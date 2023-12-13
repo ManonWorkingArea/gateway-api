@@ -41,8 +41,9 @@ function setupRoutes(app) {
     console.log('Operating System:', agent.os.toString());
     console.log('Browser:', agent.toAgent());
 
+    // Log the request body data, including the array elements
     if (req.method === 'POST') {
-      console.log('Request Body Data:', req.body);
+      console.log('Request Body Data:', JSON.stringify(req.body, null, 2));
     }
 
     next();
