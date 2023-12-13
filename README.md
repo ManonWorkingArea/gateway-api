@@ -1,3 +1,8 @@
+# Project Install
+
+npm install
+npm run dev
+
 # Dynamic API App
 
 This API allows you to perform basic CRUD operations on a MongoDB database, with support for sub-document arrays.
