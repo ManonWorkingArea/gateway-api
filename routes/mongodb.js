@@ -51,7 +51,7 @@ module.exports = function () {
 
     // GET Method
     router.get(`/:collection`, setCustomHeader, async (req, res) => {
-      const hToken = req.headers['client-token'];
+      const hToken = req.headers['Client-Token'];
       const clientData = await getClientData(hToken);
 
       if (!clientData) {
