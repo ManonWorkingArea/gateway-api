@@ -8,7 +8,7 @@ module.exports = function () {
     const { ObjectId }  = require(`mongodb`);
 
     function setCustomHeader(req, res, next) {
-      const hToken = req.headers['h-token'];
+      const hToken = req.headers['client-token-key'];
       res.set('X-Client-Token', hToken);
       next();
     }
@@ -51,6 +51,7 @@ module.exports = function () {
 
     // GET Method
     router.get(`/:collection`, setCustomHeader, async (req, res) => {
+
       const hToken = req.headers['client-token-key'];
       const clientData = await getClientData(hToken);
 
@@ -73,6 +74,48 @@ module.exports = function () {
         res.status(200).json(items);
       } catch (err) {
         res.status(500).json({ message: err.message });
+      }
+    });
+
+    // GET Single Document
+    router.get(`/:collection/:id`, setCustomHeader, async (req, res) => {
+
+      const hToken = req.headers['client-token-key'];
+      const clientData = await getClientData(hToken);
+
+      if (!clientData) {
+        res.status(404).json({ message: 'Client not found' });
+        return;
+      }
+
+      const { client, db } = await createMongoClient(
+        clientData.connection.URI + "/" + clientData.connection.database + "?tls=true&authSource=admin",
+        clientData.connection.database
+      );
+      const collectionName = req.params.collection;
+      const documentId = req.params.id;
+      const joinCollection = req.query.join; // Updated variable name
+      const arrayField = req.query.sub; // Updated variable name
+      const collection = db.collection(collectionName);
+  
+      try {
+      const document = await collection.findOne({ _id: new ObjectId(documentId) });
+  
+      if (!document) {
+          res.status(404).json({ message: `Document not found` });
+          return;
+      }
+  
+      if (joinCollection && arrayField) {
+          const joinColl = db.collection(joinCollection);
+          const idsToLookup = document[arrayField];
+          const joinedDocs = await joinColl.find({ _id: { $in: idsToLookup.map(id => new ObjectId(id)) } }).toArray();
+          document[arrayField] = joinedDocs;
+      }
+      await client.close();
+      res.status(200).json(document);
+      } catch (err) {
+      res.status(500).json({ message: err.message });
       }
     });
 
