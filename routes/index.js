@@ -1,9 +1,32 @@
 const sourceMap = {
   mongodb: './mongodb',
 };
+
+const { MongoClient } = require('mongodb');
+
+async function addToQueue(dataToInsert) {
+  const mongoClient = new MongoClient(process.env.MONGODB_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  });
+
+  try {
+    await mongoClient.connect();
+    const db = mongoClient.db('API');
+    const queueCollection = db.collection('queue');
+    const result = await queueCollection.insertOne(dataToInsert);
+    return result;
+  } catch (err) {
+    console.error('Failed to insert data into the queue', err);
+    throw err;
+  } finally {
+    await mongoClient.close();
+  }
+}
+
 function setupRoutes(app) {
   app.use('/api', (req, res, next) => {
-    const clientToken = req.headers['h-token'] || '04ZQdW5sGA9C9eXXXk6x';
+    const clientToken = req.headers['client-token-key'] || '04ZQdW5sGA9C9eXXXk6x';
     if (!clientToken) {
       res.status(500).json({ message: 'Not authenticated client' });
     } else {
@@ -12,41 +35,42 @@ function setupRoutes(app) {
   });
 
   // Add this middleware to log request details
-  app.use('/api', (req, res, next) => {
-    console.log('Request URL:', req.url);
-    console.log('Request Base URL:', req.baseUrl);
-    console.log('Request Method:', req.method);
-    console.log('Request Parameters:', req.params);
+  app.use('/api', async (req, res, next) => {
+    try {
+      // Collect the data to be logged
+      const logData = {
+        client: req.headers['client-token-key'],
+        url: req.url,
+        baseUrl: req.baseUrl,
+        method: req.method,
+        parameters: req.params,
+        query: req.query,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+        optional:null,
+        status:'wait'
+      };
 
-    // Iterate over query parameters and log their names and values
-    for (const key in req.query) {
-      if (Object.hasOwnProperty.call(req.query, key)) {
-        const value = req.query[key];
-        console.log(`Query Parameter ${key}:`, value);
+      // Parse user-agent using 'useragent' library
+      const useragent = require('useragent');
+      const agent = useragent.parse(logData.userAgent);
+      logData.os = agent.os.toString();
+      logData.browser = agent.toAgent();
+
+      // Log request body data if it's a POST request
+      if (req.method === 'POST') {
+        logData.requestBodyData = req.body;
       }
+
+      // Add the logData to the 'queue' collection in MongoDB
+      await addToQueue(logData);
+
+      // Continue processing the request
+      next();
+    } catch (err) {
+      console.error('Failed to log data to the queue', err);
+      res.status(500).json({ message: 'Failed to log data to the queue' });
     }
-
-    // Get client IP address
-    const clientIP = req.ip;
-    console.log('Client IP Address:', clientIP);
-
-    // Get client details from user-agent header
-    const userAgent = req.headers['user-agent'];
-    console.log('User-Agent:', userAgent);
-
-    // You can use a library like `useragent` to parse user-agent string
-    const useragent = require('useragent');
-    const agent = useragent.parse(userAgent);
-
-    console.log('Operating System:', agent.os.toString());
-    console.log('Browser:', agent.toAgent());
-
-    // Log the request body data, including the array elements
-    if (req.method === 'POST') {
-      console.log('Request Body Data:', JSON.stringify(req.body, null, 2));
-    }
-
-    next();
   });
 
   const connections = {};
@@ -54,4 +78,5 @@ function setupRoutes(app) {
   const sourceRoutes = require(sourceFile);
   app.use(`/api`, sourceRoutes(connections.mongodb));
 }
+
 module.exports = setupRoutes;
