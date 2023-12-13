@@ -1,21 +1,84 @@
-const { Router } = require(`express`);
+const { Router }  = require(`express`);
 const MongoClient = require(`mongodb`).MongoClient;
 
-module.exports = function (clientConfig, connections) {
+module.exports = function () {
     const router        = Router();
     const express       = require(`express`);
-    
     const mongoose      = require(`mongoose`);
     const { ObjectId }  = require(`mongodb`);
 
+    function setCustomHeader(req, res, next) {
+      const hToken = req.headers['h-token'];
+      res.set('X-Client-Token', hToken);
+      next();
+    }
+
     function safeObjectId(id) {
-        if (!ObjectId.isValid(id)) {
-          return null;
-        }
-        return new ObjectId(id);
+      if (!ObjectId.isValid(id)) {
+        return null;
+      }
+      return new ObjectId(id);
+    }
+
+    async function getClientData(clientToken) {
+      const mongoClient = new MongoClient(process.env.MONGODB_URI, {
+        useNewUrlParser: true,
+        useUnifiedTopology: true,
+      });
+      try {
+        await mongoClient.connect();
+        const db = mongoClient.db('API');
+        const clientsCollection = db.collection('clients');
+        const clientData = await clientsCollection.findOne({ clientToken });
+        return clientData;
+      } catch (err) {
+        console.error('Failed to fetch client data from MongoDB', err);
+        throw err;
+      } finally {
+        await mongoClient.close();
+      }
+    }
+
+    async function createMongoClient(uri, dbName) {
+      const client = new MongoClient(uri, {
+        useNewUrlParser: true,
+        useUnifiedTopology: true,
+      });
+      await client.connect();
+      const db = client.db(dbName);
+      return { client, db };
+    }
+
+    // GET Method
+    router.get(`/:collection`, setCustomHeader, async (req, res) => {
+      const hToken = req.headers['h-token'];
+      const clientData = await getClientData(hToken);
+
+      if (!clientData) {
+        res.status(404).json({ message: 'Client not found' });
+        return;
       }
 
-      console.log("connections",connections);
+      const { client, db } = await createMongoClient(
+        clientData.connection.URI + "/" + clientData.connection.database + "?tls=true&authSource=admin",
+        clientData.connection.database
+      );
+
+      const collectionName = req.params.collection;
+      const collection = db.collection(collectionName);
+
+      try {
+        const items = await collection.find().toArray();
+        await client.close();
+        res.status(200).json(items);
+      } catch (err) {
+        res.status(500).json({ message: err.message });
+      }
+    });
+
+    /*
+
+    backend?tls=true&authSource=admin
 
     connections.forEach(item => {
         // Use MongoClient to connect to MongoDB
@@ -40,18 +103,6 @@ module.exports = function (clientConfig, connections) {
             }
     
             const db = client.db();
-
-            // Get all GET connection
-            router.get(`/${item.clientToken}/:collection`, setCustomHeader, async (req, res) => {
-                const collectionName = req.params.collection;
-                const collection = db.collection(collectionName);
-                try {
-                const items = await collection.find().toArray();
-                res.status(200).json(items);
-                } catch (err) {
-                res.status(500).json({ message: err.message });
-                }
-            });
 
             // Get a single document by ID from a collection
             router.get(`/${item.clientToken}/:collection/:id`, setCustomHeader, async (req, res) => {
@@ -449,6 +500,8 @@ module.exports = function (clientConfig, connections) {
             });
         });
       });
+
+      */
 
   return router;
 };
