@@ -34,10 +34,8 @@ function setupRoutes(app) {
     }
   });
 
-  // Add this middleware to log request details
   app.use('/api', async (req, res, next) => {
     try {
-      // Collect the data to be logged
       const logData = {
         client: {
           token: req.headers['client-token-key'],
@@ -53,35 +51,28 @@ function setupRoutes(app) {
         agent: {
           userAgent: req.headers['user-agent'],
           ip: req.ip,
-        }, // Create an empty 'agent' object
+        },
         status: 'wait',
       };
 
-      // Parse user-agent using 'useragent' library
       const useragent = require('useragent');
       const agent = useragent.parse(logData.request.userAgent);
-      
-      // Add user-agent data to the 'agent' object
+
       logData.agent.os = agent.os.toString();
       logData.agent.browser = agent.toAgent();
 
-      // Log request body data for 'POST', 'PUT', and 'PATCH' requests
       if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
-        // Add request body data to the 'agent' object
         logData.agent.requestBodyData = req.body;
       }
 
-      // Add the logData to the 'queue' collection in MongoDB
       await addToQueue(logData);
 
-      // Continue processing the request
       next();
     } catch (err) {
       console.error('Failed to log data to the queue', err);
       res.status(500).json({ message: 'Failed to log data to the queue' });
     }
   });
-
 
   const connections = {};
   const sourceFile = sourceMap.mongodb;
