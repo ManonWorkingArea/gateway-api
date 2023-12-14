@@ -39,27 +39,36 @@ function setupRoutes(app) {
     try {
       // Collect the data to be logged
       const logData = {
-        client: req.headers['client-token-key'],
-        url: req.url,
-        baseUrl: req.baseUrl,
-        method: req.method,
-        parameters: req.params,
-        query: req.query,
-        ip: req.ip,
-        userAgent: req.headers['user-agent'],
-        optional:null,
-        status:'wait'
+        client: {
+          token: req.headers['client-token-key'],
+        },
+        request: {
+          url: req.url,
+          baseUrl: req.baseUrl,
+          method: req.method,
+          parameters: req.params,
+          query: req.query,
+          optional: null,
+        },
+        agent: {
+          userAgent: req.headers['user-agent'],
+          ip: req.ip,
+        }, // Create an empty 'agent' object
+        status: 'wait',
       };
 
       // Parse user-agent using 'useragent' library
       const useragent = require('useragent');
-      const agent = useragent.parse(logData.userAgent);
-      logData.os = agent.os.toString();
-      logData.browser = agent.toAgent();
+      const agent = useragent.parse(logData.request.userAgent);
+      
+      // Add user-agent data to the 'agent' object
+      logData.agent.os = agent.os.toString();
+      logData.agent.browser = agent.toAgent();
 
-      // Log request body data if it's a POST request
-      if (req.method === 'POST') {
-        logData.requestBodyData = req.body;
+      // Log request body data for 'POST', 'PUT', and 'PATCH' requests
+      if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
+        // Add request body data to the 'agent' object
+        logData.agent.requestBodyData = req.body;
       }
 
       // Add the logData to the 'queue' collection in MongoDB
@@ -72,6 +81,7 @@ function setupRoutes(app) {
       res.status(500).json({ message: 'Failed to log data to the queue' });
     }
   });
+
 
   const connections = {};
   const sourceFile = sourceMap.mongodb;
