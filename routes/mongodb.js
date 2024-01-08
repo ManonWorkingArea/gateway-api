@@ -409,7 +409,7 @@ module.exports = function () {
             .sort(sort) // Add sorting option
             .toArray();
   
-            total = await collection.countDocuments(query);
+          total = await collection[method](query).count();
         } else {
           result = await collection[method](query, projection)
             .sort(sort) // Add sorting option
@@ -560,7 +560,7 @@ module.exports = function () {
   
       // Performing the count operation
       const query = { $and: args };
-      total = await collection.countDocuments(query);
+      const count = await collection.count(query);
   
       // Sending the count as the response
       await client.close();
