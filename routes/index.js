@@ -41,7 +41,7 @@ function setupRoutes(app) {
           const decryptedJson = JSON.parse(decryptedData.toString(CryptoJS.enc.Utf8));
           return decryptedJson;
         } catch (error) {
-          console.error('1.Error parsing decrypted data as JSON:', error);
+          console.error('Error parsing decrypted data as JSON:', error);
           return {}; // Return an empty object or handle the error as needed
         }
       }
