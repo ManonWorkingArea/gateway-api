@@ -29,12 +29,12 @@ async function addToQueue(dataToInsert) {
 function setupRoutes(app) {
   app.use('/api', (req, res, next) => {
     const clientToken = req.headers['client-token-key'] || '04ZQdW5sGA9C9eXXXk6x';
-
-    const encryptionKey = CryptoJS.enc.Hex.parse(req.headers['encryption-key']);
-    const iv = CryptoJS.enc.Hex.parse(req.headers['iv']);
     const encryptedData = req.headers['encrypted-token'];
     
-    if (encryptionKey && iv && encryptedData) {
+    if (encryptedData) {
+      const encryptionKey = CryptoJS.enc.Hex.parse(req.headers['encryption-key']);
+      const iv = CryptoJS.enc.Hex.parse(req.headers['iv']);
+
       const decryptedData = CryptoJS.AES.decrypt(encryptedData, encryptionKey, {
         iv: iv,
       }).toString(CryptoJS.enc.Utf8);
