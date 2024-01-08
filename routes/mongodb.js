@@ -22,7 +22,8 @@ module.exports = function () {
     }
 
     async function getClientData(headers) {
-      const clientToken  = headers['client-token-key'];
+      let clientToken;
+      let channel;
       const headerToken  = headers['x-content-token'];
 
       function decryptToken(headerToken, key, iv, salt) {
@@ -45,8 +46,15 @@ module.exports = function () {
         const key     = CryptoJS.enc.Hex.parse(headers['x-content-key']);
         const iv      = CryptoJS.enc.Hex.parse(headers['x-content-sign']);
         const result  = decryptToken(headerToken, key, iv, salt);
-        console.log("Client Key", result);
+        clientToken = result.key
+        channel = "token"
+      } else {
+        clientToken  = headers['client-token-key'];
+        channel = "header"
       }
+      
+      console.log("Channel",channel);
+      console.log("Key",clientToken);
       
       const mongoClient = new MongoClient(process.env.MONGODB_URI, {
         useNewUrlParser: true,
