@@ -24,26 +24,25 @@ module.exports = function () {
     async function getClientData(headers) {
       const clientToken  = headers['client-token-key'];
       const headerToken  = headers['x-content-token'];
-      function decryptToken(headerToken, key, iv, salt) {
+
+      function decryptToken(headerToken, key, iv) {
+        const salt    = 'dF5NQqK4lBpncFdVNBwzEnJz8hWgEUEH';
         const saltWordArray = CryptoJS.enc.Utf8.parse(salt);
-        const combinedKey = CryptoJS.lib.WordArray.create()
+        const combinedKey   = CryptoJS.lib.WordArray.create()
           .concat(key)
           .concat(saltWordArray);
-        const decryptedData = CryptoJS.AES.decrypt(headerToken, combinedKey, {
-          iv: iv,
-        });
-        return decryptedData.toString(CryptoJS.enc.Utf8);
+        const decryptedData = CryptoJS.AES.decrypt(headerToken, combinedKey, {iv: iv});
+        const decryptedJson = JSON.parse(decryptedData.toString(CryptoJS.enc.Utf8));
+        return decryptedJson;
       }
-
+      
       if (headerToken) {
-        const key   = CryptoJS.enc.Hex.parse(headers['x-content-key']);
-        const iv    = CryptoJS.enc.Hex.parse(headers['x-content-sign']);
-        const salt  = 'dF5NQqK4lBpncFdVNBwzEnJz8hWgEUEH';
-
-        const decryptedData = decryptToken(headerToken, key, iv, salt);
-        console.log("Client Key", decryptedData);
-        //console.log("Client headers", headers);
+        const key     = CryptoJS.enc.Hex.parse(headers['x-content-key']);
+        const iv      = CryptoJS.enc.Hex.parse(headers['x-content-sign']);
+        const result  = decryptToken(headerToken, key, iv);
+        console.log("Client Key", result);
       }
+      
       const mongoClient = new MongoClient(process.env.MONGODB_URI, {
         useNewUrlParser: true,
         useUnifiedTopology: true,
