@@ -65,60 +65,64 @@ function decryptToken(headerToken, key, iv, salt) {
 
 // Helper function to get client data
 async function getClientData(headers) {
-  let clientToken;
-  let channel;
-  const headerToken = headers['x-content-token'];
-
-  if (headerToken) {
-    const salt = 'dF5NQqK4lBpncFdVNBwzEnJz8hWgEUEH';
-    const key = CryptoJS.enc.Hex.parse(headers['x-content-key']);
-    const iv = CryptoJS.enc.Hex.parse(headers['x-content-sign']);
-    const result = decryptToken(headerToken, key, iv, salt);
-    clientToken = result.key;
-    channel = 'token';
-  } else {
-    clientToken = headers['client-token-key'];
-    channel = 'header';
-  }
-
-  console.log('Channel', channel);
-  console.log('Key', clientToken);
-
-  if (clientDataCache.has(clientToken)) {
-    const { data, timestamp } = clientDataCache.get(clientToken);
-    const currentTime = Date.now();
-
-    // Check if the cached item has exceeded the maximum age
-    if (currentTime - timestamp <= maxCacheAge) {
-      return data;
+    let clientToken;
+    let channel;
+    const headerToken = headers['x-content-token'];
+  
+    if (headerToken) {
+      const salt = 'dF5NQqK4lBpncFdVNBwzEnJz8hWgEUEH';
+      const key = CryptoJS.enc.Hex.parse(headers['x-content-key']);
+      const iv = CryptoJS.enc.Hex.parse(headers['x-content-sign']);
+      const result = decryptToken(headerToken, key, iv, salt);
+      clientToken = result.key;
+      channel = 'token';
     } else {
-      // Remove the expired item from the cache
-      clientDataCache.delete(clientToken);
+      clientToken = headers['client-token-key'];
+      channel = 'header';
+    }
+  
+    console.log('Channel', channel);
+    console.log('Key', clientToken);
+  
+    if (clientDataCache.has(clientToken)) {
+      console.log('Data retrieved from cache for clientToken:', clientToken);
+      const { data, timestamp } = clientDataCache.get(clientToken);
+      const currentTime = Date.now();
+  
+      // Check if the cached item has exceeded the maximum age
+      if (currentTime - timestamp <= maxCacheAge) {
+        return data;
+      } else {
+        // Remove the expired item from the cache
+        clientDataCache.delete(clientToken);
+        console.log('Cache entry expired for clientToken:', clientToken);
+      }
+    }
+  
+    if (!mongoClient) {
+      mongoClient = new MongoClient(process.env.MONGODB_URI, {
+        useNewUrlParser: true,
+        useUnifiedTopology: true,
+      });
+    }
+  
+    try {
+      await mongoClient.connect();
+      const db = mongoClient.db('API');
+      const clientsCollection = db.collection('clients');
+      const clientData = await clientsCollection.findOne({ clientToken });
+      if (clientData) {
+        // Cache the retrieved data with a timestamp
+        clientDataCache.set(clientToken, { data: clientData, timestamp: Date.now() });
+        console.log('Data cached for clientToken:', clientToken);
+      }
+      return clientData;
+    } catch (err) {
+      console.error('Failed to fetch client data from MongoDB', err);
+      throw err;
     }
   }
-
-  if (!mongoClient) {
-    mongoClient = new MongoClient(process.env.MONGODB_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    });
-  }
-
-  try {
-    await mongoClient.connect();
-    const db = mongoClient.db('API');
-    const clientsCollection = db.collection('clients');
-    const clientData = await clientsCollection.findOne({ clientToken });
-    if (clientData) {
-      // Cache the retrieved data with a timestamp
-      clientDataCache.set(clientToken, { data: clientData, timestamp: Date.now() });
-    }
-    return clientData;
-  } catch (err) {
-    console.error('Failed to fetch client data from MongoDB', err);
-    throw err;
-  }
-}
+  
 
 // Error handling middleware
 function errorHandler(err, req, res, next) {
