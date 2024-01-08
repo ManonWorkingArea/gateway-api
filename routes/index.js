@@ -3,6 +3,8 @@ const sourceMap = {
 };
 
 const { MongoClient } = require('mongodb');
+const CryptoJS = require('crypto-js'); // Import CryptoJS library
+
 
 async function addToQueue(dataToInsert) {
   const mongoClient = new MongoClient(process.env.MONGODB_URI, {
@@ -27,6 +29,17 @@ async function addToQueue(dataToInsert) {
 function setupRoutes(app) {
   app.use('/api', (req, res, next) => {
     const clientToken = req.headers['client-token-key'] || '04ZQdW5sGA9C9eXXXk6x';
+
+    const encryptionKey = CryptoJS.enc.Hex.parse(req.headers['encryption-key']);
+    const iv = CryptoJS.enc.Hex.parse(req.headers['iv']);
+    const encryptedData = req.headers['encrypted-token'];
+
+    const decryptedData = CryptoJS.AES.decrypt(encryptedData, encryptionKey, {
+      iv: iv,
+    }).toString(CryptoJS.enc.Utf8);
+
+    console.log("decryptedData",decryptedData);
+    
     if (!clientToken) {
       res.status(500).json({ message: 'Not authenticated client' });
     } else {
