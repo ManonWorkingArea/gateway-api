@@ -30,17 +30,21 @@ function setupRoutes(app) {
   app.use('/api', (req, res, next) => {
     const clientToken = req.headers['client-token-key'] || '04ZQdW5sGA9C9eXXXk6x';
     const headerToken = req.headers['x-content-token'];
-    function decryptToken(headerToken, key, iv, salt) {
-      const saltWordArray = CryptoJS.enc.Utf8.parse(salt);
-      const combinedKey = CryptoJS.lib.WordArray.create()
-        .concat(key)
-        .concat(saltWordArray);
-      const decryptedData = CryptoJS.AES.decrypt(headerToken, combinedKey, {
-        iv: iv,
-      });
-      const decryptedJson = JSON.parse(decryptedData.toString(CryptoJS.enc.Utf8));
-      return decryptedJson;
-    }
+
+      function decryptToken(headerToken, key, iv, salt) {
+        try {
+          const saltWordArray = CryptoJS.enc.Utf8.parse(salt);
+          const combinedKey = CryptoJS.lib.WordArray.create()
+            .concat(key)
+            .concat(saltWordArray);
+          const decryptedData = CryptoJS.AES.decrypt(headerToken, combinedKey, { iv: iv });
+          const decryptedJson = JSON.parse(decryptedData.toString(CryptoJS.enc.Utf8));
+          return decryptedJson;
+        } catch (error) {
+          console.error('1.Error parsing decrypted data as JSON:', error);
+          return {}; // Return an empty object or handle the error as needed
+        }
+      }
     
     if (headerToken) {
       const salt    = 'dF5NQqK4lBpncFdVNBwzEnJz8hWgEUEH';

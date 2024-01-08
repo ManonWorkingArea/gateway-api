@@ -26,13 +26,18 @@ module.exports = function () {
       const headerToken  = headers['x-content-token'];
 
       function decryptToken(headerToken, key, iv, salt) {
-        const saltWordArray = CryptoJS.enc.Utf8.parse(salt);
-        const combinedKey   = CryptoJS.lib.WordArray.create()
-          .concat(key)
-          .concat(saltWordArray);
-        const decryptedData = CryptoJS.AES.decrypt(headerToken, combinedKey, {iv: iv});
-        const decryptedJson = JSON.parse(decryptedData.toString(CryptoJS.enc.Utf8));
-        return decryptedJson;
+        try {
+          const saltWordArray = CryptoJS.enc.Utf8.parse(salt);
+          const combinedKey = CryptoJS.lib.WordArray.create()
+            .concat(key)
+            .concat(saltWordArray);
+          const decryptedData = CryptoJS.AES.decrypt(headerToken, combinedKey, { iv: iv });
+          const decryptedJson = JSON.parse(decryptedData.toString(CryptoJS.enc.Utf8));
+          return decryptedJson;
+        } catch (error) {
+          console.error('2.Error parsing decrypted data as JSON:', error);
+          return {}; // Return an empty object or handle the error as needed
+        }
       }
       
       if (headerToken) {
