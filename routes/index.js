@@ -33,12 +33,14 @@ function setupRoutes(app) {
     const encryptionKey = CryptoJS.enc.Hex.parse(req.headers['encryption-key']);
     const iv = CryptoJS.enc.Hex.parse(req.headers['iv']);
     const encryptedData = req.headers['encrypted-token'];
-
-    const decryptedData = CryptoJS.AES.decrypt(encryptedData, encryptionKey, {
-      iv: iv,
-    }).toString(CryptoJS.enc.Utf8);
-
-    console.log("decryptedData",decryptedData);
+    
+    if (encryptionKey && iv && encryptedData) {
+      const decryptedData = CryptoJS.AES.decrypt(encryptedData, encryptionKey, {
+        iv: iv,
+      }).toString(CryptoJS.enc.Utf8);
+    
+      console.log("decryptedData", decryptedData);
+    }
     
     if (!clientToken) {
       res.status(500).json({ message: 'Not authenticated client' });
