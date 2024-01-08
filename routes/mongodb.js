@@ -1,5 +1,6 @@
 const { Router }  = require(`express`);
 const MongoClient = require(`mongodb`).MongoClient;
+const CryptoJS    = require('crypto-js'); // Import CryptoJS library
 
 module.exports = function () {
     const router        = Router();
@@ -20,10 +21,32 @@ module.exports = function () {
       return new ObjectId(id);
     }
 
-    async function getClientData(clientToken) {
+    async function getClientData(headers) {
+      const clientToken  = headers['client-token-key'];
+      const headerToken  = headers['x-mod-token'];
+      function decryptToken(headerToken, key, iv, salt) {
+        const saltWordArray = CryptoJS.enc.Utf8.parse(salt);
+        const combinedKey = CryptoJS.lib.WordArray.create()
+          .concat(key)
+          .concat(saltWordArray);
+        const decryptedData = CryptoJS.AES.decrypt(headerToken, combinedKey, {
+          iv: iv,
+        });
+        return decryptedData.toString(CryptoJS.enc.Utf8);
+      }
+
+      if (headerToken) {
+        const key   = CryptoJS.enc.Hex.parse(headers['x-mod-key']);
+        const iv    = CryptoJS.enc.Hex.parse(headers['x-mod-sign']);
+        const salt  = 'dF5NQqK4lBpncFdVNBwzEnJz8hWgEUEH';
+
+        const decryptedData = decryptToken(headerToken, key, iv, salt);
+        console.log("Client Key", decryptedData);
+        //console.log("Client headers", headers);
+      }
       const mongoClient = new MongoClient(process.env.MONGODB_URI, {
-        useNewUrlParser: true,
-        useUnifiedTopology: true,
+        //useNewUrlParser: true,
+        //useUnifiedTopology: true,
       });
       try {
         await mongoClient.connect();
@@ -41,8 +64,8 @@ module.exports = function () {
 
     async function createMongoClient(uri, dbName) {
       const client = new MongoClient(uri, {
-        useNewUrlParser: true,
-        useUnifiedTopology: true,
+        //useNewUrlParser: true,
+        //useUnifiedTopology: true,
       });
       await client.connect();
       const db = client.db(dbName);
@@ -53,7 +76,7 @@ module.exports = function () {
     router.get('/db-info', setCustomHeader, async (req, res) => {
       try {
         const hToken = req.headers['client-token-key'];
-        const clientData = await getClientData(hToken);
+        const clientData = await getClientData(req.headers);
 
         if (!clientData) {
           res.status(404).json({ message: 'Client not found' });
@@ -82,7 +105,7 @@ module.exports = function () {
     router.get(`/:collection`, setCustomHeader, async (req, res) => {
 
       const hToken = req.headers['client-token-key'];
-      const clientData = await getClientData(hToken);
+      const clientData = await getClientData(req.headers);
 
       if (!clientData) {
         res.status(404).json({ message: 'Client not found' });
@@ -110,7 +133,7 @@ module.exports = function () {
     router.get(`/:collection/:id`, setCustomHeader, async (req, res) => {
 
       const hToken = req.headers['client-token-key'];
-      const clientData = await getClientData(hToken);
+      const clientData = await getClientData(req.headers);
 
       if (!clientData) {
         res.status(404).json({ message: 'Client not found' });
@@ -151,7 +174,7 @@ module.exports = function () {
     router.post(`/:collection`, setCustomHeader, async (req, res) => {
 
       const hToken = req.headers['client-token-key'];
-      const clientData = await getClientData(hToken);
+      const clientData = await getClientData(req.headers);
 
       if (!clientData) {
         res.status(404).json({ message: 'Client not found' });
@@ -246,7 +269,7 @@ module.exports = function () {
   router.put(`/:collection/:id`, setCustomHeader, async (req, res) => {
 
     const hToken = req.headers['client-token-key'];
-      const clientData = await getClientData(hToken);
+      const clientData = await getClientData(req.headers);
 
       if (!clientData) {
         res.status(404).json({ message: 'Client not found' });
@@ -296,7 +319,7 @@ module.exports = function () {
   // Delete a document by ID from a collection
   router.delete(`/:collection/:id`, setCustomHeader, async (req, res) => {
     const hToken = req.headers['client-token-key'];
-    const clientData = await getClientData(hToken);
+    const clientData = await getClientData(req.headers);
 
     if (!clientData) {
       res.status(404).json({ message: 'Client not found' });
@@ -327,7 +350,7 @@ module.exports = function () {
   router.post(`/:collection/query`, setCustomHeader, async (req, res) => {
     try {
       const hToken = req.headers['client-token-key'];
-      const clientData = await getClientData(hToken);
+      const clientData = await getClientData(req.headers);
 
       if (!clientData) {
         res.status(404).json({ message: 'Client not found' });
@@ -386,7 +409,7 @@ module.exports = function () {
             .sort(sort) // Add sorting option
             .toArray();
   
-          total = await collection[method](query).count();
+            total = await collection.countDocuments(query);
         } else {
           result = await collection[method](query, projection)
             .sort(sort) // Add sorting option
@@ -442,7 +465,7 @@ module.exports = function () {
   
   router.post(`/:collection/aggregate`, setCustomHeader, async (req, res) => {
     const hToken = req.headers['client-token-key'];
-    const clientData = await getClientData(hToken);
+    const clientData = await getClientData(req.headers);
 
     if (!clientData) {
       res.status(404).json({ message: 'Client not found' });
@@ -483,7 +506,7 @@ module.exports = function () {
   // Search for documents in a collection
   router.post(`/:collection/search`, setCustomHeader, async (req, res) => {
     const hToken = req.headers['client-token-key'];
-    const clientData = await getClientData(hToken);
+    const clientData = await getClientData(req.headers);
 
     if (!clientData) {
       res.status(404).json({ message: 'Client not found' });
@@ -511,7 +534,7 @@ module.exports = function () {
   router.post(`/:collection/count`, setCustomHeader, async (req, res) => {
     try {
       const hToken = req.headers['client-token-key'];
-      const clientData = await getClientData(hToken);
+      const clientData = await getClientData(req.headers);
 
       if (!clientData) {
         res.status(404).json({ message: 'Client not found' });
@@ -537,7 +560,7 @@ module.exports = function () {
   
       // Performing the count operation
       const query = { $and: args };
-      const count = await collection.countDocuments(query);
+      total = await collection.countDocuments(query);
   
       // Sending the count as the response
       await client.close();
@@ -552,7 +575,7 @@ module.exports = function () {
   // Add, update, or remove an element in a subarray of a document
   router.post(`/:collection/:documentId/:arrayField`, setCustomHeader, async (req, res) => {
     const hToken = req.headers['client-token-key'];
-    const clientData = await getClientData(hToken);
+    const clientData = await getClientData(req.headers);
 
     if (!clientData) {
       res.status(404).json({ message: 'Client not found' });
