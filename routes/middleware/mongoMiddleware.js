@@ -70,15 +70,15 @@ async function getClientData(headers) {
   const headerToken = headers['x-content-token'];
 
   if (headerToken) {
-    const salt = 'dF5NQqK4lBpncFdVNBwzEnJz8hWgEUEH';
-    const key = CryptoJS.enc.Hex.parse(headers['x-content-key']);
-    const iv = CryptoJS.enc.Hex.parse(headers['x-content-sign']);
-    const result = decryptToken(headerToken, key, iv, salt);
-    clientToken = result.key;
-    channel = 'token';
+    const salt      = process.env.TOKEN_SALT;
+    const key       = CryptoJS.enc.Hex.parse(headers['x-content-key']);
+    const iv        = CryptoJS.enc.Hex.parse(headers['x-content-sign']);
+    const result    = decryptToken(headerToken, key, iv, salt);
+    clientToken     = result.key;
+    channel         = 'token';
   } else {
-    clientToken = headers['client-token-key'];
-    channel = 'header';
+    clientToken     = headers['client-token-key'];
+    channel         = 'header';
   }
 
   console.log('Channel', channel);
