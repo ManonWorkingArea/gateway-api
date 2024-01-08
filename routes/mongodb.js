@@ -25,8 +25,7 @@ module.exports = function () {
       const clientToken  = headers['client-token-key'];
       const headerToken  = headers['x-content-token'];
 
-      function decryptToken(headerToken, key, iv) {
-        const salt    = 'dF5NQqK4lBpncFdVNBwzEnJz8hWgEUEH';
+      function decryptToken(headerToken, key, iv, salt) {
         const saltWordArray = CryptoJS.enc.Utf8.parse(salt);
         const combinedKey   = CryptoJS.lib.WordArray.create()
           .concat(key)
@@ -37,9 +36,10 @@ module.exports = function () {
       }
       
       if (headerToken) {
+        const salt    = 'dF5NQqK4lBpncFdVNBwzEnJz8hWgEUEH';
         const key     = CryptoJS.enc.Hex.parse(headers['x-content-key']);
         const iv      = CryptoJS.enc.Hex.parse(headers['x-content-sign']);
-        const result  = decryptToken(headerToken, key, iv);
+        const result  = decryptToken(headerToken, key, iv, salt);
         console.log("Client Key", result);
       }
       

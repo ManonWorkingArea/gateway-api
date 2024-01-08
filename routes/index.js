@@ -30,22 +30,23 @@ function setupRoutes(app) {
   app.use('/api', (req, res, next) => {
     const clientToken = req.headers['client-token-key'] || '04ZQdW5sGA9C9eXXXk6x';
     const headerToken = req.headers['x-content-token'];
-
-    function decryptToken(headerToken, key, iv) {
-      const salt          = 'dF5NQqK4lBpncFdVNBwzEnJz8hWgEUEH';
+    function decryptToken(headerToken, key, iv, salt) {
       const saltWordArray = CryptoJS.enc.Utf8.parse(salt);
-      const combinedKey   = CryptoJS.lib.WordArray.create()
+      const combinedKey = CryptoJS.lib.WordArray.create()
         .concat(key)
         .concat(saltWordArray);
-      const decryptedData = CryptoJS.AES.decrypt(headerToken, combinedKey, {iv: iv});
+      const decryptedData = CryptoJS.AES.decrypt(headerToken, combinedKey, {
+        iv: iv,
+      });
       const decryptedJson = JSON.parse(decryptedData.toString(CryptoJS.enc.Utf8));
       return decryptedJson;
     }
     
     if (headerToken) {
+      const salt    = 'dF5NQqK4lBpncFdVNBwzEnJz8hWgEUEH';
       const key     = CryptoJS.enc.Hex.parse(req.headers['x-content-key']);
       const iv      = CryptoJS.enc.Hex.parse(req.headers['x-content-sign']);
-      const result  = decryptToken(headerToken, key, iv);
+      const result  = decryptToken(headerToken, key, iv, salt);
 
       console.log("Client Key", result);
       console.log("Client Timestamp", result.timestamp);
@@ -55,10 +56,10 @@ function setupRoutes(app) {
       const timeDifference        = currentTimestamp - result.timestamp;
       
       if (timeDifference > maxAllowedDifference) {
-        console.log('Authenticated expired');
+        console.log("Authenticated expired");
         //return res.status(500).json({ message: 'Authenticated expired' });
       } else {
-        console.log('Authenticated valid');
+        console.log("Authenticated valid");
       }
     }
 
