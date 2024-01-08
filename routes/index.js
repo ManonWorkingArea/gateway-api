@@ -5,7 +5,6 @@ const sourceMap = {
 const { MongoClient } = require('mongodb');
 const CryptoJS = require('crypto-js'); // Import CryptoJS library
 
-
 async function addToQueue(dataToInsert) {
   const mongoClient = new MongoClient(process.env.MONGODB_URI, {
     useNewUrlParser: true,
@@ -52,8 +51,8 @@ function setupRoutes(app) {
       const iv      = CryptoJS.enc.Hex.parse(req.headers['x-content-sign']);
       const result  = decryptToken(headerToken, key, iv, salt);
 
-      console.log("Client Key", result);
-      console.log("Client Timestamp", result.timestamp);
+      //console.log("Client Key", result);
+      //console.log("Client Timestamp", result.timestamp);
       
       const currentTimestamp      = Date.now();
       const maxAllowedDifference  = 15 * 1000;
