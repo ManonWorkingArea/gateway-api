@@ -45,8 +45,8 @@ module.exports = function () {
         //console.log("Client headers", headers);
       }
       const mongoClient = new MongoClient(process.env.MONGODB_URI, {
-        //useNewUrlParser: true,
-        //useUnifiedTopology: true,
+        useNewUrlParser: true,
+        useUnifiedTopology: true,
       });
       try {
         await mongoClient.connect();
@@ -64,8 +64,8 @@ module.exports = function () {
 
     async function createMongoClient(uri, dbName) {
       const client = new MongoClient(uri, {
-        //useNewUrlParser: true,
-        //useUnifiedTopology: true,
+        useNewUrlParser: true,
+        useUnifiedTopology: true,
       });
       await client.connect();
       const db = client.db(dbName);
