@@ -61,7 +61,7 @@ function setupRoutes(app) {
       
       if (timeDifference > maxAllowedDifference) {
         console.log("Authenticated expired");
-        //return res.status(500).json({ message: 'Authenticated expired' });
+        return res.status(500).json({ message: 'Authenticated expired' });
       } else {
         console.log("Authenticated valid");
       }
