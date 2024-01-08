@@ -8,8 +8,8 @@ const CryptoJS = require('crypto-js'); // Import CryptoJS library
 
 async function addToQueue(dataToInsert) {
   const mongoClient = new MongoClient(process.env.MONGODB_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
+    //useNewUrlParser: true,
+    //useUnifiedTopology: true,
   });
 
   try {
@@ -28,20 +28,7 @@ async function addToQueue(dataToInsert) {
 
 function setupRoutes(app) {
   app.use('/api', (req, res, next) => {
-    const clientToken = req.headers['client-token-key'] || '04ZQdW5sGA9C9eXXXk6x';
-    const encryptedData = req.headers['encrypted-token'];
-    
-    if (encryptedData) {
-      const encryptionKey = CryptoJS.enc.Hex.parse(req.headers['encryption-key']);
-      const iv = CryptoJS.enc.Hex.parse(req.headers['iv']);
-
-      const decryptedData = CryptoJS.AES.decrypt(encryptedData, encryptionKey, {
-        iv: iv,
-      }).toString(CryptoJS.enc.Utf8);
-    
-      console.log("decryptedData", decryptedData);
-    }
-    
+    const clientToken = req.headers['client-token-key'] || '04ZQdW5sGA9C9eXXXk6x';    
     if (!clientToken) {
       res.status(500).json({ message: 'Not authenticated client' });
     } else {
