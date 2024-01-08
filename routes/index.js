@@ -8,8 +8,8 @@ const CryptoJS = require('crypto-js'); // Import CryptoJS library
 
 async function addToQueue(dataToInsert) {
   const mongoClient = new MongoClient(process.env.MONGODB_URI, {
-    //useNewUrlParser: true,
-    //useUnifiedTopology: true,
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
   });
 
   try {
