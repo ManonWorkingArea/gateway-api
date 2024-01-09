@@ -84,7 +84,7 @@ function setupRoutes(app) {
           baseUrl: req.baseUrl,
           method: req.method,
           parameters: req.params,
-          query: req.query,
+          query: req.body,
           optional: null,
         },
         agent: {
@@ -92,6 +92,7 @@ function setupRoutes(app) {
           ip: req.ip,
         },
         status: 'wait',
+        type: 'log',
       };
 
       const useragent = require('useragent');
