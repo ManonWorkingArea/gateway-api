@@ -178,7 +178,10 @@ router.post('/send', limiter, async (req, res) => {
 
       // Add email data to the email queue and log data to the log queue (MongoDB)
       await addToEmailQueue({
+        fromEmail,
+        fromName,
         toEmail,
+        toName,
         subject,
         text,
         html,
