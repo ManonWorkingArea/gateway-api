@@ -9,6 +9,7 @@ const emailRouter   = require('./email'); // Import the socket router
 dotenv.config();
 
 const app = express();
+app.set('trust proxy', true);
 app.use(bodyParser.json());
 app.use(cors());
 app.use((req, res, next) => {
