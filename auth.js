@@ -7,20 +7,22 @@ const router = express.Router();
 // In a production environment, it's important to store this token securely, e.g., in environment variables or a secret manager.
 const CHANNEL_ACCESS_TOKEN = 'FbfaYJGWQHpGXAoYTvrkhIFr60h6qzBjoFWAP+tQ643Sh6dlY3+fqv1v1JX4UiFSW0kEuw7MipxJBj0W76VEzMx68KLAYmPNoomgnNiLNC9p2dXYHp8yESo5ARQMBdL3+mMQXp8uaLvBH/401XCCwgdB04t89/1O/w1cDnyilFU=';
 // MongoDB Connection URL
+// Connection pool to reuse MongoClient instances
+let mongoClient;
 const mongoURI = process.env.MONGODB_URI;
 console.log("MongoDB URI:", mongoURI);
 // Function to retrieve hostname from MongoDB
 const getHostname = async (hostname) => {
     try {
-      const mongoClient = new MongoClient(mongoURI, { useNewUrlParser: true, useUnifiedTopology: true });
-      await mongoClient.connect();
-      const db = mongoClient.db('API');
-      const clientsCollection = db.collection('hostname');
-      const clientData = await clientsCollection.findOne({ hostname });
-      if (clientData) {
-        return clientData;
-      }
-      return null;
+        mongoClient = new MongoClient(mongoURI, { useNewUrlParser: true, useUnifiedTopology: true });
+        await mongoClient.connect();
+        const db = mongoClient.db('API');
+        const clientsCollection = db.collection('hostname');
+        const clientData = await clientsCollection.findOne({ hostname });
+        if (clientData) {
+            return clientData;
+        }
+        return null;
     } catch (error) {
       console.error('Error retrieving hostname:', error);
       throw error;
