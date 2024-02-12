@@ -9,12 +9,10 @@ const CHANNEL_ACCESS_TOKEN = 'FbfaYJGWQHpGXAoYTvrkhIFr60h6qzBjoFWAP+tQ643Sh6dlY3
 // MongoDB Connection URL
 // Connection pool to reuse MongoClient instances
 let mongoClient;
-const mongoURI = process.env.MONGODB_URI;
-console.log("MongoDB URI:", mongoURI);
 // Function to retrieve hostname from MongoDB
 const getHostname = async (hostname) => {
     try {
-        mongoClient = new MongoClient(mongoURI, { useNewUrlParser: true, useUnifiedTopology: true });
+        mongoClient = new MongoClient(process.env.MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true });
         await mongoClient.connect();
         const db = mongoClient.db('API');
         const clientsCollection = db.collection('hostname');
@@ -30,13 +28,13 @@ const getHostname = async (hostname) => {
   };
 
 // Helper function to send messages using the LINE Messaging API
-const sendMessage = async (userId, messageText) => {
+const sendMessage = async (channel_access_token, userId, messageText) => {
   try {
     const response = await fetch('https://api.line.me/v2/bot/message/push', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${CHANNEL_ACCESS_TOKEN}`,
+        'Authorization': `Bearer ${channel_access_token}`,
       },
       body: JSON.stringify({
         to: userId,
@@ -64,7 +62,11 @@ const sendMessage = async (userId, messageText) => {
 // Endpoint to handle LINE login redirection and code exchange
 router.post('/line', async (req, res) => {
   const { code, hostname } = req.body;
+
   try {
+    // Get hostname data from MongoDB
+    const hostnameData = await getHostname(hostname);
+
     // Exchange the authorization code for an access token
     const tokenResponse = await fetch('https://api.line.me/oauth2/v2.1/token', {
       method: 'POST',
@@ -75,9 +77,9 @@ router.post('/line', async (req, res) => {
         grant_type: 'authorization_code',
         code,
         redirect_uri: 'http://localhost:8080/user/auth',
-        client_id: '2003469499', // Replace with your LINE Login Channel ID
-        client_secret: '1bf0da65b5a6b09eba0a045e73128026', // Replace with your LINE Login Channel Secret
-        code_verifier: 'wJKN8qz5t8SSI9lMFhBB6qwNkQBkuPZoCxzRhwLRUo1',
+        client_id: hostnameData.line.client_id, // Replace with your LINE Login Channel ID
+        client_secret: hostnameData.line.client_secret, // Replace with your LINE Login Channel Secret
+        code_verifier: hostnameData.line.code_verifier,
       }),
     });
 
@@ -95,12 +97,9 @@ router.post('/line', async (req, res) => {
     });
     const userData = await profileResponse.json();
 
-     // Get hostname data from MongoDB
-     const hostnameData = await getHostname(hostname);
-
      // Send a welcome message to the user
-     const welcomeMessage = `Welcome to our service, ${hostnameData ? hostnameData.name : 'Guest'}!`;
-     await sendMessage(userData.userId, welcomeMessage);
+     const welcomeMessage = `Welcome to our service, ${hostnameData ? hostnameData.siteName : 'Guest'}!`;
+     await sendMessage(hostnameData.line.channel_access_token, userData.userId, welcomeMessage);
 
     res.json({ accessToken: tokenData.access_token, userData, message: "Welcome message sent." });
   } catch (error) {
@@ -111,32 +110,35 @@ router.post('/line', async (req, res) => {
 
 // New endpoint to send a message
 router.post('/send-message', async (req, res) => {
-    const { userId, messageText } = req.body;
+    const { hostname, userId, messageText } = req.body;
   
     try {
-      const response = await fetch('https://api.line.me/v2/bot/message/push', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${CHANNEL_ACCESS_TOKEN}`,
-        },
-        body: JSON.stringify({
-          to: userId,
-          messages: [
-            {
-              type: 'text',
-              text: messageText,
+        // Get hostname data from MongoDB
+        const hostnameData = await getHostname(hostname);
+
+        const response = await fetch('https://api.line.me/v2/bot/message/push', {
+            method: 'POST',
+            headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${hostnameData.line.channel_access_token}`,
             },
-          ],
-        }),
-      });
+            body: JSON.stringify({
+            to: userId,
+            messages: [
+                {
+                    type: 'text',
+                    text: messageText,
+                },
+            ],
+            }),
+        });
   
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message);
-      }
-  
-      res.json({ success: true, message: 'Message sent successfully.' });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message);
+        }
+    
+        res.json({ success: true, message: 'Message sent successfully.' });
     } catch (error) {
       console.error('Error sending message:', error);
       res.status(500).json({ success: false, error: 'Failed to send message.' });
