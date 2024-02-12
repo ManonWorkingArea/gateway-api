@@ -4,7 +4,7 @@ const router = express.Router();
 
 // Replace 'Your_Channel_Access_Token_Here' with your actual LINE Messaging API Channel Access Token.
 // In a production environment, it's important to store this token securely, e.g., in environment variables or a secret manager.
-const CHANNEL_ACCESS_TOKEN = '3e4256c1c7fb0f88429a58a86def8f62';
+const CHANNEL_ACCESS_TOKEN = 'FbfaYJGWQHpGXAoYTvrkhIFr60h6qzBjoFWAP+tQ643Sh6dlY3+fqv1v1JX4UiFSW0kEuw7MipxJBj0W76VEzMx68KLAYmPNoomgnNiLNC9p2dXYHp8yESo5ARQMBdL3+mMQXp8uaLvBH/401XCCwgdB04t89/1O/w1cDnyilFU=';
 
 // Helper function to send messages using the LINE Messaging API
 const sendMessage = async (userId, messageText) => {
