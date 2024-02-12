@@ -61,7 +61,7 @@ const sendMessage = async (channel_access_token, userId, messageText) => {
 
 // Endpoint to handle LINE login redirection and code exchange
 router.post('/line', async (req, res) => {
-  const { code, hostname, callback } = req.body;
+  const { code, hostname } = req.body;
 
   try {
     // Get hostname data from MongoDB
@@ -76,7 +76,7 @@ router.post('/line', async (req, res) => {
       body: new URLSearchParams({
         grant_type: 'authorization_code',
         code,
-        redirect_uri: callback,
+        redirect_uri: hostnameData.line.callback,
         client_id: hostnameData.line.client_id, // Replace with your LINE Login Channel ID
         client_secret: hostnameData.line.client_secret, // Replace with your LINE Login Channel Secret
         code_verifier: hostnameData.line.code_verifier,
