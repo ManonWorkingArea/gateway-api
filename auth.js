@@ -54,8 +54,7 @@ router.post('/line', async (req, res) => {
         redirect_uri: 'http://localhost:8080/user/auth',
         client_id: '2003469499', // Replace with your LINE Login Channel ID
         client_secret: '1bf0da65b5a6b09eba0a045e73128026', // Replace with your LINE Login Channel Secret
-        // The code_verifier is necessary if you're using PKCE. Otherwise, omit it.
-        // code_verifier: 'your_code_verifier_here',
+        code_verifier: 'wJKN8qz5t8SSI9lMFhBB6qwNkQBkuPZoCxzRhwLRUo1',
       }),
     });
 
@@ -83,5 +82,39 @@ router.post('/line', async (req, res) => {
     res.status(500).json({ error: 'Internal server error during LINE login or messaging' });
   }
 });
+
+// New endpoint to send a message
+router.post('/send-message', async (req, res) => {
+    const { userId, messageText } = req.body;
+  
+    try {
+      const response = await fetch('https://api.line.me/v2/bot/message/push', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${CHANNEL_ACCESS_TOKEN}`,
+        },
+        body: JSON.stringify({
+          to: userId,
+          messages: [
+            {
+              type: 'text',
+              text: messageText,
+            },
+          ],
+        }),
+      });
+  
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message);
+      }
+  
+      res.json({ success: true, message: 'Message sent successfully.' });
+    } catch (error) {
+      console.error('Error sending message:', error);
+      res.status(500).json({ success: false, error: 'Failed to send message.' });
+    }
+  });
 
 module.exports = router;
