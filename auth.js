@@ -8,6 +8,7 @@ const router = express.Router();
 const CHANNEL_ACCESS_TOKEN = 'FbfaYJGWQHpGXAoYTvrkhIFr60h6qzBjoFWAP+tQ643Sh6dlY3+fqv1v1JX4UiFSW0kEuw7MipxJBj0W76VEzMx68KLAYmPNoomgnNiLNC9p2dXYHp8yESo5ARQMBdL3+mMQXp8uaLvBH/401XCCwgdB04t89/1O/w1cDnyilFU=';
 // MongoDB Connection URL
 const mongoURI = process.env.MONGODB_URI;
+console.log("MongoDB URI:", mongoURI);
 // Function to retrieve hostname from MongoDB
 const getHostname = async (hostname) => {
     try {
