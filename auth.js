@@ -1,10 +1,30 @@
 const express = require('express');
 const fetch = require('node-fetch');
+const { MongoClient } = require('mongodb');
 const router = express.Router();
 
 // Replace 'Your_Channel_Access_Token_Here' with your actual LINE Messaging API Channel Access Token.
 // In a production environment, it's important to store this token securely, e.g., in environment variables or a secret manager.
 const CHANNEL_ACCESS_TOKEN = 'FbfaYJGWQHpGXAoYTvrkhIFr60h6qzBjoFWAP+tQ643Sh6dlY3+fqv1v1JX4UiFSW0kEuw7MipxJBj0W76VEzMx68KLAYmPNoomgnNiLNC9p2dXYHp8yESo5ARQMBdL3+mMQXp8uaLvBH/401XCCwgdB04t89/1O/w1cDnyilFU=';
+// MongoDB Connection URL
+const mongoURI = process.env.MONGODB_URI;
+// Function to retrieve hostname from MongoDB
+const getHostname = async (hostname) => {
+    try {
+      const mongoClient = new MongoClient(mongoURI, { useNewUrlParser: true, useUnifiedTopology: true });
+      await mongoClient.connect();
+      const db = mongoClient.db('API');
+      const clientsCollection = db.collection('hostname');
+      const clientData = await clientsCollection.findOne({ hostname });
+      if (clientData) {
+        return clientData;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error retrieving hostname:', error);
+      throw error;
+    }
+  };
 
 // Helper function to send messages using the LINE Messaging API
 const sendMessage = async (userId, messageText) => {
@@ -40,7 +60,7 @@ const sendMessage = async (userId, messageText) => {
 
 // Endpoint to handle LINE login redirection and code exchange
 router.post('/line', async (req, res) => {
-  const { code } = req.body;
+  const { code, hostname } = req.body;
   try {
     // Exchange the authorization code for an access token
     const tokenResponse = await fetch('https://api.line.me/oauth2/v2.1/token', {
@@ -72,9 +92,12 @@ router.post('/line', async (req, res) => {
     });
     const userData = await profileResponse.json();
 
-    // Send a welcome message to the user
-    const welcomeMessage = "Welcome to our service! Glad to have you on board.";
-    await sendMessage(userData.userId, welcomeMessage);
+     // Get hostname data from MongoDB
+     const hostnameData = await getHostname(hostname);
+
+     // Send a welcome message to the user
+     const welcomeMessage = `Welcome to our service, ${hostnameData ? hostnameData.name : 'Guest'}!`;
+     await sendMessage(userData.userId, welcomeMessage);
 
     res.json({ accessToken: tokenData.access_token, userData, message: "Welcome message sent." });
   } catch (error) {
