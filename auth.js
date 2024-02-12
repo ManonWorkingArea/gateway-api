@@ -18,10 +18,12 @@ router.post('/line', async (req, res) => {
         redirect_uri: 'http://localhost:8080/user/auth',
         client_id: '2003469499',
         client_secret: '1bf0da65b5a6b09eba0a045e73128026',
+        code_verifier: 'wJKN8qz5t8SSI9lMFhBB6qwNkQBkuPZoCxzRhwLRUo1',
       }),
     });
 
     const data = await response.json();
+    console.log("data",data);
 
     if (!response.ok) {
       throw new Error(data.error_description || 'Failed to exchange code for token');
