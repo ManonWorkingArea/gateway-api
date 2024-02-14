@@ -67,6 +67,8 @@ router.post('/line', async (req, res) => {
     // Get hostname data from MongoDB
     const hostnameData = await getHostname(hostname);
 
+    console.log("hostnameData",hostnameData);
+
     // Exchange the authorization code for an access token
     const tokenResponse = await fetch('https://api.line.me/oauth2/v2.1/token', {
       method: 'POST',
