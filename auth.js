@@ -100,7 +100,7 @@ router.post('/line', async (req, res) => {
     const userData = await profileResponse.json();
 
      // Send a welcome message to the user
-     const welcomeMessage = `Welcome to our service, ${hostnameData ? hostnameData.siteName : 'Guest'}!`;
+     const welcomeMessage = `Welcome back to , ${hostnameData ? hostnameData.siteName : 'Guest'}!`;
      await sendMessage(hostnameData.line.channel_access_token, userData.userId, welcomeMessage);
 
     res.json({ accessToken: tokenData.access_token, userData, message: "Welcome message sent." });
