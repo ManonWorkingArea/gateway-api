@@ -23,8 +23,14 @@ app.use((req, res, next) => {
 // Create a server using http module and pass express app to it
 const server = http.createServer(app);
 
-// Create a Socket.IO instance by passing the server
-const io = socketio(server);
+// Allow all origins in Socket.IO
+const io = socketio(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"],
+    credentials: true
+  }
+});
 
 // Socket.IO logic goes here
 io.on('connection', (socket) => {
