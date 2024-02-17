@@ -20,33 +20,22 @@ app.use((req, res, next) => {
   next();
 });
 
-// Create a server using http module and pass express app to it
 const server = http.createServer(app);
-
-// Allow all origins in Socket.IO
 const io = socketio(server, {
   cors: {
-    origin: "*",
-    methods: ["GET", "POST"],
-    credentials: true
+    origin: "*"
   }
 });
 
-// Socket.IO logic goes here
 io.on('connection', (socket) => {
   console.log('New client connected');
-
-  // Handle events from clients
   socket.on('event-from-client', (data) => {
     console.log('Received data from client:', data);
-    // Handle the data or emit back to clients
+    socket.emit('push-notification', { message: 'Server : ' . data });
   });
-  // Send a push notification to the client
   setTimeout(() => {
     socket.emit('push-notification', { message: 'Hello from the server!' });
-  }, 5000); // Sending after 5 seconds
-
-  // More event handlers can be added here
+  }, 5000);
 });
 
 async function initializeApp() {
