@@ -41,6 +41,10 @@ io.on('connection', (socket) => {
     console.log('Received data from client:', data);
     // Handle the data or emit back to clients
   });
+  // Send a push notification to the client
+  setTimeout(() => {
+    socket.emit('push-notification', { message: 'Hello from the server!' });
+  }, 5000); // Sending after 5 seconds
 
   // More event handlers can be added here
 });
