@@ -31,7 +31,7 @@ io.on('connection', (socket) => {
   console.log('New client connected');
   socket.on('event-from-client', (data) => {
     console.log('Received data from client:', data);
-    socket.emit('push-notification', { message: 'Server : ' . data.text });
+    socket.emit('push-notification', { message: 'Server : ' + data });
   });
   setTimeout(() => {
     socket.emit('push-notification', { message: 'Hello from the server!' });
