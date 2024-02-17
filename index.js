@@ -4,9 +4,10 @@ const cors          = require('cors');
 const dotenv        = require('dotenv');
 const setupRoutes   = require('./routes');
 const socketRouter  = require('./socket'); // Import the socket router
-const emailRouter   = require('./email'); // Import the socket router
-const authRouter = require('./auth'); // Import the auth router
-
+const emailRouter   = require('./email'); // Import the email router
+const authRouter    = require('./auth');  // Import the auth router
+const http          = require('http');    // Import the http module
+const socketio      = require('socket.io'); // Import socket.io module
 
 dotenv.config();
 
@@ -19,15 +20,32 @@ app.use((req, res, next) => {
   next();
 });
 
+// Create a server using http module and pass express app to it
+const server = http.createServer(app);
+
+// Create a Socket.IO instance by passing the server
+const io = socketio(server);
+
+// Socket.IO logic goes here
+io.on('connection', (socket) => {
+  console.log('New client connected');
+
+  // Handle events from clients
+  socket.on('event-from-client', (data) => {
+    console.log('Received data from client:', data);
+    // Handle the data or emit back to clients
+  });
+
+  // More event handlers can be added here
+});
+
 async function initializeApp() {
   try {
     setupRoutes(app);
-    // Mount the socket router under the "/socket" route
-    app.use('/socket', socketRouter);
     app.use('/email', emailRouter);
     app.use('/auth', authRouter);
-    
-    app.listen(process.env.PORT, () => {
+
+    server.listen(process.env.PORT, () => {
       console.log(`Server is running on port ${process.env.PORT}`);
     });
   } catch (err) {
