@@ -6,23 +6,23 @@ const { MongoClient } = require('mongodb');
 const CryptoJS = require('crypto-js'); // Import CryptoJS library
 
 async function addToQueue(dataToInsert) {
-  const mongoClient = new MongoClient(process.env.MONGODB_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  });
+  // const mongoClient = new MongoClient(process.env.MONGODB_URI, {
+  //   useNewUrlParser: true,
+  //   useUnifiedTopology: true,
+  // });
 
-  try {
-    await mongoClient.connect();
-    const db = mongoClient.db('API');
-    const queueCollection = db.collection('queue');
-    const result = await queueCollection.insertOne(dataToInsert);
-    return result;
-  } catch (err) {
-    console.error('Failed to insert data into the queue', err);
-    throw err;
-  } finally {
-    await mongoClient.close();
-  }
+  // try {
+  //   await mongoClient.connect();
+  //   const db = mongoClient.db('API');
+  //   const queueCollection = db.collection('queue');
+  //   const result = await queueCollection.insertOne(dataToInsert);
+  //   return result;
+  // } catch (err) {
+  //   console.error('Failed to insert data into the queue', err);
+  //   throw err;
+  // } finally {
+  //   await mongoClient.close();
+  // }
 }
 
 function setupRoutes(app) {
