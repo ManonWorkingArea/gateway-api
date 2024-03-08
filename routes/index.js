@@ -55,7 +55,7 @@ function setupRoutes(app) {
       //console.log("Client Timestamp", result.timestamp);
       
       const currentTimestamp      = Date.now();
-      const maxAllowedDifference  = 15 * 1000;
+      const maxAllowedDifference  = 60 * 1000;
       const timeDifference        = currentTimestamp - result.timestamp;
       
       if (timeDifference > maxAllowedDifference) {
