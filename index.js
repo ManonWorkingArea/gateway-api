@@ -25,7 +25,7 @@ const apiLimiter = rateLimit({
 
 // Apply the rate limit to all requests
 app.use(apiLimiter);
-app.set('trust proxy', true);
+//app.set('trust proxy', true);
 app.use(bodyParser.json());
 app.use(cors());
 app.use((req, res, next) => {
