@@ -29,7 +29,7 @@ const transporter = nodemailer.createTransport(smtpPool(smtpConfig));
 // Apply rate limiting middleware
 const limiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: 10,
+  max: 100,
 });
 
 // Cache setup with a 10-minute TTL (adjust as needed)
@@ -52,6 +52,8 @@ async function sendEmail({
     text: text,
     html: html,
   };
+
+  console.log('Email Data:', mailOptions);
 
   try {
     const info = await transporter.sendMail(mailOptions);
