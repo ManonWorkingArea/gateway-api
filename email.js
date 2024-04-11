@@ -1,6 +1,6 @@
 const express = require('express');
 const nodemailer = require('nodemailer');
-const rateLimit = require('express-rate-limit');
+// Removed import of express-rate-limit
 const NodeCache = require('node-cache'); // For caching
 
 const router = express.Router();
@@ -18,12 +18,6 @@ const smtpConfig = {
 
 // Create a transporter for sending emails
 const transporter = nodemailer.createTransport(smtpConfig);
-
-// Apply rate limiting middleware to prevent abuse
-const limiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 10, // limit each IP to 10 requests per windowMs
-});
 
 // Cache setup with a 10-minute TTL (adjust as needed)
 const emailCache = new NodeCache({ stdTTL: 600 });
@@ -48,8 +42,8 @@ async function sendEmail({ fromEmail, fromName, toEmail, toName, subject, text, 
   }
 }
 
-// Define a route for sending emails with rate limiting
-router.post('/send', limiter, async (req, res) => {
+// Define a route for sending emails without rate limiting
+router.post('/send', async (req, res) => {
   const { fromEmail, fromName, toEmail, toName, subject, text, html } = req.body;
 
   // Construct cache key from request parameters to prevent duplicate emails being sent
