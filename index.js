@@ -34,6 +34,9 @@ app.use((req, res, next) => {
 });
 
 const server = http.createServer(app);
+const timeoutDuration = 300000; // 5 minutes in milliseconds
+server.setTimeout(timeoutDuration);
+
 const io = socketio(server, {
   cors: {
     origin: "*"
