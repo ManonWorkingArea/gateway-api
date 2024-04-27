@@ -29,7 +29,7 @@ module.exports = function () {
       const { client, db } = req;
       const collectionName = req.params.collection;
       const collection = db.collection(collectionName);
-      const items = await collection.find().toArray();
+      const items = await collection.find().maxTimeMS(300000).toArray();
       res.status(200).json(items);
     } catch (err) {
       next(err);
@@ -57,7 +57,7 @@ module.exports = function () {
         const idsToLookup = document[arrayField];
         const joinedDocs = await joinColl
           .find({ _id: { $in: idsToLookup.map(id => safeObjectId(id)) } })
-          .toArray();
+          .maxTimeMS(300000).toArray();
         document[arrayField] = joinedDocs;
       }
 
@@ -255,13 +255,13 @@ module.exports = function () {
             .skip(skip)
             .limit(limit)
             .sort(sort) // Add sorting option
-            .toArray();
+            .maxTimeMS(300000).toArray();
 
           total = await collection[method](query).count();
         } else {
           result = await collection[method](query, projection)
             .sort(sort) // Add sorting option
-            .toArray();
+            .maxTimeMS(300000).toArray();
           total = result.length;
         }
 
@@ -295,7 +295,7 @@ module.exports = function () {
         const pipeline = args;
 
         // Performing the aggregate operation
-        const result = await collection.aggregate(pipeline).toArray();
+        const result = await collection.aggregate(pipeline).maxTimeMS(300000).toArray();
         res.status(200).json(result);
       } else {
         // Handling unsupported methods
@@ -330,7 +330,7 @@ module.exports = function () {
         return stage;
       });
 
-      const result = await collection.aggregate(modifiedPipeline).toArray();
+      const result = await collection.aggregate(modifiedPipeline).maxTimeMS(300000).toArray();
       res.status(200).json(result);
     } catch (err) {
       next(err);
@@ -346,7 +346,7 @@ module.exports = function () {
       const query = req.body;
   
       const cursor = await collection.find(query);
-      const results = await cursor.toArray();
+      const results = await cursor.maxTimeMS(300000).toArray();
       res.status(200).json(results);
     } catch (err) {
       next(err);
