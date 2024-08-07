@@ -35,10 +35,10 @@ async function sendEmail({ fromEmail, fromName, toEmail, toName, subject, text, 
   try {
     const info = await transporter.sendMail(mailOptions);
     console.log('Email sent:', info.messageId);
-    return { success: true, message: 'Email sent successfully', messageId: info.messageId };
+    return { status: true, message: 'Email sent successfully', messageId: info.messageId };
   } catch (error) {
     console.error('Error sending email:', error);
-    return { success: false, message: 'Error sending email', error: error };
+    return { status: false, message: 'Error sending email', error: error };
   }
 }
 
