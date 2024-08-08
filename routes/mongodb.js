@@ -26,7 +26,7 @@ module.exports = function () {
       }
 
       // Find the user in the database
-      const collection = db.collection('users'); // Adjust the collection name as needed
+      const collection = db.collection('user'); // Adjust the collection name as needed
       const userQuery = {
         method: 'find',
         args: [
