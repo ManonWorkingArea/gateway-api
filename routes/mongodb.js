@@ -252,10 +252,10 @@ module.exports = function () {
             }
         );
 
-        // Update the request status to 'used'
+        // Update the request status to 'complete' if password change is successful
         await requestCollection.updateOne(
             { _id: safeObjectId(requestId) },
-            { $set: { status: 'used' } }
+            { $set: { status: 'complete' } }
         );
 
         // Return success response
@@ -265,7 +265,7 @@ module.exports = function () {
         console.error('Error changing password:', err);
         return res.status(500).json({ status: false, message: 'An error occurred while changing the password' });
     }
-});
+  });
 
   router.get('/db-info', async (req, res) => {
     try {
