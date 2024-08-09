@@ -133,14 +133,25 @@ module.exports = function () {
             return res.status(200).json({ status: false, message: 'Not found' });
         }
 
-        // If user is found, return success
-        return res.status(200).json({ status: true, message: 'Found' });
+        // Prepare the user data to return (excluding sensitive information)
+        const userResponseData = {
+            userID: userData._id,
+            username: userData.username,
+            email: userData.email,
+            firstname: userData.firstname,
+            lastname: userData.lastname,
+            // Add any other non-sensitive fields you wish to include
+        };
+
+        // If user is found, return success along with user data
+        return res.status(200).json({ status: true, message: 'Found', user: userResponseData });
 
     } catch (err) {
         console.error(err);
         return res.status(200).json({ status: false, message: 'An error occurred' });
     }
-});
+  });
+
 
   router.get('/db-info', async (req, res) => {
     try {
