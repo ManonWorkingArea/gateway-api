@@ -166,6 +166,41 @@ module.exports = function () {
     }
   });
 
+  router.post('/check_request', async (req, res) => {
+    try {
+        const { client, db } = req;
+        const { requestId } = req.body;
+
+        console.log("Checking request:", requestId);
+
+        // Check if requestId is provided
+        if (!requestId) {
+            return res.status(200).json({ status: false, message: 'Request ID is required' });
+        }
+
+        // Find the request by ID in the database
+        const requestCollection = db.collection('request'); // Adjust the collection name as needed
+        const requestData = await requestCollection.findOne({ _id: new ObjectId(requestId) });
+
+        if (!requestData) {
+            return res.status(200).json({ status: false, message: 'Request not found' });
+        }
+
+        // Check if the request has expired
+        const currentDate = new Date();
+        if (currentDate > requestData.expiredate) {
+            return res.status(200).json({ status: false, message: 'Request has expired' });
+        }
+
+        // If request exists and is not expired, return success
+        return res.status(200).json({ status: true, message: 'Request is valid' });
+
+    } catch (err) {
+        console.error('Error checking request:', err);
+        return res.status(200).json({ status: false, message: 'An error occurred while checking the request' });
+    }
+  });
+
   router.get('/db-info', async (req, res) => {
     try {
       const { client, db } = req;
