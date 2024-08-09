@@ -13,93 +13,92 @@ module.exports = function () {
   const router = Router();
   router.use(authenticateClient);
 
-
   // Signin endpoint
   router.post('/signin', async (req, res) => {
     try {
-      const { client, db } = req;
-      const { username, password } = req.body;
+        const { client, db } = req;
+        const { username, password } = req.body;
 
-      // Check if username and password are provided
-      if (!username || !password) {
-        return res.status(400).json({ message: 'Username and password are required' });
-      }
+        // Check if username and password are provided
+        if (!username || !password) {
+            return res.status(200).json({ status: false, message: 'Username and password are required' });
+        }
 
-      // Find the user in the database
-      const collection = db.collection('user'); // Adjust the collection name as needed
-      const userQuery = {
-        method: 'find',
-        args: [
-          {
-            $and: [
-              { username: username }
+        // Find the user in the database
+        const collection = db.collection('user'); // Adjust the collection name as needed
+        const userQuery = {
+            method: 'find',
+            args: [
+                {
+                    $and: [
+                        { username: username }
+                    ]
+                }
             ]
-          }
-        ]
-      };
-      const userResponse = await collection.find(userQuery.args[0]).toArray();
-      const loginData = userResponse.length > 0 ? userResponse[0] : null;
+        };
+        const userResponse = await collection.find(userQuery.args[0]).toArray();
+        const loginData = userResponse.length > 0 ? userResponse[0] : null;
 
-      if (!loginData) {
-        return res.status(404).json({ message: 'User not found' });
-      }
+        if (!loginData) {
+            return res.status(200).json({ status: false, message: 'User not found' + client });
+        }
 
-      // Validate password
-      const salt = loginData.salt;
-      const inputHash = CryptoJS.SHA256(password + salt).toString();
-      const storedHash = loginData.password;
+        // Validate password
+        const salt = loginData.salt;
+        const inputHash = CryptoJS.SHA256(password + salt).toString();
+        const storedHash = loginData.password;
 
-      if (inputHash !== storedHash) {
-        return res.status(401).json({ message: 'Invalid username or password' });
-      }
+        if (inputHash !== storedHash) {
+            return res.status(200).json({ status: false, message: 'Invalid username or password' + client });
+        }
 
-      // Check user role
-      if (loginData.role !== 'user') {
-        return res.status(403).json({ message: 'Unauthorized to access this site' });
-      }
+        // Check user role
+        if (loginData.role !== 'user') {
+            return res.status(200).json({ status: false, message: 'Unauthorized to access this site' + client });
+        }
 
-      // Get User Enroll
-      const enrollCollection = db.collection('enroll'); // Adjust the collection name as needed
-      const enrollQuery = {
-        method: 'find',
-        hidden: ['userID'],
-        args: [
-          {
-            $and: [
-              { userID: loginData._id }
+        // Get User Enroll
+        const enrollCollection = db.collection('enroll'); // Adjust the collection name as needed
+        const enrollQuery = {
+            method: 'find',
+            hidden: ['userID'],
+            args: [
+                {
+                    $and: [
+                        { userID: loginData._id }
+                    ]
+                }
             ]
-          }
-        ]
-      };
-      const enrollResponse = await enrollCollection.find(enrollQuery.args[0]).toArray();
+        };
+        const enrollResponse = await enrollCollection.find(enrollQuery.args[0]).toArray();
 
-      // Prepare session data
-      let unitList = [];
-      let currentAccess = "";
+        // Prepare session data
+        let unitList = [];
+        let currentAccess = "";
 
-      const session = {
-        active: true,
-        token: loginData._id,
-        refresh: "",
-        login: true,
-        userID: loginData._id,
-        user: loginData,
-        loader: false,
-        role: loginData.role,
-        nav: "normal-nav",
-        layout: "frontend-layout",
-        current: currentAccess,
-        list: unitList,
-        enroll: enrollResponse,
-        channel: 'web',
-      };
+        const session = {
+            active: true,
+            token: loginData._id,
+            refresh: "",
+            login: true,
+            userID: loginData._id,
+            user: loginData,
+            loader: false,
+            role: loginData.role,
+            nav: "normal-nav",
+            layout: "frontend-layout",
+            current: currentAccess,
+            list: unitList,
+            enroll: enrollResponse,
+            channel: 'web',
+        };
 
-      // Respond with session data
-      res.status(200).json({ message: 'Signin successful', session });
+        // Respond with session data and success status
+        res.status(200).json({ status: true, message: 'Signin successful' + client, session });
 
     } catch (err) {
-      console.error(err);
-      res.status(500).json({ message: 'An error occurred' });
+        console.error(err);
+        res.status(200).json({ status: false, message: 'An error occurred' + client });
     }
   });
 
