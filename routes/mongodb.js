@@ -180,7 +180,7 @@ module.exports = function () {
 
         // Find the request by ID in the database
         const requestCollection = db.collection('request'); // Adjust the collection name as needed
-        const requestData = await requestCollection.findOne({ _id: new ObjectId(requestId) });
+        const requestData = await requestCollection.findOne({ _id: safeObjectId(requestId) });
 
         if (!requestData) {
             return res.status(200).json({ status: false, message: 'Request not found' });
