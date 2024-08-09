@@ -19,6 +19,7 @@ module.exports = function () {
         const { client, db } = req;
         const { username, password } = req.body;
 
+        console.log("req",req);
         // Check if username and password are provided
         if (!username || !password) {
             return res.status(200).json({ status: false, message: 'Username and password are required' });
@@ -40,7 +41,7 @@ module.exports = function () {
         const loginData = userResponse.length > 0 ? userResponse[0] : null;
 
         if (!loginData) {
-            return res.status(200).json({ status: false, message: 'User not found' + client });
+            return res.status(200).json({ status: false, message: 'User not found' });
         }
 
         // Validate password
@@ -49,12 +50,12 @@ module.exports = function () {
         const storedHash = loginData.password;
 
         if (inputHash !== storedHash) {
-            return res.status(200).json({ status: false, message: 'Invalid username or password' + client });
+            return res.status(200).json({ status: false, message: 'Invalid username or password' });
         }
 
         // Check user role
         if (loginData.role !== 'user') {
-            return res.status(200).json({ status: false, message: 'Unauthorized to access this site' + client });
+            return res.status(200).json({ status: false, message: 'Unauthorized to access this site' });
         }
 
         // Get User Enroll
@@ -94,11 +95,11 @@ module.exports = function () {
         };
 
         // Respond with session data and success status
-        res.status(200).json({ status: true, message: 'Signin successful' + client, session });
+        res.status(200).json({ status: true, message: 'Signin successful', session });
 
     } catch (err) {
         console.error(err);
-        res.status(200).json({ status: false, message: 'An error occurred' + client });
+        res.status(200).json({ status: false, message: 'An error occurred' });
     }
   });
 
