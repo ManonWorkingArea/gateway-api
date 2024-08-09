@@ -149,7 +149,7 @@ module.exports = function () {
         expireDate.setHours(expireDate.getHours() + 24); // Set expiry to 24 hours from now
 
         const requestInsert = await requestCollection.insertOne({
-            userID: userData._id,
+            userID: userData._id.toString(),
             type: 'reset',
             expiredate: expireDate,
         });
