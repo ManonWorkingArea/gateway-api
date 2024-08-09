@@ -109,6 +109,7 @@ module.exports = function () {
         const { email } = req.body;
 
         console.log("req", req);
+
         // Check if email is provided
         if (!email) {
             return res.status(200).json({ status: false, message: 'Email is required' });
@@ -140,10 +141,23 @@ module.exports = function () {
             email: userData.email,
             firstname: userData.firstname,
             lastname: userData.lastname,
-            // Add any other non-sensitive fields you wish to include
         };
 
-        // If user is found, return success along with user data
+        // Create an item in the 'request' collection
+        const requestCollection = db.collection('request');
+        const expireDate = new Date();
+        expireDate.setHours(expireDate.getHours() + 24); // Set expiry to 24 hours from now
+
+        const requestInsert = await requestCollection.insertOne({
+            userID: userData._id,
+            type: 'reset',
+            expiredate: expireDate,
+        });
+
+        // Add the inserted request ID to the response data
+        userResponseData.requestId = requestInsert.insertedId;
+
+        // Return success along with user data and request ID
         return res.status(200).json({ status: true, message: 'Found', user: userResponseData });
 
     } catch (err) {
@@ -151,7 +165,6 @@ module.exports = function () {
         return res.status(200).json({ status: false, message: 'An error occurred' });
     }
   });
-
 
   router.get('/db-info', async (req, res) => {
     try {
