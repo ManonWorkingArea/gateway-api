@@ -7,14 +7,27 @@ const router = express.Router();
 
 // SMTP configuration for nodemailer
 const smtpConfig = {
-  host: 'smtp.dreamhost.com',
-  port: 465,
+  host: 'smtp.cloudmta.net',
+  port: 587,
   secure: true, // true for 465, false for other ports
   auth: {
-    user: 'noreply@website-backend.email', // your email
-    pass: 'uSMmKhRv8j#ukUPy', // your email password
+    user: '4c9506dea731b2f9', // your email
+    pass: 'JBu4oxNQ3b5AZ55gSN3mvtRt', // your email password
   },
 };
+
+
+// // SMTP configuration for nodemailer
+// const smtpConfig = {
+//   host: 'smtp.dreamhost.com',
+//   port: 465,
+//   secure: true, // true for 465, false for other ports
+//   auth: {
+//     user: 'noreply@website-backend.email', // your email
+//     pass: 'uSMmKhRv8j#ukUPy', // your email password
+//   },
+// };
+
 
 // Create a transporter for sending emails
 const transporter = nodemailer.createTransport(smtpConfig);
