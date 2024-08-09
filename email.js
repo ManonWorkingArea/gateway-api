@@ -9,7 +9,8 @@ const router = express.Router();
 const smtpConfig = {
   host: 'smtp.cloudmta.net',
   port: 587,
-  secure: true, // true for 465, false for other ports
+  secure: false,
+  requireTLS: true,
   auth: {
     user: '4c9506dea731b2f9', // your email
     pass: 'JBu4oxNQ3b5AZ55gSN3mvtRt', // your email password
