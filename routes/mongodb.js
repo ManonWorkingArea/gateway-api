@@ -103,6 +103,45 @@ module.exports = function () {
     }
   });
 
+  router.post('/forgot', async (req, res) => {
+    try {
+        const { client, db } = req;
+        const { email } = req.body;
+
+        console.log("req", req);
+        // Check if email is provided
+        if (!email) {
+            return res.status(200).json({ status: false, message: 'Email is required' });
+        }
+
+        // Find the user by email in the database
+        const collection = db.collection('user'); // Adjust the collection name as needed
+        const userQuery = {
+            method: 'find',
+            args: [
+                {
+                    $and: [
+                        { email: email }
+                    ]
+                }
+            ]
+        };
+        const userResponse = await collection.find(userQuery.args[0]).toArray();
+        const userData = userResponse.length > 0 ? userResponse[0] : null;
+
+        if (!userData) {
+            return res.status(200).json({ status: false, message: 'Not found' });
+        }
+
+        // If user is found, return success
+        return res.status(200).json({ status: true, message: 'Found' });
+
+    } catch (err) {
+        console.error(err);
+        return res.status(200).json({ status: false, message: 'An error occurred' });
+    }
+});
+
   router.get('/db-info', async (req, res) => {
     try {
       const { client, db } = req;
