@@ -167,7 +167,7 @@ module.exports = function () {
     }
   });
 
-  router.post('/check_request', async (req, res) => {
+  router.post('/chkrequest', async (req, res) => {
     try {
         const { client, db } = req;
         const { requestId } = req.body;
@@ -206,6 +206,66 @@ module.exports = function () {
         return res.status(200).json({ status: false, message: 'An error occurred while checking the request' });
     }
   });
+
+  router.post('/changepwd', async (req, res) => {
+    try {
+        const { client, db } = req;
+        const { newPassword, requestId } = req.body;
+
+        console.log("Processing password change request:", requestId);
+
+        // Validate input
+        if (!newPassword || !requestId) {
+            return res.status(400).json({ status: false, message: 'New password and request ID are required' });
+        }
+
+        // Find the request by ID
+        const requestCollection = db.collection('request');
+        const requestData = await requestCollection.findOne({ _id: safeObjectId(requestId) });
+
+        if (!requestData) {
+            return res.status(404).json({ status: false, message: 'Request not found' });
+        }
+
+        // Check if the request has expired or is not pending
+        const currentDate = new Date();
+        if (currentDate > requestData.expiredate || requestData.status !== 'pending') {
+            return res.status(400).json({ status: false, message: 'Request is invalid or has expired' });
+        }
+
+        // Get the user ID from the request data
+        const userId = requestData.userID;
+
+        // Generate a new salt and hash the new password
+        const salt = CryptoJS.lib.WordArray.random(16).toString();
+        const hash = CryptoJS.SHA256(newPassword + salt).toString();
+
+        // Update the user's password in the user collection
+        const userCollection = db.collection('user');
+        await userCollection.updateOne(
+            { _id: safeObjectId(userId) },
+            {
+                $set: {
+                    password: hash,
+                    salt: salt,
+                }
+            }
+        );
+
+        // Update the request status to 'used'
+        await requestCollection.updateOne(
+            { _id: safeObjectId(requestId) },
+            { $set: { status: 'used' } }
+        );
+
+        // Return success response
+        return res.status(200).json({ status: true, message: 'Password changed successfully' });
+
+    } catch (err) {
+        console.error('Error changing password:', err);
+        return res.status(500).json({ status: false, message: 'An error occurred while changing the password' });
+    }
+});
 
   router.get('/db-info', async (req, res) => {
     try {
