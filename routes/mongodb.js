@@ -151,6 +151,7 @@ module.exports = function () {
         const requestInsert = await requestCollection.insertOne({
             userID: userData._id.toString(),
             type: 'reset',
+            status: 'pending',
             expiredate: expireDate,
         });
 
@@ -192,7 +193,12 @@ module.exports = function () {
             return res.status(200).json({ status: false, message: 'Request has expired' });
         }
 
-        // If request exists and is not expired, return success
+        // Check if the request status is 'pending'
+        if (requestData.status !== 'pending') {
+            return res.status(200).json({ status: false, message: 'Request is not valid. Current status: ' + requestData.status });
+        }
+
+        // If request exists, is not expired, and status is 'pending', return success
         return res.status(200).json({ status: true, message: 'Request is valid' });
 
     } catch (err) {
