@@ -2,6 +2,7 @@
 
 const { Router } = require('express');
 const CryptoJS = require('crypto-js');
+const { createEvent, createEvents } = require('ics');
 
 const {
   authenticateClient,
@@ -278,6 +279,69 @@ module.exports = function () {
       res.status(500).json({ message: 'An error occurred' });
     }
   });
+
+// GET Appointment by calendarId
+router.get('/appointment/:id', async (req, res) => {
+  try {
+    const { db } = req;
+    const calendarId = req.params.id;
+    const keyQueryParam = req.query.key;
+
+    if (!calendarId) {
+      return res.status(400).json({ status: false, message: 'calendarId is required' });
+    }
+
+    const calendarObjectId = safeObjectId(calendarId);
+
+    if (!calendarObjectId) {
+      return res.status(400).json({ status: false, message: 'Invalid calendarId format' });
+    }
+
+    const collection = db.collection('calendar_event');
+    const appointments = await collection.find({ calendarId: calendarId }).toArray();
+
+    if (!appointments.length) {
+      return res.status(404).json({ status: false, message: 'No appointments found for this calendarId: ' + calendarId });
+    }
+
+    // Convert appointments to the ICS format
+    const events = appointments.map((appointment) => {
+      return {
+        start: [
+          parseInt(appointment.startDate.substr(0, 4)),
+          parseInt(appointment.startDate.substr(5, 2)),
+          parseInt(appointment.startDate.substr(8, 2))
+        ],
+        end: [
+          parseInt(appointment.endDate.substr(0, 4)),
+          parseInt(appointment.endDate.substr(5, 2)),
+          parseInt(appointment.endDate.substr(8, 2))
+        ],
+        title: appointment.title,
+        description: appointment.description || '',
+        location: appointment.location || '',
+        status: 'CONFIRMED',
+      };
+    });
+
+    // Generate ICS file
+    createEvents(events, (error, value) => {
+      if (error) {
+        console.error('Error creating ICS file:', error);
+        return res.status(500).json({ status: false, message: 'An error occurred while generating the ICS file' });
+      }
+
+      // Send the ICS file as a download
+      res.setHeader('Content-Disposition', 'attachment; filename=appointments.ics');
+      res.setHeader('Content-Type', 'text/calendar');
+      res.send(value);
+    });
+    
+  } catch (err) {
+    console.error('Error fetching appointments:', err);
+    res.status(500).json({ status: false, message: 'An error occurred while fetching appointments' });
+  }
+});
 
   // GET Method
   router.get('/:collection', async (req, res) => {
