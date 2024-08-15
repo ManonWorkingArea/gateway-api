@@ -15,70 +15,19 @@ const maxCacheAge = 60 * 60 * 1000; // 1 hour
 // Middleware function for custom headers and client data retrieval
 async function authenticateClient(req, res, next) {
   try {
-    // First, try to get the token from the URL parameter
-    let clientToken = req.query.client;
-    let channel = 'query';
-
-    // If the token is not in the URL, fall back to checking the headers
-    if (!clientToken) {
-      const headerToken = req.headers['x-content-token'];
-      if (headerToken) {
-        const salt = process.env.TOKEN_SALT;
-        const key = CryptoJS.enc.Hex.parse(headers['x-content-key']);
-        const iv = CryptoJS.enc.Hex.parse(headers['x-content-sign']);
-        const result = decryptToken(headerToken, key, iv, salt);
-        clientToken = result.key;
-        channel = 'token';
-      } else {
-        clientToken = req.headers['client-token-key'];
-        channel = 'header';
-      }
-    }
-
-    if (!clientToken) {
-      res.status(400).json({ message: 'Client token is required' });
-      return;
-    }
-
-    console.log('Channel', channel);
-    console.log('Key', clientToken);
-
-    if (clientDataCache.has(clientToken)) {
-      console.log('Data retrieved from cache for clientToken:', clientToken);
-      const { data, timestamp } = clientDataCache.get(clientToken);
-      const currentTime = Date.now();
-
-      if (currentTime - timestamp <= maxCacheAge) {
-        req.client = mongoClient;
-        req.db = mongoClient.db(data.connection.database);
-        req.clientData = data;
-        return next();
-      } else {
-        clientDataCache.delete(clientToken);
-        console.log('Cache entry expired for clientToken:', clientToken);
-      }
-    }
-
-    if (!mongoClient) {
-      mongoClient = new MongoClient(process.env.MONGODB_URI, {
-        useNewUrlParser: true,
-        useUnifiedTopology: true,
-      });
-    }
-
-    await mongoClient.connect();
-    const db = mongoClient.db('API');
-    const clientsCollection = db.collection('clients');
-    const clientData = await clientsCollection.findOne({ clientToken });
+    const hToken = req.headers['client-token-key'];
+    const clientData = await getClientData(req.headers);
 
     if (!clientData) {
       res.status(404).json({ message: 'Client not found' });
       return;
     }
 
-    clientDataCache.set(clientToken, { data: clientData, timestamp: Date.now() });
-    console.log('Data cached for clientToken:', clientToken);
+    // Set the custom X-Client-Token header
+    const clientToken = req.headers['client-token-key']; // Fixed variable name
+    res.set('X-Client-Token', clientToken);
 
+    // Attach the client and database objects to the request for further middleware and route handlers
     req.client = mongoClient;
     req.db = mongoClient.db(clientData.connection.database);
     req.clientData = clientData;
