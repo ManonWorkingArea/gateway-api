@@ -255,23 +255,27 @@ router.get('/getHost', async (req, res) => {
 router.post('/getTheme', async (req, res) => {
   try {
     const { db } = req;
-    const ids = req.body;
+    const { data } = req.body;
 
-    // Validate input: Ensure ids is an object and not empty
-    if (!ids || typeof ids !== 'object' || Object.keys(ids).length === 0) {
-      return res.status(400).json({ status: false, message: 'Invalid input: IDs are required' });
+    // Validate input: Ensure data is an object and not empty
+    if (!data || typeof data !== 'object' || Object.keys(data).length === 0) {
+      return res.status(400).json({ status: false, message: 'Invalid input: Data object is required' });
     }
 
-    // Convert the values of the input object to an array of ObjectIds
-    const objectIds = Object.values(ids).map(id => safeObjectId(id));
+    // Filter out any empty values and convert the values of the input object to an array of ObjectIds
+    const objectIds = Object.values(data).filter(id => id).map(id => safeObjectId(id));
 
     // Query the 'post' collection to find documents matching the provided ObjectIds
     const postCollection = db.collection('post'); // Adjust collection name accordingly
     const posts = await postCollection.find({ _id: { $in: objectIds } }).toArray();
 
     // Create a response object that maps the input keys to the corresponding posts
-    const result = Object.keys(ids).reduce((acc, key) => {
-      acc[key] = posts.find(post => post._id.toString() === ids[key]) || null;
+    const result = Object.keys(data).reduce((acc, key) => {
+      if (data[key]) {
+        acc[key] = posts.find(post => post._id.toString() === data[key]) || null;
+      } else {
+        acc[key] = null;
+      }
       return acc;
     }, {});
 
@@ -282,6 +286,7 @@ router.post('/getTheme', async (req, res) => {
     res.status(500).json({ status: false, message: 'An error occurred while retrieving posts' });
   }
 });
+
 
   router.post('/changepwd', async (req, res) => {
     try {
