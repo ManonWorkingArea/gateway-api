@@ -220,7 +220,7 @@ module.exports = function () {
       }
   
       // Query the 'hostnameCollection' for the given hostname
-      const hostnameCollection = db.collection('hostname'); // Adjust collection name accordingly
+      const hostnameCollection = db.collection('hostnameCollection'); // Adjust collection name accordingly
       const hostResult = await hostnameCollection.findOne({ hostname: hostname });
   
       if (!hostResult) {
@@ -235,13 +235,23 @@ module.exports = function () {
         return res.status(404).json({ status: false, message: 'No space data found for the provided spaceId' });
       }
   
-      // Return the combined data from both collections
-      res.status(200).json({ status: true, hostData: hostResult, spaceData: spaceResult });
+      // Query the 'translate' collection to get all data
+      const translateCollection = db.collection('translate'); // Adjust collection name accordingly
+      const translateResult = await translateCollection.find().toArray();
+  
+      // Return the combined data from hostname, space, and translate collections
+      res.status(200).json({
+        status: true,
+        hostData: hostResult,
+        spaceData: spaceResult,
+        translateData: translateResult,
+      });
     } catch (err) {
       console.error('Error retrieving data by hostname:', err);
       res.status(500).json({ status: false, message: 'An error occurred while retrieving data' });
     }
   });
+  
 
   router.post('/changepwd', async (req, res) => {
     try {
