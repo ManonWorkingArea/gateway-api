@@ -213,22 +213,30 @@ module.exports = function () {
     try {
       const { db } = req;
       const { hostname } = req.query;
-
+  
       // Validate hostname parameter
       if (!hostname) {
         return res.status(400).json({ status: false, message: 'Hostname is required' });
       }
-
-      // Query the collection for the given hostname
-      const collection = db.collection('hostname'); // Adjust collection name accordingly
-      const result = await collection.findOne({ hostname: hostname });
-
-      if (!result) {
+  
+      // Query the 'hostnameCollection' for the given hostname
+      const hostnameCollection = db.collection('hostname'); // Adjust collection name accordingly
+      const hostResult = await hostnameCollection.findOne({ hostname: hostname });
+  
+      if (!hostResult) {
         return res.status(404).json({ status: false, message: 'No data found for the provided hostname' });
       }
-
-      // Return the found document
-      res.status(200).json({ status: true, data: result });
+  
+      // Query the 'space' collection using the spaceId from the hostResult
+      const spaceCollection = db.collection('space'); // Adjust collection name accordingly
+      const spaceResult = await spaceCollection.findOne({ _id: safeObjectId(hostResult.spaceId) });
+  
+      if (!spaceResult) {
+        return res.status(404).json({ status: false, message: 'No space data found for the provided spaceId' });
+      }
+  
+      // Return the combined data from both collections
+      res.status(200).json({ status: true, hostData: hostResult, spaceData: spaceResult });
     } catch (err) {
       console.error('Error retrieving data by hostname:', err);
       res.status(500).json({ status: false, message: 'An error occurred while retrieving data' });
