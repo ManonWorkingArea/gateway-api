@@ -208,6 +208,33 @@ module.exports = function () {
     }
   });
 
+  // New /getHost endpoint to retrieve data by hostname
+  router.get('/getHost', async (req, res) => {
+    try {
+      const { db } = req;
+      const { hostname } = req.query;
+
+      // Validate hostname parameter
+      if (!hostname) {
+        return res.status(400).json({ status: false, message: 'Hostname is required' });
+      }
+
+      // Query the collection for the given hostname
+      const collection = db.collection('hostname'); // Adjust collection name accordingly
+      const result = await collection.findOne({ hostname: hostname });
+
+      if (!result) {
+        return res.status(404).json({ status: false, message: 'No data found for the provided hostname' });
+      }
+
+      // Return the found document
+      res.status(200).json({ status: true, data: result });
+    } catch (err) {
+      console.error('Error retrieving data by hostname:', err);
+      res.status(500).json({ status: false, message: 'An error occurred while retrieving data' });
+    }
+  });
+
   router.post('/changepwd', async (req, res) => {
     try {
         const { client, db } = req;
