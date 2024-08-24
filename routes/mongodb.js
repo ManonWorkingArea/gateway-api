@@ -209,49 +209,49 @@ module.exports = function () {
   });
 
   // New /getHost endpoint to retrieve data by hostname
-  router.get('/getHost', async (req, res) => {
-    try {
-      const { db } = req;
-      const { hostname } = req.query;
-  
-      // Validate hostname parameter
-      if (!hostname) {
-        return res.status(400).json({ status: false, message: 'Hostname is required' });
-      }
-  
-      // Query the 'hostnameCollection' for the given hostname
-      const hostnameCollection = db.collection('hostnameCollection'); // Adjust collection name accordingly
-      const hostResult = await hostnameCollection.findOne({ hostname: hostname });
-  
-      if (!hostResult) {
-        return res.status(404).json({ status: false, message: 'No data found for the provided hostname' });
-      }
-  
-      // Query the 'space' collection using the spaceId from the hostResult
-      const spaceCollection = db.collection('space'); // Adjust collection name accordingly
-      const spaceResult = await spaceCollection.findOne({ _id: safeObjectId(hostResult.spaceId) });
-  
-      if (!spaceResult) {
-        return res.status(404).json({ status: false, message: 'No space data found for the provided spaceId' });
-      }
-  
-      // Query the 'translate' collection to get all data
-      const translateCollection = db.collection('translate'); // Adjust collection name accordingly
-      const translateResult = await translateCollection.find().toArray();
-  
-      // Return the combined data from hostname, space, and translate collections
-      res.status(200).json({
-        status: true,
-        hostData: hostResult,
-        spaceData: spaceResult,
-        translateData: translateResult,
-      });
-    } catch (err) {
-      console.error('Error retrieving data by hostname:', err);
-      res.status(500).json({ status: false, message: 'An error occurred while retrieving data' });
+router.get('/getHost', async (req, res) => {
+  try {
+    const { db } = req;
+    const { hostname } = req.query;
+
+    // Validate hostname parameter
+    if (!hostname) {
+      return res.status(400).json({ status: false, message: 'Hostname is required' });
     }
-  });
-  
+
+    // Query the 'hostnameCollection' for the given hostname
+    const hostnameCollection = db.collection('hostname'); // Adjust collection name accordingly
+    const hostResult = await hostnameCollection.findOne({ hostname: hostname });
+
+    if (!hostResult) {
+      return res.status(404).json({ status: false, message: 'No data found for the provided hostname' });
+    }
+
+    // Query the 'space' collection using the spaceId from the hostResult
+    const spaceCollection = db.collection('space'); // Adjust collection name accordingly
+    const spaceResult = await spaceCollection.findOne({ _id: safeObjectId(hostResult.spaceId) });
+
+    if (!spaceResult) {
+      return res.status(404).json({ status: false, message: 'No space data found for the provided spaceId' });
+    }
+
+    // Query the 'translate' collection to get all data
+    const translateCollection = db.collection('translate'); // Adjust collection name accordingly
+    const translateResult = await translateCollection.find().toArray();
+
+    // Return the combined data from hostname, space, and translate collections
+    res.status(200).json({
+      status: true,
+      hostData: hostResult,
+      spaceData: spaceResult,
+      translateData: translateResult,
+    });
+  } catch (err) {
+    console.error('Error retrieving data by hostname:', err);
+    res.status(500).json({ status: false, message: 'An error occurred while retrieving data' });
+  }
+});
+
 
   router.post('/changepwd', async (req, res) => {
     try {
