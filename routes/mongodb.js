@@ -733,7 +733,7 @@ router.get('/appointment/:id', async (req, res) => {
         return stage;
       });
 
-      const result = await collection.aggregate(modifiedPipeline).toArray();
+      const result = await collection.aggregate(modifiedPipeline, { allowDiskUse: true }).toArray();
       res.status(200).json(result);
     } catch (err) {
       next(err);

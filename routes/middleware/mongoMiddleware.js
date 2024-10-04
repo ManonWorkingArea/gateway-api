@@ -17,7 +17,12 @@ async function authenticateClient(req, res, next) {
   try {
     const hToken = req.headers['client-token-key'];
     const keyQueryParam = req.query.key; // Check for the ?key=xxxx query parameter
-    const clientData = await getClientData(req.headers, keyQueryParam);
+    let clientData = await getClientData(req.headers, keyQueryParam);
+
+    // If no client data is found and keyQueryParam is present, try again using keyQueryParam as clientToken
+    if (!clientData && keyQueryParam) {
+      clientData = await getClientData({ 'client-token-key': keyQueryParam });
+    }
 
     if (!clientData) {
       res.status(404).json({ message: 'Client not found' });
@@ -25,7 +30,7 @@ async function authenticateClient(req, res, next) {
     }
 
     // Set the custom X-Client-Token header
-    const clientToken = req.headers['client-token-key']; // Fixed variable name
+    const clientToken = hToken || keyQueryParam; // Use hToken or fallback to keyQueryParam
     res.set('X-Client-Token', clientToken);
 
     // Attach the client and database objects to the request for further middleware and route handlers
@@ -142,13 +147,12 @@ async function getClientData(headers, keyQueryParam) {
   }
 }
 
-
 // Error handling middleware
 function errorHandler(err, req, res, next) {
-    console.error(err);
-    res.status(500).json({ message: 'An error occurred' });
+  console.error(err);
+  res.status(500).json({ err });
 }
-  
+
 module.exports = {
   authenticateClient,
   safeObjectId,
