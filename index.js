@@ -5,12 +5,11 @@ const dotenv        = require('dotenv');
 const setupRoutes   = require('./routes');
 const socketRouter  = require('./socket');
 const emailRouter   = require('./email');
-const authenRouter    = require('./authen');  // Updated to 'authen'
+const accountRouter    = require('./account');  // Updated to 'authen'
 const authRouter    = require('./auth');  // Import the auth router
 const http          = require('http');
 const socketio      = require('socket.io');
 const verifySlipRouter = require('./routes/verifySlip'); 
-const helmet = require('helmet');
 
 dotenv.config();
 
@@ -30,8 +29,6 @@ app.use(apiLimiter);
 app.set('trust proxy', false);
 app.use(bodyParser.json());
 app.use(cors());
-app.use(helmet());
-app.use(helmet.frameguard({ action: 'deny' }));  // ป้องกันการใช้ iframe
 app.use((req, res, next) => {
   console.log(`Incoming request: ${req.method} ${req.url}`);
   next();
@@ -61,7 +58,7 @@ async function initializeApp() {
     setupRoutes(app);
     app.use('/email', emailRouter);
     app.use('/auth', authRouter);
-    app.use('/authen', authenRouter);  // Updated route to 'authen'
+    app.use('/account', accountRouter);  // Updated route to 'authen'
     app.use('/slip', verifySlipRouter);
 
     server.listen(process.env.PORT, () => {

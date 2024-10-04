@@ -42,7 +42,7 @@ function generateJWT(userResponse, key) {
   return { token, data };
 }
 
-router.post('/signin', async (req, res) => {
+router.post('/login', async (req, res) => {
   try {
     const { db } = req; // MongoDB connection is attached by authenticateClient middleware
     const { username, password } = req.body;
@@ -106,7 +106,7 @@ router.post('/signin', async (req, res) => {
       status: true,
       message: 'Signin successful',
       token,
-      data, // Send the same data used for JWT generation back to the client
+      //data, // Send the same data used for JWT generation back to the client
     });
 
   } catch (error) {
@@ -116,7 +116,7 @@ router.post('/signin', async (req, res) => {
 });
 
 // Endpoint to check session validity
-router.get('/check', async (req, res) => {
+router.get('/recheck', async (req, res) => {
   const token = req.headers['authorization'];
   if (!token) {
     return res.status(400).json({ status: false, message: 'Token is required' });
@@ -202,7 +202,7 @@ router.get('/refresh', async (req, res) => {
       status: true,
       message: 'Token refreshed successfully',
       token: newToken, // Return the new token
-      data,  // Return the session data used for JWT generation
+      //data,  // Return the session data used for JWT generation
     });
 
   } catch (error) {
@@ -212,7 +212,7 @@ router.get('/refresh', async (req, res) => {
 });
 
 // Endpoint to revoke a session (logout) using GET method
-router.get('/revoke', async (req, res) => {
+router.get('/remove', async (req, res) => {
   const token = req.headers['authorization'];
 
   if (!token) {
