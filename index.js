@@ -25,7 +25,7 @@ const apiLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-app.use(apiLimiter);
+//app.use(apiLimiter);
 app.set('trust proxy', false);
 app.use(bodyParser.json());
 app.use(cors());
