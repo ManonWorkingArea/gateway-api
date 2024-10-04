@@ -6,7 +6,7 @@ const { authenticateClient, safeObjectId, errorHandler } = require('./routes/mid
 const router = express.Router();
 
 // Secret key for signing JWT (You should store this securely)
-const JWT_SECRET = 'your_jwt_secret_key'; // Replace with your own secret key
+const JWT_SECRET = 'ZCOKU1v3TO2flcOqCdrJ3vWbWhmnZNQn'; // Replace with your own secret key
 
 // Use authenticateClient to manage the MongoDB connection based on the client key
 router.use(authenticateClient);
