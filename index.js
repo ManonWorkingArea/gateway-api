@@ -3,11 +3,14 @@ const bodyParser    = require('body-parser');
 const cors          = require('cors');
 const dotenv        = require('dotenv');
 const setupRoutes   = require('./routes');
-const socketRouter  = require('./socket'); // Import the socket router
-const emailRouter   = require('./email'); // Import the email router
+const socketRouter  = require('./socket');
+const emailRouter   = require('./email');
+const authenRouter    = require('./authen');  // Updated to 'authen'
 const authRouter    = require('./auth');  // Import the auth router
-const http          = require('http');    // Import the http module
-const socketio      = require('socket.io'); // Import socket.io module
+const http          = require('http');
+const socketio      = require('socket.io');
+const verifySlipRouter = require('./routes/verifySlip'); 
+const helmet = require('helmet');
 
 dotenv.config();
 
@@ -15,39 +18,38 @@ const app = express();
 
 const rateLimit = require('express-rate-limit');
 
-// Create the rate limit rule
+// Rate limiting
 const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 10000, // 15 minutes
-  max: 60000, // limit each IP to 100 requests per windowMs
-  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  windowMs: 15 * 60 * 1000, 
+  max: 100, 
+  standardHeaders: true, 
+  legacyHeaders: false,
 });
 
-// Apply the rate limit to all requests
 app.use(apiLimiter);
 app.set('trust proxy', false);
 app.use(bodyParser.json());
 app.use(cors());
+app.use(helmet());
+app.use(helmet.frameguard({ action: 'deny' }));  // ป้องกันการใช้ iframe
 app.use((req, res, next) => {
   console.log(`Incoming request: ${req.method} ${req.url}`);
   next();
 });
 
 const server = http.createServer(app);
-const timeoutDuration = 300000; // 5 minutes in milliseconds
+const timeoutDuration = 300000;
 server.setTimeout(timeoutDuration);
 
 const io = socketio(server, {
-  cors: {
-    origin: "*"
-  }
+  cors: { origin: "*" }
 });
 
 io.on('connection', (socket) => {
   console.log('New client connected');
   socket.on('event-from-client', (data) => {
     console.log('Received data from client:', data);
-    socket.emit('push-notification', { message: 'Server : ' + data });
+    socket.emit('push-notification', { message: 'Server: ' + data });
   });
   setTimeout(() => {
     socket.emit('push-notification', { message: 'Hello from the server!' });
@@ -59,6 +61,8 @@ async function initializeApp() {
     setupRoutes(app);
     app.use('/email', emailRouter);
     app.use('/auth', authRouter);
+    app.use('/authen', authenRouter);  // Updated route to 'authen'
+    app.use('/slip', verifySlipRouter);
 
     server.listen(process.env.PORT, () => {
       console.log(`Server is running on port ${process.env.PORT}`);
