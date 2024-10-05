@@ -359,8 +359,41 @@ router.post('/wallet', async (req, res) => {
   }
 });
 
+// Wallet GET endpoint to fetch wallet balance
+router.get('/wallet', async (req, res) => {
+  try {
+    const token = req.headers['authorization'];
+    if (!token) {
+      return res.status(400).json({ status: false, message: 'Token is required' });
+    }
 
+    // Verify the token to get the user ID
+    const decodedToken = await verifyToken(token);
+    if (!decodedToken.status) {
+      return res.status(401).json({ status: false, message: 'Invalid or expired token' });
+    }
 
+    const { user } = decodedToken.decoded;
+
+    // Fetch the wallet data from the database
+    const walletCollection = req.db.collection('wallet');
+    const wallet = await walletCollection.findOne({ userID: safeObjectId(user) });
+
+    if (!wallet) {
+      return res.status(404).json({ status: false, message: 'Wallet not found' });
+    }
+
+    // Respond with the current wallet balance
+    res.status(200).json({
+      status: true,
+      message: 'Wallet fetched successfully',
+      balance: wallet.balance,
+    });
+  } catch (error) {
+    console.error('Error fetching wallet:', error);
+    res.status(500).json({ status: false, message: 'An error occurred while fetching the wallet' });
+  }
+});
 
 // Use error handling middleware
 router.use(errorHandler);
