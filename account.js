@@ -343,23 +343,31 @@ router.post('/wallet', async (req, res) => {
           status: true,
           message: 'New wallet created successfully',
           balance: wallet.balance,
+          transactions: [], // No transactions for a new wallet
         });
       } else {
         return res.status(404).json({ status: false, message: 'Wallet not found' });
       }
     }
 
-    // Mode to get wallet balance
+    // Mode to get wallet balance along with last 5 transactions
     if (mode === 'get') {
+      // Fetch the last 5 transactions from the transaction log for this user
+      const lastTransactions = await walletTransactionCollection.find({ userID: safeObjectId(user) })
+        .sort({ timestamp: -1 }) // Sort by the most recent first
+        .limit(5) // Limit to 5 transactions
+        .toArray();
+
       return res.status(200).json({
         status: true,
         message: 'Wallet fetched successfully',
         balance: wallet.balance,
+        transactions: lastTransactions, // Return the last 5 transactions
       });
     }
 
     // Perform update operations (increase, decrease, adjust)
-    if (mode === 'increase', 'decrease', 'adjust') {
+    if (['increase', 'decrease', 'adjust'].includes(mode)) {
       if (!amount || isNaN(amount)) {
         return res.status(400).json({ status: false, message: 'A valid amount is required' });
       }
@@ -411,6 +419,7 @@ router.post('/wallet', async (req, res) => {
     res.status(500).json({ status: false, message: 'An error occurred while processing the wallet operation' });
   }
 });
+
 
 // Use error handling middleware
 router.use(errorHandler);
