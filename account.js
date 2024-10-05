@@ -296,6 +296,70 @@ router.get('/profile', async (req, res) => {
   }
 });
 
+// Wallet management endpoint
+router.post('/wallet', async (req, res) => {
+  try {
+    const token = req.headers['authorization'];
+    if (!token) {
+      return res.status(400).json({ status: false, message: 'Token is required' });
+    }
+
+    const { mode, amount } = req.body; // mode could be 'increase', 'decrease', or 'adjust'
+    if (!mode || !amount || isNaN(amount)) {
+      return res.status(400).json({ status: false, message: 'Mode and a valid amount are required' });
+    }
+
+    // Verify the token to get the user ID
+    const decodedToken = await verifyToken(token);
+    if (!decodedToken.status) {
+      return res.status(401).json({ status: false, message: 'Invalid or expired token' });
+    }
+
+    const { user } = decodedToken.decoded;
+
+    // Fetch wallet data from the database
+    const walletCollection = req.db.collection('wallet');
+    const wallet = await walletCollection.findOne({ userID: safeObjectId(user) });
+
+    if (!wallet) {
+      return res.status(404).json({ status: false, message: 'Wallet not found' });
+    }
+
+    // Perform the operation based on the mode
+    let updatedBalance = wallet.balance;
+
+    if (mode === 'increase') {
+      updatedBalance += parseFloat(amount);
+    } else if (mode === 'decrease') {
+      updatedBalance -= parseFloat(amount);
+      if (updatedBalance < 0) {
+        return res.status(400).json({ status: false, message: 'Insufficient funds' });
+      }
+    } else if (mode === 'adjust') {
+      updatedBalance = parseFloat(amount); // Set the balance to the new amount
+    } else {
+      return res.status(400).json({ status: false, message: 'Invalid mode' });
+    }
+
+    // Update the wallet balance in the database
+    await walletCollection.updateOne(
+      { userID: safeObjectId(user) },
+      { $set: { balance: updatedBalance, updatedAt: new Date() } }
+    );
+
+    // Respond with the updated wallet balance
+    res.status(200).json({
+      status: true,
+      message: 'Wallet updated successfully',
+      balance: updatedBalance,
+    });
+  } catch (error) {
+    console.error('Error updating wallet:', error);
+    res.status(500).json({ status: false, message: 'An error occurred while updating the wallet' });
+  }
+});
+
+
 
 
 // Use error handling middleware
