@@ -334,7 +334,8 @@ router.post('/wallet', async (req, res) => {
           userID: safeObjectId(user),
           action: 'create',
           amount: 0,
-          balanceAfter: 0,
+          balanceBefore: 0, // Initially, balance before is 0
+          balanceAfter: 0,  // Balance after is also 0
           timestamp: new Date(),
         });
 
@@ -358,12 +359,13 @@ router.post('/wallet', async (req, res) => {
     }
 
     // Perform update operations (increase, decrease, adjust)
-    if (mode === 'increase' || mode === 'decrease' || mode === 'adjust') {
+    if (mode === 'increase', 'decrease', 'adjust') {
       if (!amount || isNaN(amount)) {
         return res.status(400).json({ status: false, message: 'A valid amount is required' });
       }
 
-      let updatedBalance = wallet.balance;
+      const balanceBefore = wallet.balance; // Capture the balance before the operation
+      let updatedBalance = balanceBefore;
       let actionType = '';
 
       if (mode === 'increase') {
@@ -391,7 +393,8 @@ router.post('/wallet', async (req, res) => {
         userID: safeObjectId(user),
         action: actionType,
         amount: parseFloat(amount),
-        balanceAfter: updatedBalance,
+        balanceBefore: balanceBefore, // Log the balance before the transaction
+        balanceAfter: updatedBalance, // Log the balance after the transaction
         timestamp: new Date(),
       });
 
