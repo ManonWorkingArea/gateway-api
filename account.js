@@ -361,28 +361,42 @@ router.post('/password', async (req, res) => {
     }
 
     const { user } = decodedToken.decoded; // Extract user ID from the decoded token
-    const { newPassword, confirmPassword } = req.body; // Extract the new password and confirm password from the request body
+    const { currentPassword, newPassword, confirmPassword } = req.body; // Extract the current password, new password, and confirm password
 
-    // Validate new password and confirm password
-    if (!newPassword || !confirmPassword) {
-      return res.status(400).json({ status: false, message: 'New password and confirmation are required' });
+    // Validate all required fields
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      return res.status(400).json({ status: false, message: 'Current password, new password, and confirmation are required' });
     }
 
+    // Validate new password and confirm password
     if (newPassword !== confirmPassword) {
       return res.status(400).json({ status: false, message: 'Passwords do not match' });
     }
 
+    // Fetch the user's current password and salt from the database
+    const userCollection = req.db.collection('user');
+    const userData = await userCollection.findOne({ _id: safeObjectId(user) });
+
+    if (!userData) {
+      return res.status(404).json({ status: false, message: 'User not found' });
+    }
+
+    // Verify the current password
+    const currentHash = CryptoJS.SHA256(currentPassword + userData.salt).toString();
+    if (currentHash !== userData.password) {
+      return res.status(401).json({ status: false, message: 'Current password is incorrect' });
+    }
+
     // Generate a new salt and hash the new password
     const salt = CryptoJS.lib.WordArray.random(16).toString();
-    const hash = CryptoJS.SHA256(newPassword + salt).toString();
+    const newHash = CryptoJS.SHA256(newPassword + salt).toString();
 
     // Update the user's password in the user collection
-    const userCollection = req.db.collection('user');
     await userCollection.updateOne(
       { _id: safeObjectId(user) }, // Use the user ID from the token
       {
         $set: {
-          password: hash, // Set the new hashed password
+          password: newHash, // Set the new hashed password
           salt: salt, // Set the new salt
           updatedAt: new Date(), // Optionally update the `updatedAt` field
         }
@@ -400,6 +414,7 @@ router.post('/password', async (req, res) => {
     res.status(500).json({ status: false, message: 'An error occurred during password reset' });
   }
 });
+
 
 // Wallet management endpoint 
 router.post('/wallet', async (req, res) => {
