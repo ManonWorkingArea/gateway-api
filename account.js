@@ -345,6 +345,61 @@ router.post('/update', async (req, res) => {
   }
 });
 
+// Endpoint to reset the user's password
+router.post('/password', async (req, res) => {
+  const token = req.headers['authorization'];
+
+  if (!token) {
+    return res.status(400).json({ status: false, message: 'Token is required' });
+  }
+
+  try {
+    // Verify the current token
+    const decodedToken = await verifyToken(token);
+    if (!decodedToken.status) {
+      return res.status(401).json({ status: false, message: 'Invalid or expired token' });
+    }
+
+    const { user } = decodedToken.decoded; // Extract user ID from the decoded token
+    const { newPassword, confirmPassword } = req.body; // Extract the new password and confirm password from the request body
+
+    // Validate new password and confirm password
+    if (!newPassword || !confirmPassword) {
+      return res.status(400).json({ status: false, message: 'New password and confirmation are required' });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({ status: false, message: 'Passwords do not match' });
+    }
+
+    // Generate a new salt and hash the new password
+    const salt = CryptoJS.lib.WordArray.random(16).toString();
+    const hash = CryptoJS.SHA256(newPassword + salt).toString();
+
+    // Update the user's password in the user collection
+    const userCollection = req.db.collection('user');
+    await userCollection.updateOne(
+      { _id: safeObjectId(user) }, // Use the user ID from the token
+      {
+        $set: {
+          password: hash, // Set the new hashed password
+          salt: salt, // Set the new salt
+          updatedAt: new Date(), // Optionally update the `updatedAt` field
+        }
+      }
+    );
+
+    // Respond with a success message
+    res.status(200).json({
+      status: true,
+      message: 'Password reset successfully',
+    });
+
+  } catch (error) {
+    console.error('Error during password reset:', error);
+    res.status(500).json({ status: false, message: 'An error occurred during password reset' });
+  }
+});
 
 // Wallet management endpoint 
 router.post('/wallet', async (req, res) => {
