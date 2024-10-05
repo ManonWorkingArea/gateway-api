@@ -296,7 +296,7 @@ router.get('/profile', async (req, res) => {
   }
 });
 
-// Wallet management endpoint
+// Wallet management endpoint 
 router.post('/wallet', async (req, res) => {
   try {
     const token = req.headers['authorization'];
