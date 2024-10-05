@@ -249,6 +249,55 @@ router.get('/remove', async (req, res) => {
   }
 });
 
+
+// Endpoint to get user profile
+router.get('/profile', async (req, res) => {
+  const token = req.headers['authorization'];
+  
+  if (!token) {
+    return res.status(400).json({ status: false, message: 'Token is required' });
+  }
+
+  try {
+    const decodedToken = await verifyToken(token);
+    if (!decodedToken.status) {
+      return res.status(401).json({ status: false, message: 'Invalid or expired token' });
+    }
+
+    const { user } = decodedToken.decoded; // Extract user ID from the decoded token
+
+    // Fetch user data from the database
+    const userCollection = req.db.collection('user');
+    const userData = await userCollection.findOne({ _id: safeObjectId(user) });
+
+    if (!userData) {
+      return res.status(404).json({ status: false, message: 'User not found' });
+    }
+
+    // Respond with the user profile data
+    res.status(200).json({
+      status: true,
+      message: 'Profile fetched successfully',
+      profile: {
+        firstname: userData.firstname,
+        lastname: userData.lastname,
+        phone: userData.phone,
+        email: userData.email,
+        avatar_img: userData.avatar_img,
+        role: userData.role,
+        createdAt: userData.createdAt,
+        updatedAt: userData.updatedAt,
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching profile:', error);
+    res.status(500).json({ status: false, message: 'An error occurred while fetching profile' });
+  }
+});
+
+
+
 // Use error handling middleware
 router.use(errorHandler);
 
