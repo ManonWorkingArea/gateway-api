@@ -304,11 +304,6 @@ router.post('/wallet', async (req, res) => {
       return res.status(400).json({ status: false, message: 'Token is required' });
     }
 
-    const { mode, amount } = req.body; // mode could be 'increase', 'decrease', or 'adjust'
-    if (!mode || !amount || isNaN(amount)) {
-      return res.status(400).json({ status: false, message: 'Mode and a valid amount are required' });
-    }
-
     // Verify the token to get the user ID
     const decodedToken = await verifyToken(token);
     if (!decodedToken.status) {
@@ -316,84 +311,75 @@ router.post('/wallet', async (req, res) => {
     }
 
     const { user } = decodedToken.decoded;
+    const { mode, amount } = req.body; // mode can be 'get', 'increase', 'decrease', or 'adjust'
 
     // Fetch wallet data from the database
     const walletCollection = req.db.collection('wallet');
-    const wallet = await walletCollection.findOne({ userID: safeObjectId(user) });
+    let wallet = await walletCollection.findOne({ userID: safeObjectId(user) });
 
     if (!wallet) {
-      return res.status(404).json({ status: false, message: 'Wallet not found' });
+      if (mode !== 'get') {
+        // Create a new wallet with a balance of 0 if a user tries to update, but no wallet exists
+        wallet = { balance: 0 };
+        await walletCollection.insertOne({
+          userID: safeObjectId(user),
+          balance: 0,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+      } else {
+        return res.status(404).json({ status: false, message: 'Wallet not found' });
+      }
     }
 
-    // Perform the operation based on the mode
-    let updatedBalance = wallet.balance;
+    // Mode to get wallet balance
+    if (mode === 'get') {
+      return res.status(200).json({
+        status: true,
+        message: 'Wallet fetched successfully',
+        balance: wallet.balance,
+      });
+    }
 
-    if (mode === 'increase') {
-      updatedBalance += parseFloat(amount);
-    } else if (mode === 'decrease') {
-      updatedBalance -= parseFloat(amount);
-      if (updatedBalance < 0) {
-        return res.status(400).json({ status: false, message: 'Insufficient funds' });
+    // Perform update operations (increase, decrease, adjust)
+    if (mode === 'increase' || mode === 'decrease' || mode === 'adjust') {
+      if (!amount || isNaN(amount)) {
+        return res.status(400).json({ status: false, message: 'A valid amount is required' });
       }
-    } else if (mode === 'adjust') {
-      updatedBalance = parseFloat(amount); // Set the balance to the new amount
+
+      let updatedBalance = wallet.balance;
+
+      if (mode === 'increase') {
+        updatedBalance += parseFloat(amount);
+      } else if (mode === 'decrease') {
+        updatedBalance -= parseFloat(amount);
+        if (updatedBalance < 0) {
+          return res.status(400).json({ status: false, message: 'Insufficient funds' });
+        }
+      } else if (mode === 'adjust') {
+        updatedBalance = parseFloat(amount); // Set the balance to the new amount
+      }
+
+      // Update the wallet balance in the database
+      await walletCollection.updateOne(
+        { userID: safeObjectId(user) },
+        { $set: { balance: updatedBalance, updatedAt: new Date() } }
+      );
+
+      return res.status(200).json({
+        status: true,
+        message: 'Wallet updated successfully',
+        balance: updatedBalance,
+      });
     } else {
       return res.status(400).json({ status: false, message: 'Invalid mode' });
     }
-
-    // Update the wallet balance in the database
-    await walletCollection.updateOne(
-      { userID: safeObjectId(user) },
-      { $set: { balance: updatedBalance, updatedAt: new Date() } }
-    );
-
-    // Respond with the updated wallet balance
-    res.status(200).json({
-      status: true,
-      message: 'Wallet updated successfully',
-      balance: updatedBalance,
-    });
   } catch (error) {
-    console.error('Error updating wallet:', error);
-    res.status(500).json({ status: false, message: 'An error occurred while updating the wallet' });
+    console.error('Error in wallet operation:', error);
+    res.status(500).json({ status: false, message: 'An error occurred while processing the wallet operation' });
   }
 });
 
-// Wallet GET endpoint to fetch wallet balance
-router.get('/wallet', async (req, res) => {
-  try {
-    const token = req.headers['authorization'];
-    if (!token) {
-      return res.status(400).json({ status: false, message: 'Token is required' });
-    }
-
-    // Verify the token to get the user ID
-    const decodedToken = await verifyToken(token);
-    if (!decodedToken.status) {
-      return res.status(401).json({ status: false, message: 'Invalid or expired token' });
-    }
-
-    const { user } = decodedToken.decoded;
-
-    // Fetch the wallet data from the database
-    const walletCollection = req.db.collection('wallet');
-    const wallet = await walletCollection.findOne({ userID: safeObjectId(user) });
-
-    if (!wallet) {
-      return res.status(404).json({ status: false, message: 'Wallet not found' });
-    }
-
-    // Respond with the current wallet balance
-    res.status(200).json({
-      status: true,
-      message: 'Wallet fetched successfully',
-      balance: wallet.balance,
-    });
-  } catch (error) {
-    console.error('Error fetching wallet:', error);
-    res.status(500).json({ status: false, message: 'An error occurred while fetching the wallet' });
-  }
-});
 
 // Use error handling middleware
 router.use(errorHandler);
