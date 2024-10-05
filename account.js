@@ -296,6 +296,56 @@ router.get('/profile', async (req, res) => {
   }
 });
 
+// Endpoint to update user profile
+router.post('/update', async (req, res) => {
+  const token = req.headers['authorization'];
+
+  if (!token) {
+    return res.status(400).json({ status: false, message: 'Token is required' });
+  }
+
+  try {
+    // Verify the token to get the user ID
+    const decodedToken = await verifyToken(token);
+    if (!decodedToken.status) {
+      return res.status(401).json({ status: false, message: 'Invalid or expired token' });
+    }
+
+    const { user } = decodedToken.decoded; // Extract user ID from the decoded token
+    const { firstname, lastname, phone, email } = req.body; // Extract the updated fields from the request body
+
+    // Validate input data
+    if (!firstname || !lastname || !phone || !email) {
+      return res.status(400).json({ status: false, message: 'All fields (firstname, lastname, phone, email) are required' });
+    }
+
+    // Fetch the user data from the database
+    const userCollection = req.db.collection('user');
+    const userData = await userCollection.findOne({ _id: safeObjectId(user) });
+
+    if (!userData) {
+      return res.status(404).json({ status: false, message: 'User not found' });
+    }
+
+    // Update the user profile in the database
+    await userCollection.updateOne(
+      { _id: safeObjectId(user) },
+      { $set: { firstname, lastname, phone, email, updatedAt: new Date() } }
+    );
+
+    // Respond with success message
+    res.status(200).json({
+      status: true,
+      message: 'Profile updated successfully',
+    });
+
+  } catch (error) {
+    console.error('Error updating profile:', error);
+    res.status(500).json({ status: false, message: 'An error occurred while updating profile' });
+  }
+});
+
+
 // Wallet management endpoint 
 router.post('/wallet', async (req, res) => {
   try {
