@@ -315,17 +315,33 @@ router.post('/wallet', async (req, res) => {
 
     // Fetch wallet data from the database
     const walletCollection = req.db.collection('wallet');
+    const walletTransactionCollection = req.db.collection('wallet_transaction'); // Collection for transactions
     let wallet = await walletCollection.findOne({ userID: safeObjectId(user) });
 
+    // Handle 'get' mode and create a new wallet if it doesn't exist
     if (!wallet) {
-      if (mode !== 'get') {
-        // Create a new wallet with a balance of 0 if a user tries to update, but no wallet exists
+      if (mode === 'get') {
         wallet = { balance: 0 };
         await walletCollection.insertOne({
           userID: safeObjectId(user),
           balance: 0,
           createdAt: new Date(),
           updatedAt: new Date(),
+        });
+
+        // Record wallet creation transaction
+        await walletTransactionCollection.insertOne({
+          userID: safeObjectId(user),
+          action: 'create',
+          amount: 0,
+          balanceAfter: 0,
+          timestamp: new Date(),
+        });
+
+        return res.status(200).json({
+          status: true,
+          message: 'New wallet created successfully',
+          balance: wallet.balance,
         });
       } else {
         return res.status(404).json({ status: false, message: 'Wallet not found' });
@@ -348,16 +364,20 @@ router.post('/wallet', async (req, res) => {
       }
 
       let updatedBalance = wallet.balance;
+      let actionType = '';
 
       if (mode === 'increase') {
         updatedBalance += parseFloat(amount);
+        actionType = 'increase';
       } else if (mode === 'decrease') {
         updatedBalance -= parseFloat(amount);
         if (updatedBalance < 0) {
           return res.status(400).json({ status: false, message: 'Insufficient funds' });
         }
+        actionType = 'decrease';
       } else if (mode === 'adjust') {
         updatedBalance = parseFloat(amount); // Set the balance to the new amount
+        actionType = 'adjust';
       }
 
       // Update the wallet balance in the database
@@ -365,6 +385,15 @@ router.post('/wallet', async (req, res) => {
         { userID: safeObjectId(user) },
         { $set: { balance: updatedBalance, updatedAt: new Date() } }
       );
+
+      // Record the transaction in the wallet_transaction collection
+      await walletTransactionCollection.insertOne({
+        userID: safeObjectId(user),
+        action: actionType,
+        amount: parseFloat(amount),
+        balanceAfter: updatedBalance,
+        timestamp: new Date(),
+      });
 
       return res.status(200).json({
         status: true,
@@ -379,7 +408,6 @@ router.post('/wallet', async (req, res) => {
     res.status(500).json({ status: false, message: 'An error occurred while processing the wallet operation' });
   }
 });
-
 
 // Use error handling middleware
 router.use(errorHandler);
