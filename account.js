@@ -26,7 +26,7 @@ function verifyToken(token) {
 // Function to generate JWT
 function generateJWT(userResponse, key) {
   // Calculate the new expiration timestamp (e.g., 1 hour from now)
-  const expirationTime = Math.floor(Date.now() / 1000) + 60 * 60; // Current time + 1 hour
+  const expirationTime = Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60; // Current time + 30 days
 
   // JWT payload
   const data = {
