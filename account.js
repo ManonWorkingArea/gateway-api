@@ -23,21 +23,20 @@ function verifyToken(token) {
   });
 }
 
-// Function to generate JWT
-function generateJWT(userResponse, key) {
-  // Calculate the new expiration timestamp (e.g., 1 hour from now)
-  const expirationTime = Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60; // Current time + 30 days
-
+// Function to generate JWT with adjustable expiration time
+function generateJWT(userResponse, key, rememberMe) {
+  // Set token expiration based on the "Remember Me" flag
+  const expiration = rememberMe ? '30d' : '1h'; // 30 days or 1 hour
+  
   // JWT payload
   const data = {
     user: userResponse._id,   // User ID
     role: userResponse.role,  // User role
     site: key,                // Client key (from query parameter)
-    expire: expirationTime,   // Expiration timestamp
   };
 
   // Generate the JWT token
-  const token = jwt.sign(data, JWT_SECRET, { expiresIn: '1h' });
+  const token = jwt.sign(data, JWT_SECRET, { expiresIn: expiration });
 
   return { token, data };
 }
@@ -45,7 +44,7 @@ function generateJWT(userResponse, key) {
 router.post('/login', async (req, res) => {
   try {
     const { db } = req; // MongoDB connection is attached by authenticateClient middleware
-    const { username, password } = req.body;
+    const { username, password, rememberMe } = req.body; // Get "rememberMe" flag from request body
     const { key } = req.query; // Extract 'key' from query parameters
 
     if (!username || !password) {
@@ -83,8 +82,8 @@ router.post('/login', async (req, res) => {
     const sessionCollection = db.collection('sessions');
     await sessionCollection.deleteOne({ userID: userResponse._id });
 
-    // Generate JWT using the separate function
-    const { token, data } = generateJWT(userResponse, key);
+    // Generate JWT with "Remember Me" handling
+    const { token, data } = generateJWT(userResponse, key, rememberMe);
 
     // Prepare new session data
     const newSession = {
@@ -106,7 +105,6 @@ router.post('/login', async (req, res) => {
       status: true,
       message: 'Signin successful',
       token,
-      //data, // Send the same data used for JWT generation back to the client
     });
 
   } catch (error) {
