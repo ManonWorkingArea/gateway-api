@@ -279,6 +279,7 @@ router.get('/profile', async (req, res) => {
       status: true,
       message: 'Profile fetched successfully',
       profile: {
+        uid: userData._id,
         firstname: userData.firstname,
         lastname: userData.lastname,
         phone: userData.phone,
