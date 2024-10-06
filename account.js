@@ -346,6 +346,57 @@ router.post('/update', async (req, res) => {
   }
 });
 
+
+// Endpoint to update user avatar
+router.post('/avatar', async (req, res) => {
+  const token = req.headers['authorization'];
+
+  if (!token) {
+    return res.status(400).json({ status: false, message: 'Token is required' });
+  }
+
+  try {
+    // Verify the token to get the user ID
+    const decodedToken = await verifyToken(token);
+    if (!decodedToken.status) {
+      return res.status(401).json({ status: false, message: 'Invalid or expired token' });
+    }
+
+    const { user } = decodedToken.decoded; // Extract user ID from the decoded token
+    const { avatar_img } = req.body; // Extract the updated avatar image from the request body
+
+    // Validate input data
+    if (!avatar_img) {
+      return res.status(400).json({ status: false, message: 'Avatar image is required' });
+    }
+
+    // Fetch the user data from the database
+    const userCollection = req.db.collection('user');
+    const userData = await userCollection.findOne({ _id: safeObjectId(user) });
+
+    if (!userData) {
+      return res.status(404).json({ status: false, message: 'User not found' });
+    }
+
+    // Update the user's avatar image in the database
+    await userCollection.updateOne(
+      { _id: safeObjectId(user) },
+      { $set: { avatar_img, updatedAt: new Date() } }
+    );
+
+    // Respond with success message
+    res.status(200).json({
+      status: true,
+      message: 'Avatar updated successfully',
+    });
+
+  } catch (error) {
+    console.error('Error updating avatar:', error);
+    res.status(500).json({ status: false, message: 'An error occurred while updating avatar' });
+  }
+});
+
+
 // Endpoint to reset the user's password
 router.post('/password', async (req, res) => {
   const token = req.headers['authorization'];
