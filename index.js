@@ -7,6 +7,7 @@ const socketRouter  = require('./socket');
 const emailRouter   = require('./email');
 const accountRouter    = require('./account');  // Updated to 'authen'
 const authRouter    = require('./auth');  // Import the auth router
+const voteRouter    = require('./vote');  // Updated to 'authen'
 const http          = require('http');
 const socketio      = require('socket.io');
 const verifySlipRouter = require('./routes/verifySlip'); 
@@ -58,6 +59,7 @@ async function initializeApp() {
     setupRoutes(app);
     app.use('/email', emailRouter);
     app.use('/auth', authRouter);
+    app.use('/vote', voteRouter);  // Updated route to 'authen'
     app.use('/account', accountRouter);  // Updated route to 'authen'
     app.use('/slip', verifySlipRouter);
 
