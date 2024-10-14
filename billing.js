@@ -66,8 +66,8 @@ router.post('/subscribe', async (req, res) => {
     }
   });
 
-  // New endpoint to get the billing data by billID
-router.get('/subscribe/:billID', async (req, res) => {
+// New endpoint to get the billing data by billID and userID
+router.post('/subscribe/filter', async (req, res) => {
     const token = req.headers['authorization'];
     if (!token) {
       return res.status(400).json({ status: false, message: 'Token is required' });
@@ -81,26 +81,53 @@ router.get('/subscribe/:billID', async (req, res) => {
       }
   
       const { db } = req; // MongoDB connection is attached by authenticateClient middleware
-      const billID = req.params.billID; // Get the bill ID from the request params
+      const { billID, userID } = req.body; // Extract billID and userID from the request body
   
-      // Find the bill in the 'bill' collection by its ID
+      // Check if both billID and userID are provided
+      if (!billID || !userID) {
+        return res.status(400).json({ status: false, message: 'Both billID and userID are required' });
+      }
+  
+      // Use aggregate to find the bill by _id and userID
       const billCollection = db.collection('bill');
-      const bill = await billCollection.findOne({ _id: safeObjectId(billID) });
+      const bill = await billCollection.aggregate([
+        {
+          $match: {
+            _id: safeObjectId(billID),
+            userID: safeObjectId(userID) // Match both billID and userID
+          }
+        },
+        {
+          $lookup: {
+            from: 'users', // Assuming 'users' collection holds user information
+            localField: 'userID',
+            foreignField: '_id',
+            as: 'userDetails'
+          }
+        },
+        {
+          $unwind: {
+            path: '$userDetails',
+            preserveNullAndEmptyArrays: true // If no matching user is found, still include the bill
+          }
+        }
+      ]).toArray();
   
-      if (!bill) {
+      if (bill.length === 0) {
         return res.status(404).json({ status: false, message: 'Bill not found' });
       }
   
       return res.status(200).json({
         status: true,
         message: 'Bill retrieved successfully',
-        bill, // Return the bill data
+        bill: bill[0] // Return the first (and only) result from the aggregation
       });
     } catch (error) {
       console.error('Error retrieving bill:', error);
       res.status(500).json({ status: false, message: 'An error occurred while retrieving the bill' });
     }
   });
+  
   
 
 // Use error handling middleware
