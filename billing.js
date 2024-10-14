@@ -66,7 +66,8 @@ router.post('/subscribe', async (req, res) => {
     }
   });
 
-// New endpoint to get the billing data by billID and userID
+
+  // New endpoint to get the billing data by billID with userID from the auth token
 router.post('/subscribe/filter', async (req, res) => {
     const token = req.headers['authorization'];
     if (!token) {
@@ -81,11 +82,13 @@ router.post('/subscribe/filter', async (req, res) => {
       }
   
       const { db } = req; // MongoDB connection is attached by authenticateClient middleware
-      const { billID, userID } = req.body; // Extract billID and userID from the request body
+      const { billID } = req.body; // Extract billID from the request body
   
-      // Check if both billID and userID are provided
-      if (!billID || !userID) {
-        return res.status(400).json({ status: false, message: 'Both billID and userID are required' });
+      // Extract userID from the decoded token
+      const userID = decodedToken.user;
+  
+      if (!billID) {
+        return res.status(400).json({ status: false, message: 'billID is required' });
       }
   
       // Use aggregate to find the bill by _id and userID
@@ -93,8 +96,8 @@ router.post('/subscribe/filter', async (req, res) => {
       const bill = await billCollection.aggregate([
         {
           $match: {
-            _id: safeObjectId(billID),
-            userID: safeObjectId(userID) // Match both billID and userID
+            _id: safeObjectId(billID), // Match the billID
+            userID: safeObjectId(userID) // Match the userID from the token
           }
         },
         {
@@ -108,7 +111,7 @@ router.post('/subscribe/filter', async (req, res) => {
         {
           $unwind: {
             path: '$userDetails',
-            preserveNullAndEmptyArrays: true // If no matching user is found, still include the bill
+            preserveNullAndEmptyArrays: true // Include the bill even if no user details are found
           }
         }
       ]).toArray();
@@ -127,6 +130,7 @@ router.post('/subscribe/filter', async (req, res) => {
       res.status(500).json({ status: false, message: 'An error occurred while retrieving the bill' });
     }
   });
+  
   
   
 
