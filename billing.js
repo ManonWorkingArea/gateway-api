@@ -68,7 +68,7 @@ router.post('/subscribe', async (req, res) => {
 
 
   // New endpoint to get the billing data by billID with userID from the auth token
-router.post('/fillter', async (req, res) => {
+router.post('/filter', async (req, res) => {
     const token = req.headers['authorization'];
     if (!token) {
       return res.status(400).json({ status: false, message: 'Token is required' });
@@ -85,7 +85,7 @@ router.post('/fillter', async (req, res) => {
       const { billID } = req.body; // Extract billID from the request body
   
       // Extract userID from the decoded token
-      const userID = decodedToken.user;
+      const { user } = decodedToken.decoded; // Extract user ID from the token
   
       if (!billID) {
         return res.status(400).json({ status: false, message: 'billID is required' });
@@ -97,7 +97,7 @@ router.post('/fillter', async (req, res) => {
         {
           $match: {
             _id: safeObjectId(billID), // Match the billID
-            userID: safeObjectId(userID) // Match the userID from the token
+            userID: safeObjectId(user) // Match the userID from the token
           }
         },
         {
@@ -117,7 +117,7 @@ router.post('/fillter', async (req, res) => {
       ]).toArray();
   
       if (bill.length === 0) {
-        return res.status(404).json({ status: false, message: 'Bill not found' });
+        return res.status(404).json({ status: false, message: 'Bill not found' + userID });
       }
   
       return res.status(200).json({
