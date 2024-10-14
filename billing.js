@@ -196,6 +196,53 @@ router.post('/update', async (req, res) => {
       res.status(500).json({ status: false, message: 'An error occurred while updating the bill' });
     }
   });
+
+
+  // Endpoint to check if qrcodeData exists in the bill collection
+router.post('/check_qrcode', async (req, res) => {
+    const token = req.headers['authorization'];
+    if (!token) {
+      return res.status(400).json({ status: false, message: 'Token is required' });
+    }
+  
+    try {
+      // Verify the token and extract the decoded data
+      const decodedToken = await verifyToken(token.replace('Bearer ', ''));
+      if (!decodedToken.status) {
+        return res.status(401).json({ status: false, message: 'Invalid or expired token' });
+      }
+  
+      const { db } = req; // MongoDB connection is attached by authenticateClient middleware
+      const { qrcodeData } = req.body; // Extract qrcodeData from the request body
+  
+      if (!qrcodeData) {
+        return res.status(400).json({ status: false, message: 'QR code data is required' });
+      }
+  
+      // Query the bill collection to check if qrcodeData exists
+      const billCollection = db.collection('bill');
+      const existingBill = await billCollection.findOne({ 'bill.qrcodeData': qrcodeData });
+  
+      if (existingBill) {
+        return res.status(200).json({
+          status: true,
+          message: 'QR code data already exists in the bill collection',
+          billID: existingBill._id // Return the bill ID if found
+        });
+      }
+  
+      // If no bill is found with the same QR code data
+      return res.status(404).json({
+        status: false,
+        message: 'QR code data does not exist in the bill collection'
+      });
+  
+    } catch (error) {
+      console.error('Error checking QR code:', error);
+      res.status(500).json({ status: false, message: 'An error occurred while checking the QR code' });
+    }
+  });
+  
   
   
   
