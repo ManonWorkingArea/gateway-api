@@ -51,6 +51,7 @@ router.post('/subscribe', async (req, res) => {
         packageID: packageID, // Ensure it's a valid ObjectID
         eventID: safeObjectId(eventID), // Ensure it's a valid ObjectID
         price: parseFloat(price), // Store the price as a float
+        status: 'pending',
         timestamp: new Date() // Store the current timestamp
       });
   
