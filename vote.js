@@ -52,7 +52,6 @@ router.post('/submit', async (req, res) => {
       influencerId: safeObjectId(influencerId),
       score: parseInt(score, 10), // Ensure score is an integer
       timestamp: new Date(),
-      key, // Client key from the query
       userID: safeObjectId(user), // Include the user ID from the decoded JWT
     });
 
