@@ -176,6 +176,7 @@ router.post('/update', async (req, res) => {
 
             'bill.amount': transaction.bill.amount,
             'bill.qrcodeData': transaction.bill.qrcodeData,
+            'bill.slip': transaction.transaction.slipUrl,
             updatedAt: new Date() // Optionally update a timestamp for when the document was modified
           }
         }
