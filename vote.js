@@ -30,11 +30,13 @@ router.post('/submit', async (req, res) => {
   }
 
   try {
-    // Verify the token
+    // Verify the token and extract the decoded data
     const decodedToken = await verifyToken(token.replace('Bearer ', ''));
     if (!decodedToken.status) {
       return res.status(401).json({ status: false, message: 'Invalid or expired token' });
     }
+
+    const { user } = decodedToken.decoded; // Extract user ID from the token
 
     const { db } = req; // MongoDB connection is attached by authenticateClient middleware
     const { influencerId, score } = req.body; // Expect influencerId and score in the request body
@@ -44,26 +46,27 @@ router.post('/submit', async (req, res) => {
       return res.status(400).json({ status: false, message: 'Influencer ID and score are required' });
     }
 
-    // Create a new vote transaction
+    // Create a new vote transaction with userID from the JWT token
     const voteTransactionCollection = db.collection('vote_transaction');
     await voteTransactionCollection.insertOne({
       influencerId: safeObjectId(influencerId),
       score: parseInt(score, 10), // Ensure score is an integer
       timestamp: new Date(),
       key, // Client key from the query
+      userID: safeObjectId(user), // Include the user ID from the decoded JWT
     });
 
     // Calculate the total score for the influencer
     const totalScore = await voteTransactionCollection.aggregate([
       { $match: { influencerId: safeObjectId(influencerId) } },
-      { $group: { _id: null, totalScore: { $sum: '$score' } } },
+      { $group: { _id: null, totalScore: { $sum: '$score' } } },  // Summing up the scores for all transactions
     ]).toArray();
 
     // Update the influencer's score in the vote_influencer collection
     const voteInfluencerCollection = db.collection('vote_influencer');
     await voteInfluencerCollection.updateOne(
-      { _id: safeObjectId(influencerId) },
-      { $set: { score: totalScore[0]?.totalScore || 0 } }
+      { _id: safeObjectId(influencerId) },  // Find the influencer by ID
+      { $set: { score: totalScore[0]?.totalScore || 0 } }  // Update with the new total score
     );
 
     return res.status(200).json({
