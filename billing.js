@@ -68,7 +68,7 @@ router.post('/subscribe', async (req, res) => {
 
 
   // New endpoint to get the billing data by billID with userID from the auth token
-router.post('/subscribe/filter', async (req, res) => {
+router.post('/fillter', async (req, res) => {
     const token = req.headers['authorization'];
     if (!token) {
       return res.status(400).json({ status: false, message: 'Token is required' });
