@@ -48,7 +48,7 @@ router.post('/subscribe', async (req, res) => {
       const billCollection = db.collection('bill');
       const result = await billCollection.insertOne({
         userID: safeObjectId(user), // Use the user ID from the decoded JWT
-        packageID: safeObjectId(packageID), // Ensure it's a valid ObjectID
+        packageID: packageID, // Ensure it's a valid ObjectID
         eventID: safeObjectId(eventID), // Ensure it's a valid ObjectID
         price: parseFloat(price), // Store the price as a float
         timestamp: new Date() // Store the current timestamp
