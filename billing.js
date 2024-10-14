@@ -130,6 +130,68 @@ router.post('/filter', async (req, res) => {
       res.status(500).json({ status: false, message: 'An error occurred while retrieving the bill' });
     }
   });
+
+  // Endpoint to update bill data after verification
+router.post('/update', async (req, res) => {
+    const token = req.headers['authorization'];
+    if (!token) {
+      return res.status(400).json({ status: false, message: 'Token is required' });
+    }
+  
+    try {
+      // Verify the token and extract the decoded data
+      const decodedToken = await verifyToken(token.replace('Bearer ', ''));
+      if (!decodedToken.status) {
+        return res.status(401).json({ status: false, message: 'Invalid or expired token' });
+      }
+  
+      const { user } = decodedToken.decoded; // Extract user ID from the token
+      const { billID, transaction } = req.body; // Expect billID and transaction details in the request body
+  
+      if (!billID || !transaction) {
+        return res.status(400).json({ status: false, message: 'Bill ID and transaction details are required' });
+      }
+  
+      const { db } = req; // MongoDB connection is attached by authenticateClient middleware
+      const billCollection = db.collection('bill');
+  
+      // Update the bill with the transaction data
+      const result = await billCollection.updateOne(
+        {
+          _id: safeObjectId(billID), // Match the bill by its ID
+          userID: safeObjectId(user) // Ensure the bill belongs to the authenticated user
+        },
+        {
+          $set: {
+            'transaction.success': transaction.success,
+            'transaction.transRef': transaction.transRef,
+            'transaction.transDate': transaction.transDate,
+            'transaction.transTime': transaction.transTime,
+            'sender.displayName': transaction.sender.displayName,
+            'receiver.displayName': transaction.receiver.displayName,
+            'bill.amount': transaction.bill.amount,
+            'bill.qrcodeData': transaction.bill.qrcodeData,
+            updatedAt: new Date() // Optionally update a timestamp for when the document was modified
+          }
+        }
+      );
+  
+      if (result.matchedCount === 0) {
+        return res.status(404).json({ status: false, message: 'Bill not found or user not authorized' });
+      }
+  
+      return res.status(200).json({
+        status: true,
+        message: 'Bill updated successfully',
+        updatedCount: result.modifiedCount
+      });
+  
+    } catch (error) {
+      console.error('Error updating bill:', error);
+      res.status(500).json({ status: false, message: 'An error occurred while updating the bill' });
+    }
+  });
+  
   
   
   
