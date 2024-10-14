@@ -65,6 +65,42 @@ router.post('/subscribe', async (req, res) => {
       res.status(500).json({ status: false, message: 'An error occurred while saving the subscription' });
     }
   });
+
+  // New endpoint to get the billing data by billID
+router.get('/subscribe/:billID', async (req, res) => {
+    const token = req.headers['authorization'];
+    if (!token) {
+      return res.status(400).json({ status: false, message: 'Token is required' });
+    }
+  
+    try {
+      // Verify the token and extract the decoded data
+      const decodedToken = await verifyToken(token.replace('Bearer ', ''));
+      if (!decodedToken.status) {
+        return res.status(401).json({ status: false, message: 'Invalid or expired token' });
+      }
+  
+      const { db } = req; // MongoDB connection is attached by authenticateClient middleware
+      const billID = req.params.billID; // Get the bill ID from the request params
+  
+      // Find the bill in the 'bill' collection by its ID
+      const billCollection = db.collection('bill');
+      const bill = await billCollection.findOne({ _id: safeObjectId(billID) });
+  
+      if (!bill) {
+        return res.status(404).json({ status: false, message: 'Bill not found' });
+      }
+  
+      return res.status(200).json({
+        status: true,
+        message: 'Bill retrieved successfully',
+        bill, // Return the bill data
+      });
+    } catch (error) {
+      console.error('Error retrieving bill:', error);
+      res.status(500).json({ status: false, message: 'An error occurred while retrieving the bill' });
+    }
+  });
   
 
 // Use error handling middleware
