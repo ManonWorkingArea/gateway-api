@@ -132,7 +132,7 @@ router.post('/filter', async (req, res) => {
     }
   });
 
-  // Endpoint to update bill data after verification
+ // Endpoint to update bill data after verification and update wallet balance
 router.post('/update', async (req, res) => {
     const token = req.headers['authorization'];
     if (!token) {
@@ -155,6 +155,8 @@ router.post('/update', async (req, res) => {
   
       const { db } = req; // MongoDB connection is attached by authenticateClient middleware
       const billCollection = db.collection('bill');
+      const walletCollection = db.collection('wallet');
+      const walletTransactionCollection = db.collection('wallet_transaction');
   
       // Update the bill with the transaction data
       const result = await billCollection.updateOne(
@@ -168,17 +170,17 @@ router.post('/update', async (req, res) => {
             'transaction.transRef': transaction.transaction.transRef,
             'transaction.transDate': transaction.transaction.transDate,
             'transaction.transTime': transaction.transaction.transTime,
-
+  
             'sender.displayName': transaction.sender.displayName,
             'sender.name': transaction.sender.name,
-
+  
             'receiver.displayName': transaction.receiver.displayName,
             'receiver.name': transaction.receiver.name,
-
+  
             'bill.amount': transaction.bill.amount,
             'bill.qrcodeData': transaction.bill.qrcodeData,
             'bill.slip': transaction.slipUrl,
-            'status':'confirm',
+            'status': 'confirm',
             updatedAt: new Date() // Optionally update a timestamp for when the document was modified
           }
         }
@@ -188,19 +190,46 @@ router.post('/update', async (req, res) => {
         return res.status(404).json({ status: false, message: 'Bill not found or user not authorized' });
       }
   
+      // Retrieve the user's wallet
+      let wallet = await walletCollection.findOne({ userID: safeObjectId(user) });
+  
+      if (!wallet) {
+        return res.status(404).json({ status: false, message: 'Wallet not found' });
+      }
+  
+      const balanceBefore = wallet.balance;
+      const amountToIncrease = parseFloat(transaction.bill.amount);
+      const updatedBalance = balanceBefore + amountToIncrease;
+  
+      // Update the wallet balance
+      await walletCollection.updateOne(
+        { userID: safeObjectId(user) },
+        { $set: { balance: updatedBalance, updatedAt: new Date() } }
+      );
+  
+      // Log the wallet transaction
+      await walletTransactionCollection.insertOne({
+        userID: safeObjectId(user),
+        action: 'increase',
+        amount: amountToIncrease,
+        balanceBefore: balanceBefore,
+        balanceAfter: updatedBalance,
+        timestamp: new Date(),
+      });
+  
       return res.status(200).json({
         status: true,
-        message: 'Bill updated successfully',
-        updatedCount: result.modifiedCount
+        message: 'Bill updated and wallet balance increased successfully',
+        updatedCount: result.modifiedCount,
+        newBalance: updatedBalance,
       });
   
     } catch (error) {
-      console.error('Error updating bill:', error);
-      res.status(500).json({ status: false, message: 'An error occurred while updating the bill' });
+      console.error('Error updating bill and wallet:', error);
+      res.status(500).json({ status: false, message: 'An error occurred while updating the bill and wallet' });
     }
   });
-
-
+  
 // Endpoint to check if qrcodeData exists in the bill collection
 router.post('/check_qrcode', async (req, res) => {
     const token = req.headers['authorization'];
