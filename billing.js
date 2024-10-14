@@ -163,12 +163,14 @@ router.post('/update', async (req, res) => {
         },
         {
           $set: {
-            'transaction.success': transaction.success,
-            'transaction.transRef': transaction.transRef,
-            'transaction.transDate': transaction.transDate,
-            'transaction.transTime': transaction.transTime,
+            'transaction.success': transaction.transaction.success,
+            'transaction.transRef': transaction.transaction.transRef,
+            'transaction.transDate': transaction.transaction.transDate,
+            'transaction.transTime': transaction.transaction.transTime,
+
             'sender.displayName': transaction.sender.displayName,
             'receiver.displayName': transaction.receiver.displayName,
+            
             'bill.amount': transaction.bill.amount,
             'bill.qrcodeData': transaction.bill.qrcodeData,
             updatedAt: new Date() // Optionally update a timestamp for when the document was modified
