@@ -198,7 +198,7 @@ router.post('/update', async (req, res) => {
   });
 
 
-  // Endpoint to check if qrcodeData exists in the bill collection
+// Endpoint to check if qrcodeData exists in the bill collection
 router.post('/check_qrcode', async (req, res) => {
     const token = req.headers['authorization'];
     if (!token) {
@@ -224,6 +224,7 @@ router.post('/check_qrcode', async (req, res) => {
       const existingBill = await billCollection.findOne({ 'bill.qrcodeData': qrcodeData });
   
       if (existingBill) {
+        // If the QR code exists in the bill collection
         return res.status(200).json({
           status: true,
           message: 'QR code data already exists in the bill collection',
@@ -231,8 +232,8 @@ router.post('/check_qrcode', async (req, res) => {
         });
       }
   
-      // If no bill is found with the same QR code data
-      return res.status(404).json({
+      // If no bill is found with the same QR code data, return status false but with a 200 status code
+      return res.status(200).json({
         status: false,
         message: 'QR code data does not exist in the bill collection'
       });
@@ -242,6 +243,7 @@ router.post('/check_qrcode', async (req, res) => {
       res.status(500).json({ status: false, message: 'An error occurred while checking the QR code' });
     }
   });
+  
   
   
   
