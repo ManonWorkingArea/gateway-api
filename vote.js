@@ -1,6 +1,6 @@
 const express = require('express');
 const jwt = require('jsonwebtoken'); // Import jsonwebtoken
-const { authenticateClient, safeObjectId, errorHandler } = require('./middleware/mongoMiddleware'); // Import your middleware
+const { authenticateClient, safeObjectId, errorHandler } = require('./routes/middleware/mongoMiddleware'); // Import your middleware
 
 const router = express.Router();
 
