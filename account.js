@@ -26,7 +26,7 @@ function verifyToken(token) {
 // Function to generate JWT with adjustable expiration time
 function generateJWT(userResponse, key, rememberMe) {
   // Set token expiration based on the "Remember Me" flag
-  const expiration = rememberMe ? '30d' : '1h'; // 30 days or 1 hour
+  const expiration = rememberMe ? '30d' : '24h'; // 30 days or 1 hour
   
   // JWT payload
   const data = {
