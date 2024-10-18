@@ -13,7 +13,7 @@ const TEST_MODE = false; // Toggle test mode as needed
 const emailCache = new NodeCache({ stdTTL: 600 });
 
 // Define an async function for sending emails using CloudMailin API
-async function sendEmail({ from, to, subject, plain, html }) {
+async function sendEmail({ from, to, subject, plain, html, attachments }) {
   const emailData = {
     from,
     to,
@@ -21,6 +21,7 @@ async function sendEmail({ from, to, subject, plain, html }) {
     subject,
     plain,
     html,
+    attachments, // Include attachments if provided
   };
 
   try {
@@ -50,7 +51,7 @@ async function sendEmail({ from, to, subject, plain, html }) {
 
 // Define a route for sending emails with caching to prevent duplicates
 router.post('/send', async (req, res) => {
-  const { from, to, subject, plain, html } = req.body;
+  const { from, to, subject, plain, html, attachments } = req.body;
 
   // Check if all required fields are present
   if (!from || !to || !subject || !plain || !html) {
@@ -58,7 +59,7 @@ router.post('/send', async (req, res) => {
   }
 
   // Construct cache key from request parameters to prevent duplicate emails being sent
-  const cacheKey = `${to}:${subject}:${plain}:${html}`;
+  const cacheKey = `${to}:${subject}:${plain}:${html}:${JSON.stringify(attachments)}`;
   const cachedResult = emailCache.get(cacheKey);
 
   if (cachedResult) {
@@ -71,6 +72,7 @@ router.post('/send', async (req, res) => {
         subject,
         plain,
         html,
+        attachments, // Pass attachments to the sendEmail function
       });
 
       // Cache the successful result to prevent resending
