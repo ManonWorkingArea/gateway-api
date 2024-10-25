@@ -169,9 +169,10 @@ const restructureItems = async (db) => {
   };
   
   /** List Parent Endpoint
-   * Retrieves and updates items by parent ID, then fetches the updated data by parent ID.
-   */
-  router.post('/list_parent', async (req, res) => {
+ * Retrieves and updates items by parent ID, then fetches the updated data by parent ID,
+ * sorted to display folders first.
+ */
+router.post('/list_parent', async (req, res) => {
     const token = req.headers['authorization'];
     if (!token) return res.status(400).json({ status: false, message: 'Token is required' });
   
@@ -200,6 +201,13 @@ const restructureItems = async (db) => {
       // Fetch the updated data for the specified parent
       const updatedItems = await fileCollection.find({ parent: safeObjectId(parent) }).toArray();
   
+      // Sort items to display folders first, then files
+      updatedItems.sort((a, b) => {
+        if (a.type === 'folder' && b.type !== 'folder') return -1;
+        if (a.type !== 'folder' && b.type === 'folder') return 1;
+        return 0;
+      });
+  
       return res.status(200).json({
         status: true,
         message: 'Items retrieved and batch updated successfully',
@@ -210,6 +218,7 @@ const restructureItems = async (db) => {
       res.status(500).json({ status: false, message: 'An error occurred while retrieving and updating items' });
     }
   });
+  
 
   /** Rename Endpoint
  * Allows renaming of a file or folder in the filemanager collection.
