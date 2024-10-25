@@ -741,45 +741,45 @@ router.get('/appointment/:id', async (req, res) => {
   });
 
   // Batch Update Endpoint
-  router.put('/:collection/batchUpdate', async (req, res) => {
-    try {
-      const { client, db } = req; // Access client and db from req object
-      const collectionName = req.params.collection;
-      const collection = db.collection(collectionName);
-      const { data } = req.body;
+router.post('/:collection/batchUpdate', async (req, res, next) => { // <-- Add `next` here
+  try {
+    const { client, db } = req;
+    const collectionName = req.params.collection;
+    const collection = db.collection(collectionName);
+    const { data } = req.body;
 
-      // Validate input: Ensure 'data' is an array with at least one item
-      if (!Array.isArray(data) || data.length === 0) {
-        return res.status(400).json({ status: false, message: 'Invalid input: Data array is required' });
-      }
-
-      // Prepare the update operations for each document in the data array
-      const updateOperations = data.map(item => {
-        if (!item._id) {
-          throw new Error('Each item must contain an _id field');
-        }
-        const id = safeObjectId(item._id);
-        const updateFields = { ...item }; // Copy all fields
-        delete updateFields._id; // Remove _id since it cannot be updated
-        return collection.updateOne({ _id: id }, { $set: updateFields });
-      });
-
-      // Execute all updates in parallel using Promise.all
-      const results = await Promise.all(updateOperations);
-
-      // Check the result to confirm updates
-      const matchedCount = results.reduce((acc, res) => acc + res.matchedCount, 0);
-      const modifiedCount = results.reduce((acc, res) => acc + res.modifiedCount, 0);
-
-      res.status(200).json({
-        status: true,
-        message: `${matchedCount} documents matched, ${modifiedCount} documents updated.`,
-      });
-    } catch (err) {
-      console.error('Error in batchUpdate:', err);
-      res.status(500).json({ status: false, message: 'An error occurred during batch update' });
+    // Validate input
+    if (!Array.isArray(data) || data.length === 0) {
+      return res.status(400).json({ status: false, message: 'Invalid input: Data array is required' });
     }
-  });
+
+    // Prepare update operations
+    const updateOperations = data.map(item => {
+      if (!item._id) {
+        throw new Error('Each item must contain an _id field');
+      }
+      const id = safeObjectId(item._id);
+      const updateFields = { ...item };
+      delete updateFields._id;
+      return collection.updateOne({ _id: id }, { $set: updateFields });
+    });
+
+    // Execute updates in parallel
+    const results = await Promise.all(updateOperations);
+
+    // Calculate results
+    const matchedCount = results.reduce((acc, res) => acc + res.matchedCount, 0);
+    const modifiedCount = results.reduce((acc, res) => acc + res.modifiedCount, 0);
+
+    res.status(200).json({
+      status: true,
+      message: `${matchedCount} documents matched, ${modifiedCount} documents updated.`,
+    });
+  } catch (err) {
+    console.error('Error in batchUpdate:', err);
+    next(err); // <-- Pass error to the error-handling middleware
+  }
+});
 
 
   // Search for documents in a collection
