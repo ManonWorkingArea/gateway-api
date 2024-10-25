@@ -58,36 +58,34 @@ router.post('/new_folder', async (req, res) => {
   }
 });
 
-// Function to fetch all items in the collection without conditions
-const getAllItems = async (db) => {
+
+
+/** Function to Restructure Items
+ * Fetches all items in the collection, restructures them, and calculates `childCount` and `size`.
+ */
+const restructureItems = async (db) => {
     const fileCollection = db.collection('filemanager');
-    return await fileCollection.find().toArray();
-  };
+    const items = await fileCollection.find().toArray();
   
-  // Function to restructure flat items into a nested format, calculate child counts, and generate a flat list with counts
-  const restructureItems = (items) => {
     const itemMap = new Map();
   
-    // Initialize each item in the map with its _id as the key, add children array, childCount, and size
+    // Initialize each item in the map with its _id as the key
     items.forEach(item => {
-      item.children = []; // Initialize empty children array for each item
-      item.childCount = 0; // Initialize child count for each item
-      item.size = item.type === "file" ? item.size || 0 : 0; // Set initial size for files, 0 for folders
+      item.children = [];
+      item.childCount = 0;
+      item.size = item.type === "file" ? item.size || 0 : 0;
       itemMap.set(item._id.toString(), item);
     });
   
     const nestedItems = [];
-  
-    // Organize each item under its parent
     items.forEach(item => {
       if (item.parent && itemMap.has(item.parent.toString())) {
         itemMap.get(item.parent.toString()).children.push(item);
       } else {
-        nestedItems.push(item); // Root item if no valid parent
+        nestedItems.push(item);
       }
     });
   
-    // Recursive function to calculate child count and accumulate file sizes for each folder
     const calculateChildrenAndSize = (item) => {
       let count = item.children.length;
       let totalSize = item.size;
@@ -99,14 +97,12 @@ const getAllItems = async (db) => {
       });
   
       item.childCount = count;
-      item.size = totalSize; // Update item with cumulative size
+      item.size = totalSize;
       return { childCount: count, size: totalSize };
     };
   
-    // Calculate size and child count for each top-level item
     nestedItems.forEach(rootItem => calculateChildrenAndSize(rootItem));
   
-    // Generate a flat list with folder data for batch updating
     const flatList = items
       .filter(item => item.type === "folder")
       .map(item => ({
@@ -118,8 +114,8 @@ const getAllItems = async (db) => {
     return { nestedItems, flatList };
   };
   
-  /** List Parent and Batch Update Endpoint
-   * Retrieves items in the filemanager collection without a filter, restructures them, and batch updates child counts and sizes.
+  /** List Parent Endpoint
+   * Retrieves and updates items by parent ID, then fetches the updated data by parent ID.
    */
   router.post('/list_parent', async (req, res) => {
     const token = req.headers['authorization'];
@@ -130,33 +126,37 @@ const getAllItems = async (db) => {
       if (!decodedToken.status) return res.status(401).json({ status: false, message: 'Invalid or expired token' });
   
       const { db } = req;
+      const { parent } = req.body;
   
-      // Fetch all items
-      const items = await getAllItems(db);
+      if (!parent) {
+        return res.status(400).json({ status: false, message: 'Parent ID is required' });
+      }
   
-      // Restructure items and calculate nested structure, sizes, and counts
-      const { nestedItems, flatList } = restructureItems(items);
+      // Fetch and restructure all items in the collection
+      const { flatList } = await restructureItems(db);
   
-      // Batch update each folder's child count and size in the database
+      // Perform batch update on folder counts and sizes
       const fileCollection = db.collection('filemanager');
-      const bulkOperations = flatList.map(item => ({
-        updateOne: {
-          filter: { _id: safeObjectId(item._id) },
-          update: { $set: { count: item.count, size: item.size } }
-        }
-      }));
-      await fileCollection.bulkWrite(bulkOperations);
+      const updateOperations = flatList.map(item => {
+        const id = safeObjectId(item._id);
+        return fileCollection.updateOne({ _id: id }, { $set: { count: item.count, size: item.size } });
+      });
+      await Promise.all(updateOperations);
+  
+      // Fetch the updated data for the specified parent
+      const updatedItems = await fileCollection.find({ parent: safeObjectId(parent) }).toArray();
   
       return res.status(200).json({
         status: true,
         message: 'Items retrieved and batch updated successfully',
-        items: nestedItems // Return the nested structure
+        items: updatedItems
       });
     } catch (error) {
       console.error('Error retrieving and updating items:', error);
       res.status(500).json({ status: false, message: 'An error occurred while retrieving and updating items' });
     }
   });
+  
 
 // Error handler middleware
 router.use(errorHandler);
