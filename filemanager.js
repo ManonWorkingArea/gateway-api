@@ -116,21 +116,34 @@ router.post('/new_file', async (req, res) => {
 
 /** Function to Restructure Items
  * Fetches all items in the collection, restructures them, and calculates `childCount` and `size`.
+ * Additionally, returns total counts for files and folders and the summary file size.
  */
 const restructureItems = async (db) => {
     const fileCollection = db.collection('filemanager');
     const items = await fileCollection.find().toArray();
-  
+
     const itemMap = new Map();
-  
+    let totalFileCount = 0; // Count of all files
+    let totalFolderCount = 0; // Count of all folders
+    let totalFileSize = 0; // Summary of all file sizes
+
     // Initialize each item in the map with its _id as the key
     items.forEach(item => {
       item.children = [];
       item.childCount = 0;
       item.size = item.type === "file" ? item.size || 0 : 0;
+
+      // Update counters for files and folders
+      if (item.type === "file") {
+        totalFileCount++;
+        totalFileSize += item.size;
+      } else if (item.type === "folder") {
+        totalFolderCount++;
+      }
+
       itemMap.set(item._id.toString(), item);
     });
-  
+
     const nestedItems = [];
     items.forEach(item => {
       if (item.parent && itemMap.has(item.parent.toString())) {
@@ -139,24 +152,24 @@ const restructureItems = async (db) => {
         nestedItems.push(item);
       }
     });
-  
+
     const calculateChildrenAndSize = (item) => {
       let count = item.children.length;
       let totalSize = item.size;
-  
+
       item.children.forEach(child => {
         const { childCount, size } = calculateChildrenAndSize(child);
         count += childCount;
         totalSize += size;
       });
-  
+
       item.childCount = count;
       item.size = totalSize;
       return { childCount: count, size: totalSize };
     };
-  
+
     nestedItems.forEach(rootItem => calculateChildrenAndSize(rootItem));
-  
+
     const flatList = items
       .filter(item => item.type === "folder")
       .map(item => ({
@@ -164,60 +177,73 @@ const restructureItems = async (db) => {
         count: item.childCount,
         size: item.size
       }));
-  
-    return { nestedItems, flatList };
-  };
+
+    return { 
+      nestedItems, 
+      flatList, 
+      totalFileCount, 
+      totalFolderCount, 
+      totalFileSize 
+    };
+};
+
   
   /** List Parent Endpoint
  * Retrieves and updates items by parent ID, then fetches the updated data by parent ID,
  * sorted to display folders first.
  */
-router.post('/list_parent', async (req, res) => {
+  router.post('/list_parent', async (req, res) => {
     const token = req.headers['authorization'];
     if (!token) return res.status(400).json({ status: false, message: 'Token is required' });
-  
+
     try {
-      const decodedToken = await verifyToken(token.replace('Bearer ', ''));
-      if (!decodedToken.status) return res.status(401).json({ status: false, message: 'Invalid or expired token' });
-  
-      const { db } = req;
-      const { parent } = req.body;
-  
-      if (!parent) {
-        return res.status(400).json({ status: false, message: 'Parent ID is required' });
-      }
-  
-      // Fetch and restructure all items in the collection
-      const { flatList } = await restructureItems(db);
-  
-      // Perform batch update on folder counts and sizes
-      const fileCollection = db.collection('filemanager');
-      const updateOperations = flatList.map(item => {
-        const id = safeObjectId(item._id);
-        return fileCollection.updateOne({ _id: id }, { $set: { count: item.count, size: item.size } });
-      });
-      await Promise.all(updateOperations);
-  
-      // Fetch the updated data for the specified parent
-      const updatedItems = await fileCollection.find({ parent: safeObjectId(parent) }).toArray();
-  
-      // Sort items to display folders first, then files
-      updatedItems.sort((a, b) => {
-        if (a.type === 'folder' && b.type !== 'folder') return -1;
-        if (a.type !== 'folder' && b.type === 'folder') return 1;
-        return 0;
-      });
-  
-      return res.status(200).json({
-        status: true,
-        message: 'Items retrieved and batch updated successfully',
-        items: updatedItems
-      });
+        const decodedToken = await verifyToken(token.replace('Bearer ', ''));
+        if (!decodedToken.status) return res.status(401).json({ status: false, message: 'Invalid or expired token' });
+
+        const { db } = req;
+        const { parent } = req.body;
+
+        if (!parent) {
+            return res.status(400).json({ status: false, message: 'Parent ID is required' });
+        }
+
+        // Fetch and restructure all items in the collection, including totals
+        const { flatList, totalFileCount, totalFolderCount, totalFileSize } = await restructureItems(db);
+
+        // Perform batch update on folder counts and sizes
+        const fileCollection = db.collection('filemanager');
+        const updateOperations = flatList.map(item => {
+            const id = safeObjectId(item._id);
+            return fileCollection.updateOne({ _id: id }, { $set: { count: item.count, size: item.size } });
+        });
+        await Promise.all(updateOperations);
+
+        // Fetch the updated data for the specified parent
+        const updatedItems = await fileCollection.find({ parent: safeObjectId(parent) }).toArray();
+
+        // Sort items to display folders first, then files
+        updatedItems.sort((a, b) => {
+            if (a.type === 'folder' && b.type !== 'folder') return -1;
+            if (a.type !== 'folder' && b.type === 'folder') return 1;
+            return 0;
+        });
+
+        return res.status(200).json({
+            status: true,
+            message: 'Items retrieved and batch updated successfully',
+            items: updatedItems,
+            totals: {
+                totalFileCount,
+                totalFolderCount,
+                totalFileSize
+            }
+        });
     } catch (error) {
-      console.error('Error retrieving and updating items:', error);
-      res.status(500).json({ status: false, message: 'An error occurred while retrieving and updating items' });
+        console.error('Error retrieving and updating items:', error);
+        res.status(500).json({ status: false, message: 'An error occurred while retrieving and updating items' });
     }
-  });
+});
+
   
 
   /** Rename Endpoint
