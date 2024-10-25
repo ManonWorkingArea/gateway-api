@@ -58,6 +58,38 @@ router.post('/new_folder', async (req, res) => {
   }
 });
 
+/** List Parent Endpoint
+ * Retrieves items in the filemanager collection by parent ID.
+ */
+router.post('/list_parent', async (req, res) => {
+    const token = req.headers['authorization'];
+    if (!token) return res.status(400).json({ status: false, message: 'Token is required' });
+  
+    try {
+      const decodedToken = await verifyToken(token.replace('Bearer ', ''));
+      if (!decodedToken.status) return res.status(401).json({ status: false, message: 'Invalid or expired token' });
+  
+      const { db } = req;
+      const { parent } = req.body;
+  
+      if (!parent) {
+        return res.status(400).json({ status: false, message: 'Parent ID is required' });
+      }
+  
+      const fileCollection = db.collection('filemanager');
+      const items = await fileCollection.find({ parent: safeObjectId(parent) }).toArray();
+  
+      return res.status(200).json({
+        status: true,
+        message: 'Items retrieved successfully',
+        items
+      });
+    } catch (error) {
+      console.error('Error retrieving items by parent:', error);
+      res.status(500).json({ status: false, message: 'An error occurred while retrieving items' });
+    }
+  });
+  
 // Error handler middleware
 router.use(errorHandler);
 
