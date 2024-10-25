@@ -58,6 +58,60 @@ router.post('/new_folder', async (req, res) => {
   }
 });
 
+/** New File Endpoint
+ * Creates a new file entry in the filemanager collection with specified attributes.
+ */
+router.post('/new_file', async (req, res) => {
+    const token = req.headers['authorization'];
+    if (!token) return res.status(400).json({ status: false, message: 'Token is required' });
+  
+    try {
+      const decodedToken = await verifyToken(token.replace('Bearer ', ''));
+      if (!decodedToken.status) return res.status(401).json({ status: false, message: 'Invalid or expired token' });
+  
+      const { db } = req;
+      const {
+        name,
+        path,
+        parent,
+        url,
+        size,
+        mimetype,
+        dimensions,
+        thumbnail
+      } = req.body;
+  
+      if (!name || !path || !parent || !url || size === undefined || !mimetype) {
+        return res.status(400).json({ status: false, message: 'Missing required file parameters' });
+      }
+  
+      const fileCollection = db.collection('filemanager');
+  
+      // Create a new file entry
+      const result = await fileCollection.insertOne({
+        name,
+        path,
+        type: 'file',
+        parent: safeObjectId(parent),
+        url,
+        size: parseFloat(size),
+        mimetype,
+        dimensions: dimensions || null,
+        thumbnail: thumbnail || null,
+        createdAt: new Date()
+      });
+  
+      return res.status(200).json({
+        status: true,
+        message: 'File created successfully',
+        _id: result.insertedId // Return the ID of the newly created file
+      });
+    } catch (error) {
+      console.error('Error creating file entry:', error);
+      res.status(500).json({ status: false, message: 'An error occurred while creating the file entry' });
+    }
+  });
+
 
 
 /** Function to Restructure Items
