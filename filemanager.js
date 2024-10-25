@@ -156,7 +156,56 @@ const restructureItems = async (db) => {
       res.status(500).json({ status: false, message: 'An error occurred while retrieving and updating items' });
     }
   });
+
+  /** Rename Endpoint
+ * Allows renaming of a file or folder in the filemanager collection.
+ */
+router.post('/rename', async (req, res) => {
+    const token = req.headers['authorization'];
+    if (!token) return res.status(400).json({ status: false, message: 'Token is required' });
   
+    try {
+      const decodedToken = await verifyToken(token.replace('Bearer ', ''));
+      if (!decodedToken.status) return res.status(401).json({ status: false, message: 'Invalid or expired token' });
+  
+      const { db } = req;
+      const { itemId, newName } = req.body;
+  
+      if (!itemId || !newName) {
+        return res.status(400).json({ status: false, message: 'Item ID and new name are required' });
+      }
+  
+      const fileCollection = db.collection('filemanager');
+      const item = await fileCollection.findOne({ _id: safeObjectId(itemId) });
+  
+      if (!item) {
+        return res.status(404).json({ status: false, message: 'Item not found' });
+      }
+  
+      // Perform the rename operation
+      const result = await fileCollection.updateOne(
+        { _id: safeObjectId(itemId) },
+        { $set: { name: newName } }
+      );
+  
+      if (result.modifiedCount === 0) {
+        return res.status(500).json({ status: false, message: 'Failed to rename the item' });
+      }
+  
+      // Return the updated item
+      const updatedItem = await fileCollection.findOne({ _id: safeObjectId(itemId) });
+  
+      return res.status(200).json({
+        status: true,
+        message: 'Item renamed successfully',
+        item: updatedItem
+      });
+    } catch (error) {
+      console.error('Error renaming item:', error);
+      res.status(500).json({ status: false, message: 'An error occurred while renaming the item' });
+    }
+  });
+
 
 // Error handler middleware
 router.use(errorHandler);
