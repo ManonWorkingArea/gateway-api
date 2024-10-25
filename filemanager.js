@@ -206,6 +206,52 @@ router.post('/rename', async (req, res) => {
     }
   });
 
+  /** Delete Endpoint
+ * Allows deleting a file or folder (only if the folder is empty) in the filemanager collection.
+ */
+router.post('/delete', async (req, res) => {
+    const token = req.headers['authorization'];
+    if (!token) return res.status(400).json({ status: false, message: 'Token is required' });
+  
+    try {
+      const decodedToken = await verifyToken(token.replace('Bearer ', ''));
+      if (!decodedToken.status) return res.status(401).json({ status: false, message: 'Invalid or expired token' });
+  
+      const { db } = req;
+      const { itemId } = req.body;
+  
+      if (!itemId) {
+        return res.status(400).json({ status: false, message: 'Item ID is required' });
+      }
+  
+      const fileCollection = db.collection('filemanager');
+      const item = await fileCollection.findOne({ _id: safeObjectId(itemId) });
+  
+      if (!item) {
+        return res.status(404).json({ status: false, message: 'Item not found' });
+      }
+  
+      // Check if the item is a folder with contents (count > 0)
+      if (item.type === 'folder' && item.count > 0) {
+        return res.status(400).json({
+          status: false,
+          message: 'Cannot delete folder because it contains items'
+        });
+      }
+  
+      // Proceed with deletion if item is a file or an empty folder
+      await fileCollection.deleteOne({ _id: safeObjectId(itemId) });
+  
+      return res.status(200).json({
+        status: true,
+        message: `Item ${itemId} deleted successfully`
+      });
+    } catch (error) {
+      console.error('Error deleting item:', error);
+      res.status(500).json({ status: false, message: 'An error occurred while deleting the item' });
+    }
+  });
+
 
 // Error handler middleware
 router.use(errorHandler);
