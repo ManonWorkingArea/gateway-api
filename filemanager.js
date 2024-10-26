@@ -57,6 +57,38 @@ router.post('/new_folder', async (req, res) => {
   }
 });
 
+
+/**
+ * Generates a thumbnail in base64 format if the mimetype is an image.
+ * @param {string} url - The URL of the image to generate a thumbnail for.
+ * @param {string} mimetype - The mimetype of the file.
+ * @returns {Promise<string|null>} - The base64 thumbnail or null if not an image.
+ */
+async function generateThumbnail(url, mimetype) {
+    if (!mimetype.startsWith('image/')) return null;
+
+    try {
+        const response = await axios.post(
+            'https://api.apyhub.com/generate/image/thumbnail/url/file?output=thumbnail&height=100&width=100&auto_orientation=false&preserve_format=true',
+            { url },
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'apy-token': 'APY02grbaFd83fKSDc8QtNTdld6dgFG4YDna2AIZYh4QGsE1jPsLQDBwuyM77R21Fq7BsSMHAH'
+                },
+                responseType: 'arraybuffer' // Ensure the response is treated as binary data
+            }
+        );
+
+        // Convert binary data to base64
+        const base64Thumbnail = Buffer.from(response.data, 'binary').toString('base64');
+        return base64Thumbnail;
+    } catch (error) {
+        console.error('Error generating thumbnail:', error);
+        return null;
+    }
+}
+
 /** New File Endpoint
  * Creates a new file entry in the filemanager collection with specified attributes.
  */
@@ -83,19 +115,8 @@ router.post('/new_file', async (req, res) => {
             return res.status(400).json({ status: false, message: 'Missing required file parameters' });
         }
   
-        // Make a request to generate a thumbnail in base64 format
-        const thumbnailResponse = await axios.post(
-            'https://api.apyhub.com/generate/image/thumbnail/url/file?output=thumbnail&height=100&width=100&auto_orientation=false&preserve_format=true',
-            { url },
-            {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'apy-token': 'APY02grbaFd83fKSDc8QtNTdld6dgFG4YDna2AIZYh4QGsE1jPsLQDBwuyM77R21Fq7BsSMHAH'
-                }
-            }
-        );
-
-        const thumbnailBase64 = thumbnailResponse.data.data || null; // Extract base64 thumbnail from `data` field
+        // Generate thumbnail if applicable
+        const thumbnailBase64 = await generateThumbnail(url, mimetype);
   
         const fileCollection = db.collection('filemanager');
   
