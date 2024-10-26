@@ -394,39 +394,109 @@ router.post('/delete', async (req, res) => {
     }
   });
 
-  router.post('/search', async (req, res) => {
-    const token = req.headers['authorization'];
-    if (!token) return res.status(400).json({ status: false, message: 'Token is required' });
 
-    try {
-        const decodedToken = await verifyToken(token.replace('Bearer ', ''));
-        if (!decodedToken.status) return res.status(401).json({ status: false, message: 'Invalid or expired token' });
 
-        const { db } = req;
-        const { query } = req.body;
 
-        if (!query) {
-            return res.status(400).json({ status: false, message: 'Search query is required' });
-        }
 
-        // Search criteria limited to name
-        const searchCriteria = {
-            name: { $regex: query, $options: 'i' } // Case-insensitive name search
-        };
 
-        const fileCollection = db.collection('filemanager');
-        const results = await fileCollection.find(searchCriteria).toArray();
+  // Function to create the nested structure
+const createNestedStructure = async (db) => {
+  const fileCollection = db.collection('filemanager');
+  const items = await fileCollection.find().toArray();
 
-        res.status(200).json({
-            status: true,
-            message: 'Search completed successfully',
-            results
-        });
-    } catch (error) {
-        console.error('Error during search:', error);
-        res.status(500).json({ status: false, message: 'An error occurred while performing the search' });
+  const itemMap = new Map();
+
+  // Initialize each item with an empty children array and store it in itemMap
+  items.forEach(item => {
+    item.children = [];
+    itemMap.set(item._id.toString(), item);
+  });
+
+  const nestedItems = [];
+
+  // Build the nested structure
+  items.forEach(item => {
+    if (item.parent && itemMap.has(item.parent.toString())) {
+      // Add item to the parent's children array
+      itemMap.get(item.parent.toString()).children.push(item);
+    } else {
+      // Add top-level items directly to nestedItems
+      nestedItems.push(item);
     }
+  });
+  return nestedItems; // Returns the nested array structure
+};
+
+// Recursive function to find the real path of an item by _id in the nested structure
+const findPathById = (targetId, nestedItems, currentPath = []) => {
+  for (const item of nestedItems) {
+    // Create a new path array that includes the current item as an object with name and _id
+    const newPath = [...currentPath, { name: item.name, id: item._id.toString() }];
+
+    if (item._id.toString() === targetId.toString()) {
+      return newPath; // Found the item, return the path as an array of objects
+    }
+
+    // If the item has children, search recursively within them
+    if (item.children && item.children.length > 0) {
+      const result = findPathById(targetId, item.children, newPath);
+      if (result) return result; // Return the path if found in the children
+    }
+  }
+  return null; // Return null if the target item is not found in this branch
+};
+
+
+// '/search' endpoint to find items and add their real paths
+router.post('/search', async (req, res) => {
+  const token = req.headers['authorization'];
+  if (!token) return res.status(400).json({ status: false, message: 'Token is required' });
+
+  try {
+    const decodedToken = await verifyToken(token.replace('Bearer ', ''));
+    if (!decodedToken.status) return res.status(401).json({ status: false, message: 'Invalid or expired token' });
+
+    const { db } = req;
+    const { query } = req.body;
+
+    if (!query) {
+      return res.status(400).json({ status: false, message: 'Search query is required' });
+    }
+
+    // Search criteria limited to name
+    const searchCriteria = {
+      name: { $regex: query, $options: 'i' } // Case-insensitive search on name field
+    };
+
+    const fileCollection = db.collection('filemanager');
+    const searchResults = await fileCollection.find(searchCriteria).toArray();
+
+    if (searchResults.length === 0) {
+      return res.status(404).json({ status: false, message: 'Item not found' });
+    }
+
+    // Create the nested structure for the entire file collection
+    const nestedItems = await createNestedStructure(db);
+
+    // Add realPath to each item in the search results
+    const resultsWithPaths = searchResults.map(item => {
+      const realPath = findPathById(item._id, nestedItems);
+      return { ...item, realPath }; // Add realPath as an array of { name, id } objects
+    });
+
+    res.status(200).json({
+      status: true,
+      message: 'Search completed successfully',
+      results: resultsWithPaths
+    });
+  } catch (error) {
+    console.error('Error during search:', error);
+    res.status(500).json({ status: false, message: 'An error occurred while performing the search' });
+  }
 });
+
+
+
 
 
 
