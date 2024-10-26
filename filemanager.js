@@ -3,7 +3,7 @@ const jwt = require('jsonwebtoken');
 const { authenticateClient, safeObjectId, errorHandler } = require('./routes/middleware/mongoMiddleware');
 const router = express.Router();
 const JWT_SECRET = 'ZCOKU1v3TO2flcOqCdrJ3vWbWhmnZNQn';
-
+const axios = require('axios');
 // Middleware to verify JWT token
 function verifyToken(token) {
   return new Promise((resolve, reject) => {
@@ -65,51 +65,64 @@ router.post('/new_file', async (req, res) => {
     if (!token) return res.status(400).json({ status: false, message: 'Token is required' });
   
     try {
-      const decodedToken = await verifyToken(token.replace('Bearer ', ''));
-      if (!decodedToken.status) return res.status(401).json({ status: false, message: 'Invalid or expired token' });
+        const decodedToken = await verifyToken(token.replace('Bearer ', ''));
+        if (!decodedToken.status) return res.status(401).json({ status: false, message: 'Invalid or expired token' });
   
-      const { db } = req;
-      const {
-        name,
-        path,
-        parent,
-        url,
-        size,
-        mimetype,
-        dimensions,
-        thumbnail
-      } = req.body;
+        const { db } = req;
+        const {
+            name,
+            path,
+            parent,
+            url,
+            size,
+            mimetype,
+            dimensions
+        } = req.body;
   
-      if (!name || !path || !parent || !url || size === undefined || !mimetype) {
-        return res.status(400).json({ status: false, message: 'Missing required file parameters' });
-      }
+        if (!name || !path || !parent || !url || size === undefined || !mimetype) {
+            return res.status(400).json({ status: false, message: 'Missing required file parameters' });
+        }
   
-      const fileCollection = db.collection('filemanager');
+        // Make a request to generate a thumbnail in base64 format
+        const thumbnailResponse = await axios.post(
+            'https://api.apyhub.com/generate/image/thumbnail/url/file?output=thumbnail&height=100&width=100&auto_orientation=false&preserve_format=true',
+            { url },
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'apy-token': 'APY02grbaFd83fKSDc8QtNTdld6dgFG4YDna2AIZYh4QGsE1jPsLQDBwuyM77R21Fq7BsSMHAH'
+                }
+            }
+        );
+
+        const thumbnailBase64 = thumbnailResponse.data.data || null; // Extract base64 thumbnail from `data` field
   
-      // Create a new file entry
-      const result = await fileCollection.insertOne({
-        name,
-        path,
-        type: 'file',
-        parent: safeObjectId(parent),
-        url,
-        size: parseFloat(size),
-        mimetype,
-        dimensions: dimensions || null,
-        thumbnail: thumbnail || null,
-        createdAt: new Date()
-      });
+        const fileCollection = db.collection('filemanager');
   
-      return res.status(200).json({
-        status: true,
-        message: 'File created successfully',
-        _id: result.insertedId // Return the ID of the newly created file
-      });
+        // Create a new file entry
+        const result = await fileCollection.insertOne({
+            name,
+            path,
+            type: 'file',
+            parent: safeObjectId(parent),
+            url,
+            size: parseFloat(size),
+            mimetype,
+            dimensions: dimensions || null,
+            thumbnail: thumbnailBase64,
+            createdAt: new Date()
+        });
+  
+        return res.status(200).json({
+            status: true,
+            message: 'File created successfully',
+            _id: result.insertedId // Return the ID of the newly created file
+        });
     } catch (error) {
-      console.error('Error creating file entry:', error);
-      res.status(500).json({ status: false, message: 'An error occurred while creating the file entry' });
+        console.error('Error creating file entry:', error);
+        res.status(500).json({ status: false, message: 'An error occurred while creating the file entry' });
     }
-  });
+});
 
 /** Function to Restructure Items
  * Fetches all items in the collection, restructures them, and calculates `childCount` and `size`.
