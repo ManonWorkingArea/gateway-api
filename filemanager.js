@@ -58,77 +58,86 @@ router.post('/new_folder', async (req, res) => {
   }
 });
 
-/** New File Endpoint
- * Creates a new file entry in the filemanager collection with specified attributes.
- */
+// Endpoint to handle image file uploads and thumbnail creation
 router.post('/new_file', async (req, res) => {
     const token = req.headers['authorization'];
     if (!token) return res.status(400).json({ status: false, message: 'Token is required' });
-  
+
     try {
-      const decodedToken = await verifyToken(token.replace('Bearer ', ''));
-      if (!decodedToken.status) return res.status(401).json({ status: false, message: 'Invalid or expired token' });
-  
-      const { db } = req;
-      const {
-        name,
-        path,
-        parent,
-        url,
-        size,
-        mimetype,
-        dimensions,
-      } = req.body;
-  
-      if (!name || !path || !parent || !url || size === undefined || !mimetype) {
-        return res.status(400).json({ status: false, message: 'Missing required file parameters' });
-      }
-  
-      const fileCollection = db.collection('filemanager');
-  
-      // Prepare file data
-      let thumbnail = null;
-      if (mimetype.startsWith('image/')) {
-        try {
-          // Fetch the image content
-          const imageResponse = await fetch(url);
-          const imageBuffer = await imageResponse.buffer();
-  
-          // Generate a small thumbnail in base64
-          const thumbnailBuffer = await sharp(imageBuffer)
-            .resize({ width: 100 }) // Adjust width as desired
-            .toBuffer();
-          
-          thumbnail = `data:${mimetype};base64,${thumbnailBuffer.toString('base64')}`;
-        } catch (thumbnailError) {
-          console.error('Error generating thumbnail:', thumbnailError);
+        // Verify token (this function should be implemented based on your auth logic)
+        const decodedToken = await verifyToken(token.replace('Bearer ', ''));
+        if (!decodedToken.status) return res.status(401).json({ status: false, message: 'Invalid or expired token' });
+
+        const { name, path, parent, url, size, mimetype, dimensions } = req.body;
+
+        if (!name || !path || !parent || !url || size === undefined || !mimetype) {
+            return res.status(400).json({ status: false, message: 'Missing required file parameters' });
         }
-      }
-  
-      // Create a new file entry in the database
-      const result = await fileCollection.insertOne({
-        name,
-        path,
-        type: 'file',
-        parent: safeObjectId(parent),
-        url,
-        size: parseFloat(size),
-        mimetype,
-        dimensions: dimensions || null,
-        thumbnail, // Save generated thumbnail here
-        createdAt: new Date()
-      });
-  
-      return res.status(200).json({
-        status: true,
-        message: 'File created successfully',
-        _id: result.insertedId // Return the ID of the newly created file
-      });
+
+        const fileCollection = db.collection('filemanager');
+
+        // Create thumbnail if the file is an image
+        let thumbnail = null;
+        if (mimetype.startsWith('image/')) {
+            try {
+                thumbnail = await generateThumbnail(url, 100); // Generate a 100px wide thumbnail
+            } catch (error) {
+                console.error('Error generating thumbnail:', error);
+            }
+        }
+
+        // Insert file data into the database
+        const result = await fileCollection.insertOne({
+            name,
+            path,
+            type: 'file',
+            parent: new ObjectId(parent),
+            url,
+            size: parseFloat(size),
+            mimetype,
+            dimensions: dimensions || null,
+            thumbnail, // Save thumbnail data
+            createdAt: new Date(),
+        });
+
+        res.status(200).json({
+            status: true,
+            message: 'File created successfully',
+            _id: result.insertedId,
+        });
     } catch (error) {
-      console.error('Error creating file entry:', error);
-      res.status(500).json({ status: false, message: 'An error occurred while creating the file entry' });
+        console.error('Error creating file entry:', error);
+        res.status(500).json({ status: false, message: 'An error occurred while creating the file entry' });
     }
-  });
+});
+
+// Helper function to generate a thumbnail using Puppeteer
+async function generateThumbnail(imageUrl, width) {
+    const browser = await puppeteer.launch();
+    const page = await browser.newPage();
+
+    // Set the viewport size to the thumbnail size
+    await page.setViewport({ width, height: Math.floor(width * 0.75) }); // Adjust height based on aspect ratio
+
+    // Load the image
+    await page.goto(`data:text/html,<img src="${imageUrl}" id="image" onload="document.title = this.width + ',' + this.height">`);
+
+    // Wait for the image to load
+    const [imgWidth, imgHeight] = (await page.title()).split(',').map(Number);
+
+    // Resize the canvas based on aspect ratio
+    const aspectRatio = imgHeight / imgWidth;
+    await page.setViewport({ width, height: Math.floor(width * aspectRatio) });
+
+    // Capture the thumbnail as base64
+    const thumbnailBase64 = await page.screenshot({ encoding: 'base64' });
+
+    await browser.close();
+
+    // Return the thumbnail as a data URL
+    return `data:image/jpeg;base64,${thumbnailBase64}`;
+}
+
 
 
 /** Function to Restructure Items
