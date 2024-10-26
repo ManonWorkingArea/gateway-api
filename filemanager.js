@@ -3,7 +3,7 @@ const jwt = require('jsonwebtoken');
 const { authenticateClient, safeObjectId, errorHandler } = require('./routes/middleware/mongoMiddleware');
 const router = express.Router();
 const JWT_SECRET = 'ZCOKU1v3TO2flcOqCdrJ3vWbWhmnZNQn';
-
+const { createCanvas, loadImage } = require('canvas');
 // Middleware to verify JWT token
 function verifyToken(token) {
   return new Promise((resolve, reject) => {
@@ -57,6 +57,21 @@ router.post('/new_folder', async (req, res) => {
   }
 });
 
+
+// Helper function to generate a base64 thumbnail
+async function generateThumbnail(imageUrl, width) {
+    const img = await loadImage(imageUrl);
+    const aspectRatio = img.height / img.width;
+    const height = Math.floor(width * aspectRatio);
+    
+    const canvas = createCanvas(width, height);
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, width, height);
+    
+    // Return the thumbnail in base64 format
+    return canvas.toDataURL();
+}
+
 // Endpoint to handle image file uploads and thumbnail creation
 router.post('/new_file', async (req, res) => {
     const token = req.headers['authorization'];
@@ -109,34 +124,6 @@ router.post('/new_file', async (req, res) => {
         res.status(500).json({ status: false, message: 'An error occurred while creating the file entry' });
     }
 });
-
-// Helper function to generate a thumbnail using Puppeteer
-async function generateThumbnail(imageUrl, width) {
-    const browser = await puppeteer.launch();
-    const page = await browser.newPage();
-
-    // Set the viewport size to the thumbnail size
-    await page.setViewport({ width, height: Math.floor(width * 0.75) }); // Adjust height based on aspect ratio
-
-    // Load the image
-    await page.goto(`data:text/html,<img src="${imageUrl}" id="image" onload="document.title = this.width + ',' + this.height">`);
-
-    // Wait for the image to load
-    const [imgWidth, imgHeight] = (await page.title()).split(',').map(Number);
-
-    // Resize the canvas based on aspect ratio
-    const aspectRatio = imgHeight / imgWidth;
-    await page.setViewport({ width, height: Math.floor(width * aspectRatio) });
-
-    // Capture the thumbnail as base64
-    const thumbnailBase64 = await page.screenshot({ encoding: 'base64' });
-
-    await browser.close();
-
-    // Return the thumbnail as a data URL
-    return `data:image/jpeg;base64,${thumbnailBase64}`;
-}
-
 
 
 /** Function to Restructure Items
