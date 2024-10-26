@@ -1,7 +1,7 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const { authenticateClient, safeObjectId, errorHandler } = require('./routes/middleware/mongoMiddleware');
-
+const sharp = require('sharp'); // Use sharp for image processing
 const router = express.Router();
 const JWT_SECRET = 'ZCOKU1v3TO2flcOqCdrJ3vWbWhmnZNQn';
 
@@ -78,7 +78,6 @@ router.post('/new_file', async (req, res) => {
         size,
         mimetype,
         dimensions,
-        thumbnail
       } = req.body;
   
       if (!name || !path || !parent || !url || size === undefined || !mimetype) {
@@ -87,7 +86,26 @@ router.post('/new_file', async (req, res) => {
   
       const fileCollection = db.collection('filemanager');
   
-      // Create a new file entry
+      // Prepare file data
+      let thumbnail = null;
+      if (mimetype.startsWith('image/')) {
+        try {
+          // Fetch the image content
+          const imageResponse = await fetch(url);
+          const imageBuffer = await imageResponse.buffer();
+  
+          // Generate a small thumbnail in base64
+          const thumbnailBuffer = await sharp(imageBuffer)
+            .resize({ width: 100 }) // Adjust width as desired
+            .toBuffer();
+          
+          thumbnail = `data:${mimetype};base64,${thumbnailBuffer.toString('base64')}`;
+        } catch (thumbnailError) {
+          console.error('Error generating thumbnail:', thumbnailError);
+        }
+      }
+  
+      // Create a new file entry in the database
       const result = await fileCollection.insertOne({
         name,
         path,
@@ -97,7 +115,7 @@ router.post('/new_file', async (req, res) => {
         size: parseFloat(size),
         mimetype,
         dimensions: dimensions || null,
-        thumbnail: thumbnail || null,
+        thumbnail, // Save generated thumbnail here
         createdAt: new Date()
       });
   
@@ -111,7 +129,6 @@ router.post('/new_file', async (req, res) => {
       res.status(500).json({ status: false, message: 'An error occurred while creating the file entry' });
     }
   });
-
 
 
 /** Function to Restructure Items
