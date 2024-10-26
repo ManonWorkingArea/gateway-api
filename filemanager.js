@@ -71,7 +71,7 @@ async function generateThumbnail(url, mimetype) {
         if (mimetype.startsWith('image/')) {
             // Generate thumbnail for an image
             response = await axios.post(
-                'https://api.apyhub.com/generate/image/thumbnail/url/file?output=thumbnail&height=100&width=100&auto_orientation=false&preserve_format=true',
+                'https://api.apyhub.com/generate/image/thumbnail/url/file?output=thumbnail&height=56&width=100&auto_orientation=false&preserve_format=true',
                 { url },
                 {
                     headers: {
