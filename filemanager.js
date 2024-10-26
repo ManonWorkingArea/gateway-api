@@ -59,30 +59,53 @@ router.post('/new_folder', async (req, res) => {
 
 
 /**
- * Generates a thumbnail in base64 format if the mimetype is an image.
- * @param {string} url - The URL of the image to generate a thumbnail for.
+ * Generates a thumbnail in base64 format if the mimetype is an image or video.
+ * @param {string} url - The URL of the image or video to generate a thumbnail for.
  * @param {string} mimetype - The mimetype of the file.
- * @returns {Promise<string|null>} - The base64 thumbnail or null if not an image.
+ * @returns {Promise<string|null>} - The base64 thumbnail or null if the mimetype is not supported.
  */
 async function generateThumbnail(url, mimetype) {
-    if (!mimetype.startsWith('image/')) return null;
-
     try {
-        const response = await axios.post(
-            'https://api.apyhub.com/generate/image/thumbnail/url/file?output=thumbnail&height=100&width=100&auto_orientation=false&preserve_format=true',
-            { url },
-            {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'apy-token': 'APY02grbaFd83fKSDc8QtNTdld6dgFG4YDna2AIZYh4QGsE1jPsLQDBwuyM77R21Fq7BsSMHAH'
+        let response;
+        
+        if (mimetype.startsWith('image/')) {
+            // Generate thumbnail for an image
+            response = await axios.post(
+                'https://api.apyhub.com/generate/image/thumbnail/url/file?output=thumbnail&height=100&width=100&auto_orientation=false&preserve_format=true',
+                { url },
+                {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'apy-token': 'APY02grbaFd83fKSDc8QtNTdld6dgFG4YDna2AIZYh4QGsE1jPsLQDBwuyM77R21Fq7BsSMHAH'
+                    },
+                    responseType: 'arraybuffer' // Ensure the response is treated as binary data
+                }
+            );
+        } else if (mimetype.startsWith('video/')) {
+            // Generate thumbnail for a video
+            response = await axios.post(
+                'https://api.apyhub.com/generate/image-thumbnail/url/file',
+                {
+                    size: "100x56",
+                    video_url: url
                 },
-                responseType: 'arraybuffer' // Ensure the response is treated as binary data
-            }
-        );
+                {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'apy-token': 'APY02grbaFd83fKSDc8QtNTdld6dgFG4YDna2AIZYh4QGsE1jPsLQDBwuyM77R21Fq7BsSMHAH'
+                    },
+                    responseType: 'arraybuffer' // Ensure the response is treated as binary data
+                }
+            );
+        } else {
+            // Return null for unsupported mimetypes
+            return null;
+        }
 
         // Convert binary data to base64
-        const base64Thumbnail = Buffer.from(response.data, 'binary').toString('base64');
+        const base64Thumbnail = `data:${mimetype};base64,${Buffer.from(response.data, 'binary').toString('base64')}`;
         return base64Thumbnail;
+
     } catch (error) {
         console.error('Error generating thumbnail:', error);
         return null;
@@ -115,7 +138,7 @@ router.post('/new_file', async (req, res) => {
             return res.status(400).json({ status: false, message: 'Missing required file parameters' });
         }
   
-        // Generate thumbnail if applicable
+        // Generate thumbnail if the file type is supported (image or video)
         const thumbnailBase64 = await generateThumbnail(url, mimetype);
   
         const fileCollection = db.collection('filemanager');
@@ -144,7 +167,6 @@ router.post('/new_file', async (req, res) => {
         res.status(500).json({ status: false, message: 'An error occurred while creating the file entry' });
     }
 });
-
 /** Function to Restructure Items
  * Fetches all items in the collection, restructures them, and calculates `childCount` and `size`.
  * Additionally, returns total counts for files and folders and the summary file size.
