@@ -394,6 +394,41 @@ router.post('/delete', async (req, res) => {
     }
   });
 
+  router.post('/search', async (req, res) => {
+    const token = req.headers['authorization'];
+    if (!token) return res.status(400).json({ status: false, message: 'Token is required' });
+
+    try {
+        const decodedToken = await verifyToken(token.replace('Bearer ', ''));
+        if (!decodedToken.status) return res.status(401).json({ status: false, message: 'Invalid or expired token' });
+
+        const { db } = req;
+        const { query } = req.body;
+
+        if (!query) {
+            return res.status(400).json({ status: false, message: 'Search query is required' });
+        }
+
+        // Search criteria limited to name
+        const searchCriteria = {
+            name: { $regex: query, $options: 'i' } // Case-insensitive name search
+        };
+
+        const fileCollection = db.collection('filemanager');
+        const results = await fileCollection.find(searchCriteria).toArray();
+
+        res.status(200).json({
+            status: true,
+            message: 'Search completed successfully',
+            results
+        });
+    } catch (error) {
+        console.error('Error during search:', error);
+        res.status(500).json({ status: false, message: 'An error occurred while performing the search' });
+    }
+});
+
+
 
 // Error handler middleware
 router.use(errorHandler);
