@@ -81,7 +81,7 @@ async function generateThumbnail(url, mimetype) {
         );
 
         // Convert binary data to base64
-        const base64Thumbnail = `data:${mimetype};base64,${Buffer.from(response.data, 'binary').toString('base64')}`;
+        const base64Thumbnail = Buffer.from(response.data, 'binary').toString('base64');
         return base64Thumbnail;
     } catch (error) {
         console.error('Error generating thumbnail:', error);
