@@ -1,7 +1,6 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const { authenticateClient, safeObjectId, errorHandler } = require('./routes/middleware/mongoMiddleware');
-const sharp = require('sharp'); // Use sharp for image processing
 const router = express.Router();
 const JWT_SECRET = 'ZCOKU1v3TO2flcOqCdrJ3vWbWhmnZNQn';
 
