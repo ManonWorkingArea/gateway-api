@@ -1,9 +1,10 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const { authenticateClient, safeObjectId, errorHandler } = require('./routes/middleware/mongoMiddleware');
+const sharp = require('sharp'); // Use sharp for image processing
 const router = express.Router();
 const JWT_SECRET = 'ZCOKU1v3TO2flcOqCdrJ3vWbWhmnZNQn';
-const { createCanvas, loadImage } = require('canvas');
+
 // Middleware to verify JWT token
 function verifyToken(token) {
   return new Promise((resolve, reject) => {
@@ -57,74 +58,59 @@ router.post('/new_folder', async (req, res) => {
   }
 });
 
-
-// Helper function to generate a base64 thumbnail
-async function generateThumbnail(imageUrl, width) {
-    const img = await loadImage(imageUrl);
-    const aspectRatio = img.height / img.width;
-    const height = Math.floor(width * aspectRatio);
-    
-    const canvas = createCanvas(width, height);
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(img, 0, 0, width, height);
-    
-    // Return the thumbnail in base64 format
-    return canvas.toDataURL();
-}
-
-// Endpoint to handle image file uploads and thumbnail creation
+/** New File Endpoint
+ * Creates a new file entry in the filemanager collection with specified attributes.
+ */
 router.post('/new_file', async (req, res) => {
     const token = req.headers['authorization'];
     if (!token) return res.status(400).json({ status: false, message: 'Token is required' });
-
+  
     try {
-        // Verify token (this function should be implemented based on your auth logic)
-        const decodedToken = await verifyToken(token.replace('Bearer ', ''));
-        if (!decodedToken.status) return res.status(401).json({ status: false, message: 'Invalid or expired token' });
-
-        const { name, path, parent, url, size, mimetype, dimensions } = req.body;
-
-        if (!name || !path || !parent || !url || size === undefined || !mimetype) {
-            return res.status(400).json({ status: false, message: 'Missing required file parameters' });
-        }
-
-        const fileCollection = db.collection('filemanager');
-
-        // Create thumbnail if the file is an image
-        let thumbnail = null;
-        if (mimetype.startsWith('image/')) {
-            try {
-                thumbnail = await generateThumbnail(url, 100); // Generate a 100px wide thumbnail
-            } catch (error) {
-                console.error('Error generating thumbnail:', error);
-            }
-        }
-
-        // Insert file data into the database
-        const result = await fileCollection.insertOne({
-            name,
-            path,
-            type: 'file',
-            parent: new ObjectId(parent),
-            url,
-            size: parseFloat(size),
-            mimetype,
-            dimensions: dimensions || null,
-            thumbnail, // Save thumbnail data
-            createdAt: new Date(),
-        });
-
-        res.status(200).json({
-            status: true,
-            message: 'File created successfully',
-            _id: result.insertedId,
-        });
+      const decodedToken = await verifyToken(token.replace('Bearer ', ''));
+      if (!decodedToken.status) return res.status(401).json({ status: false, message: 'Invalid or expired token' });
+  
+      const { db } = req;
+      const {
+        name,
+        path,
+        parent,
+        url,
+        size,
+        mimetype,
+        dimensions,
+        thumbnail
+      } = req.body;
+  
+      if (!name || !path || !parent || !url || size === undefined || !mimetype) {
+        return res.status(400).json({ status: false, message: 'Missing required file parameters' });
+      }
+  
+      const fileCollection = db.collection('filemanager');
+  
+      // Create a new file entry
+      const result = await fileCollection.insertOne({
+        name,
+        path,
+        type: 'file',
+        parent: safeObjectId(parent),
+        url,
+        size: parseFloat(size),
+        mimetype,
+        dimensions: dimensions || null,
+        thumbnail: thumbnail || null,
+        createdAt: new Date()
+      });
+  
+      return res.status(200).json({
+        status: true,
+        message: 'File created successfully',
+        _id: result.insertedId // Return the ID of the newly created file
+      });
     } catch (error) {
-        console.error('Error creating file entry:', error);
-        res.status(500).json({ status: false, message: 'An error occurred while creating the file entry' });
+      console.error('Error creating file entry:', error);
+      res.status(500).json({ status: false, message: 'An error occurred while creating the file entry' });
     }
-});
-
+  });
 
 /** Function to Restructure Items
  * Fetches all items in the collection, restructures them, and calculates `childCount` and `size`.
