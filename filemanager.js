@@ -4,6 +4,7 @@ const { authenticateClient, safeObjectId, errorHandler } = require('./routes/mid
 const router = express.Router();
 const JWT_SECRET = 'ZCOKU1v3TO2flcOqCdrJ3vWbWhmnZNQn';
 const axios = require('axios');
+const crypto = require('crypto');
 // Middleware to verify JWT token
 function verifyToken(token) {
   return new Promise((resolve, reject) => {
@@ -350,59 +351,65 @@ router.post('/rename', async (req, res) => {
 
   router.post('/share', async (req, res) => {
     const token = req.headers['authorization'];
-    if (!token) return res.status(400).json({ status: false, message: 'Token is required' });
+    if (!token) {
+        console.error('Token missing in request');
+        return res.status(400).json({ status: false, message: 'Token is required' });
+    }
 
     try {
         const decodedToken = await verifyToken(token.replace('Bearer ', ''));
-        if (!decodedToken.status) return res.status(401).json({ status: false, message: 'Invalid or expired token' });
+        if (!decodedToken.status) {
+            console.error('Invalid or expired token');
+            return res.status(401).json({ status: false, message: 'Invalid or expired token' });
+        }
 
         const { db } = req;
         const { itemId, isShare, sharePassword, shareExpire } = req.body;
 
         if (!itemId) {
+            console.error('Item ID is missing in request');
             return res.status(400).json({ status: false, message: 'Item ID is required' });
         }
 
         // Generate a random 15-digit share code if sharing is enabled
-        const shareCode = isShare ? crypto.randomBytes(15).toString('hex').slice(0, 15) : null;
+        const shareCode = isShare ? crypto.randomBytes(50).toString('hex').slice(0, 15) : null;
+        console.log('Generated share code:', shareCode);
 
         // Base64 encode the password if provided
         const encodedPassword = sharePassword ? Buffer.from(sharePassword).toString('base64') : null;
+        console.log('Encoded password:', encodedPassword);
 
         const fileCollection = db.collection('filemanager');
+        
+        // Check if item exists in the database
         const item = await fileCollection.findOne({ _id: safeObjectId(itemId) });
-
         if (!item) {
+            console.error(`Item with ID ${itemId} not found in the database`);
             return res.status(404).json({ status: false, message: 'Item not found' });
         }
 
         // Create an object for fields that need to be updated
-        const updateData = {
-            is_share: isShare || false, // Required field
-        };
+        const updateData = { is_share: isShare || false };
+        if (encodedPassword !== null) updateData.share_password = encodedPassword;
+        if (shareExpire) updateData.share_expire = new Date(shareExpire);
+        if (shareCode) updateData.share_code = shareCode;
 
-        // Conditionally add optional fields only if they are provided in the request
-        if (encodedPassword !== null) {
-            updateData.share_password = encodedPassword;
-        }
-        if (shareExpire) {
-            updateData.share_expire = new Date(shareExpire);
-        }
-        if (shareCode) {
-            updateData.share_code = shareCode;
-        }
+        console.log('Update data being set:', updateData);
 
+        // Perform the update operation
         const result = await fileCollection.updateOne(
             { _id: safeObjectId(itemId) },
             { $set: updateData }
         );
 
         if (result.modifiedCount === 0) {
+            console.error('Update operation failed: No document was modified');
             return res.status(500).json({ status: false, message: 'Failed to set share options' });
         }
 
-        // Return the updated item with the new share options
+        // Fetch the updated item
         const updatedItem = await fileCollection.findOne({ _id: safeObjectId(itemId) });
+        console.log('Updated item:', updatedItem);
 
         return res.status(200).json({
             status: true,
@@ -414,6 +421,7 @@ router.post('/rename', async (req, res) => {
         res.status(500).json({ status: false, message: 'An error occurred while setting share options' });
     }
 });
+
 
   /** Delete Endpoint
  * Allows deleting a file or folder (only if the folder is empty) in the filemanager collection.
