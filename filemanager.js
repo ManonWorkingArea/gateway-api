@@ -532,58 +532,6 @@ router.post('/delete', async (req, res) => {
   });
 
 
-
-
-
-
-  // Function to create the nested structure
-const createNestedStructure = async (db) => {
-  const fileCollection = db.collection('filemanager');
-  const items = await fileCollection.find().toArray();
-
-  const itemMap = new Map();
-
-  // Initialize each item with an empty children array and store it in itemMap
-  items.forEach(item => {
-    item.children = [];
-    itemMap.set(item._id.toString(), item);
-  });
-
-  const nestedItems = [];
-
-  // Build the nested structure
-  items.forEach(item => {
-    if (item.parent && itemMap.has(item.parent.toString())) {
-      // Add item to the parent's children array
-      itemMap.get(item.parent.toString()).children.push(item);
-    } else {
-      // Add top-level items directly to nestedItems
-      nestedItems.push(item);
-    }
-  });
-  return nestedItems; // Returns the nested array structure
-};
-
-// Recursive function to find the real path of an item by _id in the nested structure
-const findPathById = (targetId, nestedItems, currentPath = []) => {
-  for (const item of nestedItems) {
-    // Create a new path array that includes the current item as an object with name and _id
-    const newPath = [...currentPath, { name: item.name, id: item._id.toString() }];
-
-    if (item._id.toString() === targetId.toString()) {
-      return newPath; // Found the item, return the path as an array of objects
-    }
-
-    // If the item has children, search recursively within them
-    if (item.children && item.children.length > 0) {
-      const result = findPathById(targetId, item.children, newPath);
-      if (result) return result; // Return the path if found in the children
-    }
-  }
-  return null; // Return null if the target item is not found in this branch
-};
-
-
 // '/search' endpoint to find items and add their real paths
 router.post('/search', async (req, res) => {
   const token = req.headers['authorization'];
@@ -631,6 +579,53 @@ router.post('/search', async (req, res) => {
     res.status(500).json({ status: false, message: 'An error occurred while performing the search' });
   }
 });
+
+  // Function to create the nested structure
+  const createNestedStructure = async (db) => {
+    const fileCollection = db.collection('filemanager');
+    const items = await fileCollection.find().toArray();
+  
+    const itemMap = new Map();
+  
+    // Initialize each item with an empty children array and store it in itemMap
+    items.forEach(item => {
+      item.children = [];
+      itemMap.set(item._id.toString(), item);
+    });
+  
+    const nestedItems = [];
+  
+    // Build the nested structure
+    items.forEach(item => {
+      if (item.parent && itemMap.has(item.parent.toString())) {
+        // Add item to the parent's children array
+        itemMap.get(item.parent.toString()).children.push(item);
+      } else {
+        // Add top-level items directly to nestedItems
+        nestedItems.push(item);
+      }
+    });
+    return nestedItems; // Returns the nested array structure
+  };
+  
+  // Recursive function to find the real path of an item by _id in the nested structure
+  const findPathById = (targetId, nestedItems, currentPath = []) => {
+    for (const item of nestedItems) {
+      // Create a new path array that includes the current item as an object with name and _id
+      const newPath = [...currentPath, { name: item.name, id: item._id.toString() }];
+  
+      if (item._id.toString() === targetId.toString()) {
+        return newPath; // Found the item, return the path as an array of objects
+      }
+  
+      // If the item has children, search recursively within them
+      if (item.children && item.children.length > 0) {
+        const result = findPathById(targetId, item.children, newPath);
+        if (result) return result; // Return the path if found in the children
+      }
+    }
+    return null; // Return null if the target item is not found in this branch
+  };
 
 // '/search_external' endpoint to find items under a specific parent ID and add their real paths
 router.post('/search_external', async (req, res) => {
