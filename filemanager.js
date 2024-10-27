@@ -433,6 +433,58 @@ router.post('/rename', async (req, res) => {
     }
 });
 
+router.get('/external', async (req, res) => {
+  const { share_code } = req.query;
+
+  if (!share_code) {
+      console.error('share_code is missing in the request');
+      return res.status(400).json({ status: false, message: 'share_code is required' });
+  }
+
+  try {
+      const { db } = req;
+      const fileCollection = db.collection('filemanager');
+
+      // Find the item with the matching share_code and where is_share is true
+      const item = await fileCollection.findOne({
+          share_code,
+          is_share: true
+      });
+
+      if (!item) {
+          console.error(`No shared item found with share_code: ${share_code}`);
+          return res.status(404).json({ status: false, message: 'Shared item not found' });
+      }
+
+      // Format the response with necessary fields
+      const responseData = {
+          _id: item._id,
+          name: item.name,
+          type: item.type,
+          parent: item.parent,
+          parentName: item.parentName,
+          createdAt: item.createdAt,
+          count: item.count,
+          size: item.size,
+          is_share: item.is_share,
+          share_code: item.share_code,
+          share_password: item.share_password,
+          share_expire: item.share_expire,
+          share_with_password: item.share_with_password
+      };
+
+      return res.status(200).json({
+          status: true,
+          message: 'Shared item retrieved successfully',
+          data: responseData
+      });
+  } catch (error) {
+      console.error('Error retrieving shared item:', error);
+      res.status(500).json({ status: false, message: 'An error occurred while retrieving the shared item' });
+  }
+});
+
+
 /** Delete Endpoint
  * Allows deleting a file or folder (only if the folder is empty) in the filemanager collection.
  */
@@ -580,8 +632,106 @@ router.post('/search', async (req, res) => {
   }
 });
 
+// '/search_external' endpoint to find items under a specific parent ID and add their real paths
+router.post('/search_external', async (req, res) => {
+  const { db } = req;
+  const { query, fixedParentId } = req.body;
 
+  if (!query) {
+    console.error('Search query is required');
+    return res.status(400).json({ status: false, message: 'Search query is required' });
+  }
 
+  if (!fixedParentId) {
+    console.error('Fixed parent ID is required');
+    return res.status(400).json({ status: false, message: 'Fixed parent ID is required' });
+  }
+
+  try {
+    // Search criteria limited to name and is_share
+    const searchCriteria = {
+      name: { $regex: query, $options: 'i' }, // Case-insensitive search on name
+    };
+
+    const fileCollection = db.collection('filemanager');
+    const searchResults = await fileCollection.find(searchCriteria).toArray();
+
+    // If no results found, return early
+    if (searchResults.length === 0) {
+      return res.status(404).json({ status: false, message: 'No shared items found for the query' });
+    }
+
+    // Build the nested structure under the fixed parent ID
+    const nestedItems = await createNestedStructureForSearchExternal(db, fixedParentId);
+
+    // Filter results to only include items under the fixed parent hierarchy
+    const resultsWithPaths = searchResults
+      .filter(item => isDescendantOf(item._id, nestedItems))
+      .map(item => {
+        const realPath = findPathById(item._id, nestedItems);
+        return { ...item, realPath };
+      });
+
+    if (resultsWithPaths.length === 0) {
+      return res.status(404).json({ status: false, message: 'No items found under the specified parent ID' });
+    }
+
+    res.status(200).json({
+      status: true,
+      message: 'Search completed successfully within specified parent hierarchy',
+      results: resultsWithPaths
+    });
+  } catch (error) {
+    console.error('Error during search:', error);
+    res.status(500).json({ status: false, message: 'An error occurred while performing the search' });
+  }
+});
+
+// Helper function to check if an item is a descendant of the fixed parent hierarchy
+const isDescendantOf = (itemId, nestedItems) => {
+  const stack = [...nestedItems];
+  while (stack.length > 0) {
+    const currentItem = stack.pop();
+    if (currentItem._id.toString() === itemId.toString()) return true;
+    stack.push(...currentItem.children);
+  }
+  return false;
+};
+
+// Function to create a nested structure for items under the fixed parent ID
+const createNestedStructureForSearchExternal = async (db, fixedParentId) => {
+  const fileCollection = db.collection('filemanager');
+  const items = await fileCollection.find().toArray();
+
+  const itemMap = new Map();
+  let rootItem = null;
+
+  // Initialize each item with an empty children array and store it in itemMap
+  items.forEach(item => {
+    item.children = [];
+    itemMap.set(item._id.toString(), item);
+    if (item._id.toString() === fixedParentId.toString()) {
+      rootItem = item; // Identify the root item as the fixed parent
+    }
+  });
+
+  // If the fixed parent isn't found, return an empty array
+  if (!rootItem) {
+    console.error(`Fixed parent with ID ${fixedParentId} not found`);
+    return [];
+  }
+
+  // Build the nested structure only within the hierarchy of fixedParentId
+  items.forEach(item => {
+    const parentId = item.parent ? item.parent.toString() : null;
+    if (parentId && itemMap.has(parentId)) {
+      itemMap.get(parentId).children.push(item); // Add as a child to its parent
+    }
+  });
+
+  // Return only the hierarchy under the fixedParentId
+  return [rootItem];
+};
 
 
 
