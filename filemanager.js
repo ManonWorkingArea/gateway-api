@@ -364,7 +364,7 @@ router.post('/rename', async (req, res) => {
         }
 
         const { db } = req;
-        const { itemId, isShare, sharePassword, shareExpire } = req.body;
+        const { itemId, isShare, share_with_password, sharePassword, shareExpire } = req.body;
 
         if (!itemId) {
             console.error('Item ID is missing in request');
@@ -375,8 +375,8 @@ router.post('/rename', async (req, res) => {
         const shareCode = isShare ? crypto.randomBytes(50).toString('hex').slice(0, 15) : null;
         console.log('Generated share code:', shareCode);
 
-        // Base64 encode the password if provided
-        const encodedPassword = sharePassword ? Buffer.from(sharePassword).toString('base64') : null;
+        // Base64 encode the password if share_with_password is true and sharePassword is provided
+        const encodedPassword = share_with_password && sharePassword ? Buffer.from(sharePassword).toString('base64') : null;
         console.log('Encoded password:', encodedPassword);
 
         const fileCollection = db.collection('filemanager');
@@ -388,9 +388,20 @@ router.post('/rename', async (req, res) => {
             return res.status(404).json({ status: false, message: 'Item not found' });
         }
 
-        // Create an object for fields that need to be updated
-        const updateData = { is_share: isShare || false };
-        if (encodedPassword !== null) updateData.share_password = encodedPassword;
+        // Prepare update data
+        const updateData = { 
+            is_share: isShare || false, 
+            share_with_password: share_with_password || false  // Add the new key for password sharing
+        };
+
+        // Conditionally add or remove share password based on share_with_password flag
+        if (share_with_password) {
+            updateData.share_password = encodedPassword;
+        } else {
+            updateData.share_password = null;  // Clear the password if share_with_password is false
+        }
+
+        // Add optional fields only if provided
         if (shareExpire) updateData.share_expire = new Date(shareExpire);
         if (shareCode) updateData.share_code = shareCode;
 
@@ -422,8 +433,7 @@ router.post('/rename', async (req, res) => {
     }
 });
 
-
-  /** Delete Endpoint
+/** Delete Endpoint
  * Allows deleting a file or folder (only if the folder is empty) in the filemanager collection.
  */
 router.post('/delete', async (req, res) => {
