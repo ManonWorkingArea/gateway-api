@@ -348,6 +348,65 @@ router.post('/rename', async (req, res) => {
     }
   });
 
+  router.post('/share', async (req, res) => {
+    const token = req.headers['authorization'];
+    if (!token) return res.status(400).json({ status: false, message: 'Token is required' });
+
+    try {
+        const decodedToken = await verifyToken(token.replace('Bearer ', ''));
+        if (!decodedToken.status) return res.status(401).json({ status: false, message: 'Invalid or expired token' });
+
+        const { db } = req;
+        const { itemId, isShare, sharePassword, shareExpire } = req.body;
+
+        if (!itemId) {
+            return res.status(400).json({ status: false, message: 'Item ID is required' });
+        }
+
+        // Generate a random 15-digit share code
+        const shareCode = crypto.randomBytes(15).toString('hex').slice(0, 15);
+
+        // Base64 encode the password if provided
+        const encodedPassword = sharePassword ? Buffer.from(sharePassword).toString('base64') : null;
+
+        const fileCollection = db.collection('filemanager');
+        const item = await fileCollection.findOne({ _id: safeObjectId(itemId) });
+
+        if (!item) {
+            return res.status(404).json({ status: false, message: 'Item not found' });
+        }
+
+        // Update the share options
+        const updateData = {
+            is_share: isShare || false,
+            share_password: encodedPassword,
+            share_expire: shareExpire ? new Date(shareExpire) : null,
+            share_code: shareCode,
+        };
+
+        const result = await fileCollection.updateOne(
+            { _id: safeObjectId(itemId) },
+            { $set: updateData }
+        );
+
+        if (result.modifiedCount === 0) {
+            return res.status(500).json({ status: false, message: 'Failed to set share options' });
+        }
+
+        // Return the updated item with the new share options
+        const updatedItem = await fileCollection.findOne({ _id: safeObjectId(itemId) });
+
+        return res.status(200).json({
+            status: true,
+            message: 'Share options set successfully',
+            item: updatedItem
+        });
+    } catch (error) {
+        console.error('Error setting share options:', error);
+        res.status(500).json({ status: false, message: 'An error occurred while setting share options' });
+    }
+});
+
   /** Delete Endpoint
  * Allows deleting a file or folder (only if the folder is empty) in the filemanager collection.
  */
