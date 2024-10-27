@@ -363,8 +363,8 @@ router.post('/rename', async (req, res) => {
             return res.status(400).json({ status: false, message: 'Item ID is required' });
         }
 
-        // Generate a random 15-digit share code
-        const shareCode = crypto.randomBytes(15).toString('hex').slice(0, 15);
+        // Generate a random 15-digit share code if sharing is enabled
+        const shareCode = isShare ? crypto.randomBytes(15).toString('hex').slice(0, 15) : null;
 
         // Base64 encode the password if provided
         const encodedPassword = sharePassword ? Buffer.from(sharePassword).toString('base64') : null;
@@ -376,13 +376,21 @@ router.post('/rename', async (req, res) => {
             return res.status(404).json({ status: false, message: 'Item not found' });
         }
 
-        // Update the share options
+        // Create an object for fields that need to be updated
         const updateData = {
-            is_share: isShare || false,
-            share_password: encodedPassword,
-            share_expire: shareExpire ? new Date(shareExpire) : null,
-            share_code: shareCode,
+            is_share: isShare || false, // Required field
         };
+
+        // Conditionally add optional fields only if they are provided in the request
+        if (encodedPassword !== null) {
+            updateData.share_password = encodedPassword;
+        }
+        if (shareExpire) {
+            updateData.share_expire = new Date(shareExpire);
+        }
+        if (shareCode) {
+            updateData.share_code = shareCode;
+        }
 
         const result = await fileCollection.updateOne(
             { _id: safeObjectId(itemId) },
