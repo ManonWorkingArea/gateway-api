@@ -529,6 +529,49 @@ router.get('/external', async (req, res) => {
  */
 // Endpoint to download file based on share code
 
+router.get('/download_external/:sharecode', async (req, res) => {
+  const { db } = req;
+  const { sharecode } = req.params;
+
+  try {
+    // Find the shared file in the database
+    const fileCollection = db.collection('filemanager');
+    const item = await fileCollection.findOne({ share_code: sharecode, is_share: true });
+
+    // Handle case where the file is not found or is not shared
+    if (!item) {
+      return res.status(404).json({ status: false, message: 'Shared file not found' });
+    }
+
+    // Ensure the item is a file and has a URL
+    if (item.type !== 'file' || !item.url) {
+      return res.status(400).json({ status: false, message: 'Invalid file type or missing URL' });
+    }
+
+    // Fetch the file as a stream
+    const response = await axios({
+      url: item.url,
+      method: 'GET',
+      responseType: 'stream',
+      headers: {
+        // Add any necessary headers here, such as authorization if required
+      }
+    });
+
+    // Set headers to initiate a download with the correct filename and type
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(item.name)}"`);
+    res.setHeader('Content-Type', response.headers['content-type']);
+    res.setHeader('Content-Length', response.headers['content-length']); // Set content length for download reliability
+
+    // Pipe the remote file stream to the client response
+    response.data.pipe(res);
+
+  } catch (error) {
+    console.error('Error streaming file:', error);
+    res.status(500).json({ status: false, message: 'An error occurred while downloading the file' });
+  }
+});
+
 router.get('/download/:id', async (req, res) => {
   const { db } = req;
   const { id } = req.params;
