@@ -579,7 +579,7 @@ router.get('/download/:id', async (req, res) => {
   try {
     // Convert id to ObjectId and find the file by _id
     const fileCollection = db.collection('filemanager');
-    const item = await fileCollection.findOne({ _id: ObjectId(id), is_share: true });
+    const item = await fileCollection.findOne({ _id: safeObjectId(id) });
 
     // Handle case where the file is not found or is not shared
     if (!item) {
@@ -591,6 +591,7 @@ router.get('/download/:id', async (req, res) => {
       return res.status(400).json({ status: false, message: 'Invalid file type or missing URL' });
     }
 
+    console.log("item",item);
     // Fetch the file as a stream
     const response = await axios({
       url: item.url,
@@ -614,6 +615,45 @@ router.get('/download/:id', async (req, res) => {
     res.status(500).json({ status: false, message: 'An error occurred while downloading the file' });
   }
 });
+
+
+router.get('/document/:id', async (req, res) => {
+  const { db } = req;
+  const { id } = req.params;
+
+  try {
+    // Find the document by _id, ensuring to safely handle the ObjectId
+    const fileCollection = db.collection('filemanager');
+    const item = await fileCollection.findOne({ _id: safeObjectId(id) });
+
+    // Handle case where the document is not found
+    if (!item) {
+      return res.status(404).json({ status: false, message: 'Document not found' });
+    }
+
+    // Prepare the document data to return
+    const documentData = {
+      name: item.name,
+      content: item.content || null,  // Adjust based on your document's actual structure
+      metadata: {
+        size: item.size,
+        mimetype: item.mimetype,
+        path: item.path,
+        url: item.url,
+        createdAt: item.createdAt,
+      },
+      // Add additional fields if needed
+    };
+
+    // Return the document data as JSON
+    res.status(200).json({ status: true, data: documentData });
+
+  } catch (error) {
+    console.error('Error retrieving document:', error);
+    res.status(500).json({ status: false, message: 'An error occurred while retrieving the document' });
+  }
+});
+
 
 /** Delete Endpoint
  * Allows deleting a file or folder (only if the folder is empty) in the filemanager collection.
