@@ -12,20 +12,9 @@ const clientDataCache = new Map();
 // Maximum age (in milliseconds) for cached client data
 const maxCacheAge = 60 * 60 * 1000; // 1 hour
 
-// Fixed token key (consider moving this to an environment variable for security)
-const FIXED_TOKEN_KEY = 'oSpHa80H4csU3Zib1FkrGPQw1ZLikf9BBJSXKswsYJytBGR7vmLRkkre14sycehL';
-
 // Middleware function for custom headers and client data retrieval
 async function authenticateClient(req, res, next) {
   try {
-
-    // Check if the fixed token key is provided in the header
-    const headerToken = req.headers['authorization'];
-    if (headerToken && headerToken === `${FIXED_TOKEN_KEY}`) {
-      console.log('Fixed token authenticated: Bypassing further client checks');
-      return next(); // Skip further authentication and proceed to the next middleware
-    }
-
     const hToken = req.headers['client-token-key'];
     const keyQueryParam = req.query.key; // Check for the ?key=xxxx query parameter
     let clientData = await getClientData(req.headers, keyQueryParam);

