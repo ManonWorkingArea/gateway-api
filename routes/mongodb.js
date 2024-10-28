@@ -14,6 +14,36 @@ module.exports = function () {
   const router = Router();
   router.use(authenticateClient);
 
+  router.post('/multi-count', async (req, res, next) => {
+    try {
+      const { db } = req;
+      const { collections } = req.body;
+
+      // Validate input
+      if (!collections || !Array.isArray(collections) || collections.length === 0) {
+        return res.status(400).json({ status: false, message: 'Invalid input: collections array is required' });
+      }
+
+      // Run count queries for each collection in parallel
+      const countPromises = collections.map(async (collectionName) => {
+        const collection = db.collection(collectionName);
+        const count = await collection.countDocuments();
+        return { [collectionName]: count };
+      });
+
+      // Resolve all count promises
+      const countResults = await Promise.all(countPromises);
+
+      // Merge count results into a single object
+      const counts = countResults.reduce((acc, count) => ({ ...acc, ...count }), {});
+
+      res.status(200).json({ status: true, counts });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  
   // Signin endpoint
   router.post('/signin', async (req, res) => {
     try {
