@@ -529,14 +529,14 @@ router.get('/external', async (req, res) => {
  */
 // Endpoint to download file based on share code
 
-router.get('/download/:sharecode', async (req, res) => {
+router.get('/download/:id', async (req, res) => {
   const { db } = req;
-  const { sharecode } = req.params;
+  const { id } = req.params;
 
   try {
-    // Find the shared file in the database
+    // Convert id to ObjectId and find the file by _id
     const fileCollection = db.collection('filemanager');
-    const item = await fileCollection.findOne({ share_code: sharecode, is_share: true });
+    const item = await fileCollection.findOne({ _id: ObjectId(id), is_share: true });
 
     // Handle case where the file is not found or is not shared
     if (!item) {
@@ -571,15 +571,6 @@ router.get('/download/:sharecode', async (req, res) => {
     res.status(500).json({ status: false, message: 'An error occurred while downloading the file' });
   }
 });
-
-
-
-// Middleware to authenticate MongoDB connection
-router.use(authenticateClient);
-
-module.exports = router;
-
-
 
 /** Delete Endpoint
  * Allows deleting a file or folder (only if the folder is empty) in the filemanager collection.
