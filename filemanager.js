@@ -13,7 +13,11 @@ function verifyToken(token) {
     // Check if the token matches the fixed token key
     if (token === FIXED_TOKEN_KEY) {
       // Bypass JWT verification and consider it valid
-      return resolve({ status: true, message: 'Fixed token is valid', decoded: { fixedToken: true } });
+      return resolve({ 
+        status: true, 
+        message: 'Fixed token is valid', 
+        decoded: { fixedToken: true, user: 'public' } // Add `user: 'public'`
+      });
     }
 
     // Otherwise, perform JWT verification
@@ -26,9 +30,20 @@ function verifyToken(token) {
   });
 }
 
-
 // Middleware to authenticate MongoDB connection
 router.use(authenticateClient);
+
+/**
+ * Helper function to check if a folder is empty.
+ * @param {ObjectId} folderId - The ID of the folder to check.
+ * @param {Object} db - The database instance.
+ * @returns {Promise<boolean>} - Returns true if the folder is empty, otherwise false.
+ */
+async function isFolderEmpty(folderId, db) {
+  const fileCollection = db.collection('filemanager');
+  const childCount = await fileCollection.countDocuments({ parent: folderId });
+  return childCount === 0;
+}
 
 /**
  * Generates a thumbnail in base64 format if the mimetype is an image or video.
@@ -108,6 +123,7 @@ router.post('/new_folder', async (req, res) => {
       type: 'folder',
       parent: safeObjectId(parent),
       parentName: parentName || 'Root',
+      owner: decodedToken.decoded.user, // Add owner field using decoded user ID
       createdAt: new Date()
     });
 
@@ -126,57 +142,61 @@ router.post('/new_folder', async (req, res) => {
  * Creates a new file entry in the filemanager collection with specified attributes.
  */
 router.post('/new_file', async (req, res) => {
-    const token = req.headers['authorization'];
-    if (!token) return res.status(400).json({ status: false, message: 'Token is required' });
-  
-    try {
-        const decodedToken = await verifyToken(token.replace('Bearer ', ''));
-        if (!decodedToken.status) return res.status(401).json({ status: false, message: 'Invalid or expired token' });
-  
-        const { db } = req;
-        const {
-            name,
-            path,
-            parent,
-            url,
-            size,
-            mimetype,
-            dimensions
-        } = req.body;
-  
-        if (!name || !path || !parent || !url || size === undefined || !mimetype) {
-            return res.status(400).json({ status: false, message: 'Missing required file parameters' });
-        }
-  
-        // Generate thumbnail if the file type is supported (image or video)
-        const thumbnailBase64 = await generateThumbnail(url, mimetype);
-  
-        const fileCollection = db.collection('filemanager');
-  
-        // Create a new file entry
-        const result = await fileCollection.insertOne({
-            name,
-            path,
-            type: 'file',
-            parent: safeObjectId(parent),
-            url,
-            size: parseFloat(size),
-            mimetype,
-            dimensions: dimensions || null,
-            thumbnail: thumbnailBase64,
-            createdAt: new Date()
-        });
-  
-        return res.status(200).json({
-            status: true,
-            message: 'File created successfully',
-            _id: result.insertedId // Return the ID of the newly created file
-        });
-    } catch (error) {
-        console.error('Error creating file entry:', error);
-        res.status(500).json({ status: false, message: 'An error occurred while creating the file entry' });
-    }
+  const token = req.headers['authorization'];
+  if (!token) return res.status(400).json({ status: false, message: 'Token is required' });
+
+  try {
+      // Verify and decode the token
+      const decodedToken = await verifyToken(token.replace('Bearer ', ''));
+      if (!decodedToken.status) return res.status(401).json({ status: false, message: 'Invalid or expired token' });
+
+      const { db } = req;
+      const {
+          name,
+          path,
+          parent,
+          url,
+          size,
+          mimetype,
+          dimensions
+      } = req.body;
+
+      // Validate required file parameters
+      if (!name || !path || !parent || !url || size === undefined || !mimetype) {
+          return res.status(400).json({ status: false, message: 'Missing required file parameters' });
+      }
+
+      // Generate thumbnail if the file type is supported (image or video)
+      const thumbnailBase64 = await generateThumbnail(url, mimetype);
+
+      const fileCollection = db.collection('filemanager');
+
+      // Create a new file entry with the `owner` field
+      const result = await fileCollection.insertOne({
+          name,
+          path,
+          type: 'file',
+          parent: safeObjectId(parent),
+          url,
+          size: parseFloat(size),
+          mimetype,
+          dimensions: dimensions || null,
+          thumbnail: thumbnailBase64,
+          owner: decodedToken.decoded.user, // Add owner field using decoded user ID
+          createdAt: new Date()
+      });
+
+      return res.status(200).json({
+          status: true,
+          message: 'File created successfully',
+          _id: result.insertedId // Return the ID of the newly created file
+      });
+  } catch (error) {
+      console.error('Error creating file entry:', error);
+      res.status(500).json({ status: false, message: 'An error occurred while creating the file entry' });
+  }
 });
+
 
 /** Function to Restructure Items
  * Fetches all items in the collection, restructures them, and calculates `childCount` and `size`.
@@ -312,7 +332,7 @@ const restructureItems = async (db) => {
   /** Rename Endpoint
  * Allows renaming of a file or folder in the filemanager collection.
  */
-router.post('/rename', async (req, res) => {
+  router.post('/rename', async (req, res) => {
     const token = req.headers['authorization'];
     if (!token) return res.status(400).json({ status: false, message: 'Token is required' });
   
@@ -332,6 +352,11 @@ router.post('/rename', async (req, res) => {
   
       if (!item) {
         return res.status(404).json({ status: false, message: 'Item not found' });
+      }
+      
+      // Check if the user is the owner of the item
+      if (item.owner !== decodedToken.decoded.user) {
+        return res.status(403).json({ status: false, message: 'Unauthorized: You do not own this item' });
       }
   
       // Perform the rename operation
@@ -356,88 +381,84 @@ router.post('/rename', async (req, res) => {
       console.error('Error renaming item:', error);
       res.status(500).json({ status: false, message: 'An error occurred while renaming the item' });
     }
-  });
+});
 
-  router.post('/share', async (req, res) => {
-    const token = req.headers['authorization'];
-    if (!token) {
-        console.error('Token missing in request');
-        return res.status(400).json({ status: false, message: 'Token is required' });
-    }
 
-    try {
-        const decodedToken = await verifyToken(token.replace('Bearer ', ''));
-        if (!decodedToken.status) {
-            console.error('Invalid or expired token');
-            return res.status(401).json({ status: false, message: 'Invalid or expired token' });
-        }
+router.post('/share', async (req, res) => {
+  const token = req.headers['authorization'];
+  if (!token) {
+      console.error('Token missing in request');
+      return res.status(400).json({ status: false, message: 'Token is required' });
+  }
 
-        const { db } = req;
-        const { itemId, isShare, sharePassword, shareExpire, permissions } = req.body;
-        const share_with_password = req.body.isPassword;
+  try {
+      const decodedToken = await verifyToken(token.replace('Bearer ', ''));
+      if (!decodedToken.status) {
+          console.error('Invalid or expired token');
+          return res.status(401).json({ status: false, message: 'Invalid or expired token' });
+      }
 
-        if (!itemId) {
-            console.error('Item ID is missing in request');
-            return res.status(400).json({ status: false, message: 'Item ID is required' });
-        }
+      const { db } = req;
+      const { itemId, isShare, sharePassword, shareExpire, permissions } = req.body;
+      const share_with_password = req.body.isPassword;
 
-        // Generate a random 15-character share code if sharing is enabled
-        const shareCode = isShare ? crypto.randomBytes(50).toString('hex').slice(0, 15) : null;
-        console.log('Generated share code:', shareCode);
+      if (!itemId) {
+          console.error('Item ID is missing in request');
+          return res.status(400).json({ status: false, message: 'Item ID is required' });
+      }
 
-        // Base64 encode the password if share_with_password is true and sharePassword is provided
-        const encodedPassword = share_with_password && sharePassword ? Buffer.from(sharePassword).toString('base64') : null;
-        console.log('Encoded password:', encodedPassword);
+      const fileCollection = db.collection('filemanager');
+      
+      // Check if item exists in the database
+      const item = await fileCollection.findOne({ _id: safeObjectId(itemId) });
+      if (!item) {
+          console.error(`Item with ID ${itemId} not found in the database`);
+          return res.status(404).json({ status: false, message: 'Item not found' });
+      }
 
-        const fileCollection = db.collection('filemanager');
-        
-        // Check if item exists in the database
-        const item = await fileCollection.findOne({ _id: safeObjectId(itemId) });
-        if (!item) {
-            console.error(`Item with ID ${itemId} not found in the database`);
-            return res.status(404).json({ status: false, message: 'Item not found' });
-        }
+      // Generate a new shareCode only if isShare is true and the item does not already have a shareCode
+      const shareCode = isShare && !item.share_code
+          ? crypto.randomBytes(50).toString('hex').slice(0, 15)
+          : item.share_code; // Keep existing shareCode if already present
+      console.log('Using share code:', shareCode);
 
-        // Prepare update data
-        const updateData = { 
-            is_share: isShare || false, 
-            share_with_password: share_with_password || false,
-            permissions: permissions || {} // Include permissions, default to empty object if not provided
-        };
+      // Base64 encode the password if share_with_password is true and sharePassword is provided
+      const encodedPassword = share_with_password && sharePassword ? Buffer.from(sharePassword).toString('base64') : null;
+      console.log('Encoded password:', encodedPassword);
 
-        // Conditionally add or remove share password and expiration date based on flags
-        updateData.share_password = share_with_password ? encodedPassword : null;
-        updateData.share_expire = shareExpire ? new Date(shareExpire) : null;
+      // Prepare update data
+      const updateData = { 
+          is_share: isShare || false, 
+          share_with_password: share_with_password || false,
+          permissions: permissions || {}, // Include permissions, default to empty object if not provided
+          share_code: shareCode // Use the retained or newly generated shareCode
+      };
 
-        // Add share code if sharing is enabled
-        if (shareCode) updateData.share_code = shareCode;
+      // Conditionally add or remove share password and expiration date based on flags
+      updateData.share_password = share_with_password ? encodedPassword : null;
+      updateData.share_expire = shareExpire ? new Date(shareExpire) : null;
 
-        console.log('Update data being set:', updateData);
+      console.log('Update data being set:', updateData);
 
-        // Perform the update operation
-        const result = await fileCollection.updateOne(
-            { _id: safeObjectId(itemId) },
-            { $set: updateData }
-        );
+      // Perform the update operation
+      await fileCollection.updateOne(
+          { _id: safeObjectId(itemId) },
+          { $set: updateData }
+      );
 
-        if (result.modifiedCount === 0) {
-            console.error('Update operation failed: No document was modified');
-            return res.status(500).json({ status: false, message: 'Failed to set share options' });
-        }
+      // Fetch the updated item
+      const updatedItem = await fileCollection.findOne({ _id: safeObjectId(itemId) });
+      console.log('Updated item:', updatedItem);
 
-        // Fetch the updated item
-        const updatedItem = await fileCollection.findOne({ _id: safeObjectId(itemId) });
-        console.log('Updated item:', updatedItem);
-
-        return res.status(200).json({
-            status: true,
-            message: 'Share options set successfully',
-            item: updatedItem
-        });
-    } catch (error) {
-        console.error('Error setting share options:', error);
-        res.status(500).json({ status: false, message: 'An error occurred while setting share options' });
-    }
+      return res.status(200).json({
+          status: true,
+          message: 'Share options set successfully',
+          item: updatedItem
+      });
+  } catch (error) {
+      console.error('Error setting share options:', error);
+      res.status(500).json({ status: false, message: 'An error occurred while setting share options' });
+  }
 });
 
 router.get('/external', async (req, res) => {
@@ -473,6 +494,7 @@ router.get('/external', async (req, res) => {
           createdAt: item.createdAt,
           count: item.count,
           size: item.size,
+          mimetype: item.mimetype,
           is_share: item.is_share,
           share_code: item.share_code,
           share_password: item.share_password,
@@ -480,6 +502,15 @@ router.get('/external', async (req, res) => {
           share_with_password: item.share_with_password,
           permissions: item.permissions || {}
       };
+
+      // Include URL or Base64 data if the item type is 'file'
+      if (item.type === 'file') {
+          if (item.mimetype && item.mimetype.startsWith('image')) {
+              responseData.url = item.thumbnail;
+          } else {
+              responseData.url = item.url;
+          }
+      }
 
       return res.status(200).json({
           status: true,
@@ -493,52 +524,113 @@ router.get('/external', async (req, res) => {
 });
 
 
+/** Download Endpoint
+ * Downloads the file associated with the provided sharecode by streaming it to the client.
+ */
+// Endpoint to download file based on share code
+
+router.get('/download/:sharecode', async (req, res) => {
+  const { db } = req;
+  const { sharecode } = req.params;
+
+  try {
+    // Find the shared file in the database
+    const fileCollection = db.collection('filemanager');
+    const item = await fileCollection.findOne({ share_code: sharecode, is_share: true });
+
+    // Handle case where the file is not found or is not shared
+    if (!item) {
+      return res.status(404).json({ status: false, message: 'Shared file not found' });
+    }
+
+    // Ensure the item is a file and has a URL
+    if (item.type !== 'file' || !item.url) {
+      return res.status(400).json({ status: false, message: 'Invalid file type or missing URL' });
+    }
+
+    // Fetch the file as a stream
+    const response = await axios({
+      url: item.url,
+      method: 'GET',
+      responseType: 'stream',
+      headers: {
+        // Add any necessary headers here, such as authorization if required
+      }
+    });
+
+    // Set headers to initiate a download with the correct filename and type
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(item.name)}"`);
+    res.setHeader('Content-Type', response.headers['content-type']);
+    res.setHeader('Content-Length', response.headers['content-length']); // Set content length for download reliability
+
+    // Pipe the remote file stream to the client response
+    response.data.pipe(res);
+
+  } catch (error) {
+    console.error('Error streaming file:', error);
+    res.status(500).json({ status: false, message: 'An error occurred while downloading the file' });
+  }
+});
+
+
+
+// Middleware to authenticate MongoDB connection
+router.use(authenticateClient);
+
+module.exports = router;
+
+
+
 /** Delete Endpoint
  * Allows deleting a file or folder (only if the folder is empty) in the filemanager collection.
  */
 router.post('/delete', async (req, res) => {
-    const token = req.headers['authorization'];
-    if (!token) return res.status(400).json({ status: false, message: 'Token is required' });
-  
-    try {
+  const token = req.headers['authorization'];
+  if (!token) return res.status(400).json({ status: false, message: 'Token is required' });
+
+  try {
       const decodedToken = await verifyToken(token.replace('Bearer ', ''));
       if (!decodedToken.status) return res.status(401).json({ status: false, message: 'Invalid or expired token' });
-  
+
       const { db } = req;
       const { itemId } = req.body;
-  
+
       if (!itemId) {
-        return res.status(400).json({ status: false, message: 'Item ID is required' });
+          return res.status(400).json({ status: false, message: 'Item ID is required' });
       }
-  
+
       const fileCollection = db.collection('filemanager');
       const item = await fileCollection.findOne({ _id: safeObjectId(itemId) });
-  
+
       if (!item) {
-        return res.status(404).json({ status: false, message: 'Item not found' });
+          return res.status(404).json({ status: false, message: 'Item not found' });
       }
-  
-      // Check if the item is a folder with contents (count > 0)
-      if (item.type === 'folder' && item.count > 0) {
-        return res.status(400).json({
-          status: false,
-          message: 'Cannot delete folder because it contains items'
-        });
+
+      // Check if the user is the owner of the item
+      if (item.owner !== decodedToken.decoded.user) {
+          return res.status(403).json({ status: false, message: 'Unauthorized: You do not own this item' });
       }
-  
-      // Proceed with deletion if item is a file or an empty folder
+
+      // Apply check for empty folder
+      if (item.type === 'folder' && !(await isFolderEmpty(item._id, db))) {
+          return res.status(400).json({
+              status: false,
+              message: 'Cannot delete folder because it contains items'
+          });
+      }
+
+      // Proceed with deletion
       await fileCollection.deleteOne({ _id: safeObjectId(itemId) });
-  
+
       return res.status(200).json({
-        status: true,
-        message: `Item ${itemId} deleted successfully`
+          status: true,
+          message: `Item ${itemId} deleted successfully`
       });
-    } catch (error) {
+  } catch (error) {
       console.error('Error deleting item:', error);
       res.status(500).json({ status: false, message: 'An error occurred while deleting the item' });
-    }
-  });
-
+  }
+});
 
 // '/search' endpoint to find items and add their real paths
 router.post('/search', async (req, res) => {
