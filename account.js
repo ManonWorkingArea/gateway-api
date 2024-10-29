@@ -68,11 +68,12 @@ router.post('/login', async (req, res) => {
     if (inputHash !== storedHash) {
       return res.status(401).json({ status: false, message: 'Invalid username or password' });
     }
-
+    /*
     // Check user role
     if (userResponse.role !== 'user') {
       return res.status(403).json({ status: false, message: 'Unauthorized to access this site' });
     }
+    */
 
     // Get User Enroll (if necessary)
     const enrollCollection = db.collection('enroll');
