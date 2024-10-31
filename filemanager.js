@@ -908,6 +908,127 @@ const createNestedStructureForSearchExternal = async (db, fixedParentId) => {
 
 
 
+
+// New endpoint to get only folder structure
+router.get('/folder_structure', async (req, res) => {
+  const { db } = req;
+  const { parent } = req.query;
+
+  try {
+    // Convert parent ID to ObjectId if provided
+    const parentId = parent ? safeObjectId(parent) : null;
+    
+    // Create the nested folder structure starting from the specified parent ID, if any
+    const nestedFolders = await createFolderStructure(db, parentId);
+
+    res.status(200).json({
+      status: true,
+      message: 'Folder structure retrieved successfully',
+      structure: nestedFolders
+    });
+  } catch (error) {
+    console.error('Error retrieving folder structure:', error);
+    res.status(500).json({ status: false, message: 'An error occurred while retrieving the folder structure' });
+  }
+});
+
+/** Function to create a nested folder structure
+ * @param {Object} db - The database instance.
+ * @param {ObjectId|null} parentId - The ID of the parent to start from. If null, fetch all top-level folders.
+ * @returns {Promise<Array>} - A nested array structure containing only folder-type items.
+ */
+const createFolderStructure = async (db, parentId = null) => {
+  const fileCollection = db.collection('filemanager');
+
+  // Define the query condition based on the presence of parentId
+  const query = { type: 'folder' };
+
+  console.log(query);
+
+  // Retrieve folder items based on the query
+  const items = await fileCollection.find(query, {
+    projection: { _id: 1, name: 1, parent: 1, type: 1, count: 1, size: 1 }
+  }).toArray();
+
+  const itemMap = new Map();
+
+  // Initialize each folder with an empty children array and store it in itemMap
+  items.forEach(item => {
+    item.children = [];
+    itemMap.set(item._id.toString(), item);
+  });
+
+  const nestedItems = [];
+
+  // Build the nested structure
+  items.forEach(item => {
+    if (item.parent && itemMap.has(item.parent.toString())) {
+      // Add item to the parent's children array
+      itemMap.get(item.parent.toString()).children.push(item);
+    } else {
+      // Add top-level items directly to nestedItems
+      nestedItems.push(item);
+    }
+  });
+
+  // If parentId is specified and found, return only its subtree; else, return the full nested structure
+  return nestedItems;
+};
+
+/** Move Folder Endpoint
+ * Changes the parent of a specified folder or file.
+ */
+router.post('/move_folder', async (req, res) => {
+  const token = req.headers['authorization'];
+  if (!token) return res.status(400).json({ status: false, message: 'Token is required' });
+
+  try {
+    const decodedToken = await verifyToken(token.replace('Bearer ', ''));
+    if (!decodedToken.status) return res.status(401).json({ status: false, message: 'Invalid or expired token' });
+
+    const { db } = req;
+    const { itemId, newParentId } = req.body;
+
+    if (!itemId || !newParentId) {
+      return res.status(400).json({ status: false, message: 'Item ID and new parent ID are required' });
+    }
+
+    const fileCollection = db.collection('filemanager');
+    const item = await fileCollection.findOne({ _id: safeObjectId(itemId) });
+
+    if (!item) {
+      return res.status(404).json({ status: false, message: 'Item not found' });
+    }
+
+    // Check if the user is the owner of the item
+    if (item.owner !== decodedToken.decoded.user) {
+      return res.status(403).json({ status: false, message: 'Unauthorized: You do not own this item' });
+    }
+
+    // Update the item's parent
+    const result = await fileCollection.updateOne(
+      { _id: safeObjectId(itemId) },
+      { $set: { parent: safeObjectId(newParentId) } }
+    );
+
+    if (result.modifiedCount === 0) {
+      return res.status(500).json({ status: false, message: 'Failed to move the item' });
+    }
+
+    return res.status(200).json({
+      status: true,
+      message: 'Item moved successfully',
+      itemId: itemId,
+      newParentId: newParentId
+    });
+  } catch (error) {
+    console.error('Error moving folder:', error);
+    res.status(500).json({ status: false, message: 'An error occurred while moving the folder' });
+  }
+});
+
+
+
 // Error handler middleware
 router.use(errorHandler);
 
