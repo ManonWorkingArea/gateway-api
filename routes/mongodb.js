@@ -318,7 +318,7 @@ module.exports = function () {
       const postCollection = db.collection('post'); // Adjust collection name accordingly
       const posts = await postCollection.find(
         { _id: { $in: objectIds } },
-        { projection: { builder: 1 } } // Only return the 'builder' key
+        { projection: { builder: 1, seo: 1 } } // Only return the 'builder' key
       ).toArray();
 
       // Create a response object that maps the input keys to the corresponding builder data
