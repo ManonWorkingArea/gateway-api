@@ -44,11 +44,11 @@ function generateJWT(userResponse, key, rememberMe) {
 router.post('/register', async (req, res) => {
   try {
     const { db } = req; // MongoDB connection from middleware
-    const { name, password, email, phone } = req.body;
+    const { firstname, lastname,  password, email, phone } = req.body;
 
     // Validate required fields
-    if (!name || !password || !email || !phone) {
-      return res.status(400).json({ status: false, message: 'All fields are required (name, password, email, phone)' });
+    if (!firstname || !lastname || !password || !email || !phone) {
+      return res.status(400).json({ status: false, message: 'All fields are required (firstname, lastname, password, email, phone)' });
     }
 
     // Check if username or email already exists
@@ -69,7 +69,8 @@ router.post('/register', async (req, res) => {
 
     // Create a new user object
     const newUser = {
-      name,
+      firstname,
+      lastname,
       email,
       username:email,
       phone,
