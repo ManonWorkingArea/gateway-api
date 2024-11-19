@@ -325,7 +325,7 @@ module.exports = function () {
       const result = Object.keys(data).reduce((acc, key) => {
         if (data[key]) {
           const post = posts.find(post => post._id.toString() === data[key]);
-          acc[key] = post ? { builder: post.builder, id: post._id } : null;
+          acc[key] = post ? { builder: post.builder, id: post._id, seo: post.seo } : null;
         } else {
           acc[key] = null;
         }
