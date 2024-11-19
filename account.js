@@ -44,16 +44,16 @@ function generateJWT(userResponse, key, rememberMe) {
 router.post('/register', async (req, res) => {
   try {
     const { db } = req; // MongoDB connection from middleware
-    const { name, username, password, email, phone } = req.body;
+    const { name, password, email, phone } = req.body;
 
     // Validate required fields
-    if (!name || !username || !password || !email || !phone) {
-      return res.status(400).json({ status: false, message: 'All fields are required (name, username, password, email, phone)' });
+    if (!name || !password || !email || !phone) {
+      return res.status(400).json({ status: false, message: 'All fields are required (name, password, email, phone)' });
     }
 
     // Check if username or email already exists
     const userCollection = db.collection('user');
-    const existingUser = await userCollection.findOne({ $or: [{ username }, { email }] });
+    const existingUser = await userCollection.findOne({ $or: [{ phone }, { email }] });
 
     if (existingUser) {
       return res.status(409).json({
@@ -70,7 +70,6 @@ router.post('/register', async (req, res) => {
     // Create a new user object
     const newUser = {
       name,
-      username,
       email,
       phone,
       password: hashedPassword,
