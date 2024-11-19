@@ -41,6 +41,62 @@ function generateJWT(userResponse, key, rememberMe) {
   return { token, data };
 }
 
+router.post('/register', async (req, res) => {
+  try {
+    const { db } = req; // MongoDB connection from middleware
+    const { name, username, password, email, phone } = req.body;
+
+    // Validate required fields
+    if (!name || !username || !password || !email || !phone) {
+      return res.status(400).json({ status: false, message: 'All fields are required (name, username, password, email, phone)' });
+    }
+
+    // Check if username or email already exists
+    const userCollection = db.collection('user');
+    const existingUser = await userCollection.findOne({ $or: [{ username }, { email }] });
+
+    if (existingUser) {
+      return res.status(409).json({
+        status: false,
+        message: 'Username or email already exists',
+      });
+    }
+
+    // Generate a unique salt
+    const salt = CryptoJS.lib.WordArray.random(16).toString();
+    // Hash the password with the salt
+    const hashedPassword = CryptoJS.SHA256(password + salt).toString();
+
+    // Create a new user object
+    const newUser = {
+      name,
+      username,
+      email,
+      phone,
+      password: hashedPassword,
+      salt,
+      role: 'user', // Default role
+      avatar_img: null, // Default avatar
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    // Insert the new user into the database
+    const result = await userCollection.insertOne(newUser);
+
+    // Respond with success message and new user ID
+    res.status(201).json({
+      status: true,
+      message: 'User registered successfully',
+      userId: result.insertedId,
+    });
+  } catch (error) {
+    console.error('Error during registration:', error);
+    res.status(500).json({ status: false, message: 'An error occurred during registration' });
+  }
+});
+
+
 router.post('/login', async (req, res) => {
   try {
     const { db } = req; // MongoDB connection is attached by authenticateClient middleware
