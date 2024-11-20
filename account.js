@@ -162,9 +162,30 @@ router.post('/verify-otp', async (req, res) => {
       { $set: { status: 'active' }, $unset: { otp: "" }, $currentDate: { updatedAt: true } }
     );
 
+    // Send welcome email
+    const welcomeEmail = {
+      from: "Your Service <noreply@cloud-service.email>",
+      to: [`Recipient <info@manonsanoi.com>`],
+      subject: "Welcome to Our Service",
+      plain: `Hello ${user.firstname},\n\nWelcome to Our Service! We're glad to have you on board.\n\nBest regards,\nYour Service Team`,
+      html: `<h1>Welcome, ${user.firstname}!</h1><p>We're excited to have you join us. If you have any questions, feel free to reach out to our support team.</p><p>Best regards,<br>Your Service Team</p>`,
+    };
+
+    try {
+      await axios.post('https://request.cloudrestfulapi.com/email/send', welcomeEmail, {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (emailError) {
+      console.error('Error sending welcome email:', emailError.response?.data || emailError.message);
+      return res.status(500).json({
+        status: true, // Still returning success for OTP verification
+        message: 'Account verified successfully, but welcome email failed to send.',
+      });
+    }
+
     res.status(200).json({
       status: true,
-      message: 'Account verified successfully. You can now log in.',
+      message: 'Account verified successfully. A welcome email has been sent.',
     });
   } catch (error) {
     console.error('Error during OTP verification:', error);
