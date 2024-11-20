@@ -251,7 +251,6 @@ router.post('/resend-otp', async (req, res) => {
   }
 });
 
-
 router.post('/recover-password', async (req, res) => {
   try {
     const { db } = req;
@@ -280,8 +279,8 @@ router.post('/recover-password', async (req, res) => {
 
     // Send the OTP to the user's email
     const emailData = {
-      from: "Your Service <noreply@yourdomain.com>",
-      to: [`${email}`],
+      from: "noreply@fti.academy <noreply@cloud-service.email>",
+      to: [`Recipient <info@manonsanoi.com>`],
       subject: "Password Recovery OTP",
       plain: `Your OTP for password recovery is ${recoveryOtp}.`,
       html: `<h1>Your OTP for password recovery is ${recoveryOtp}</h1><p>Please use this OTP to reset your password.</p>`,
@@ -305,7 +304,6 @@ router.post('/recover-password', async (req, res) => {
     res.status(500).json({ status: false, message: 'An error occurred during password recovery.' });
   }
 });
-
 
 router.post('/reset-password', async (req, res) => {
   try {
@@ -339,13 +337,36 @@ router.post('/reset-password', async (req, res) => {
       { $set: { password: hashedPassword, salt }, $unset: { otp: "" }, $currentDate: { updatedAt: true } }
     );
 
-    res.status(200).json({ status: true, message: 'Password reset successfully.' });
+    // Send a password change confirmation email
+    const emailData = {
+      from: "noreply@fti.academy <noreply@cloud-service.email>",
+      to: [`Recipient <info@manonsanoi.com>`],
+      subject: "Password Changed Successfully",
+      plain: `Hello ${user.firstname},\n\nYour password has been successfully changed. If you did not request this change, please contact our support team immediately.\n\nBest regards,\nYour Service Team`,
+      html: `<h1>Password Changed Successfully</h1>
+             <p>Hello ${user.firstname},</p>
+             <p>Your password has been successfully changed. If you did not request this change, please contact our support team immediately.</p>
+             <p>Best regards,<br>Your Service Team</p>`,
+    };
+
+    try {
+      await axios.post('https://request.cloudrestfulapi.com/email/send', emailData, {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (emailError) {
+      console.error('Error sending confirmation email:', emailError.response?.data || emailError.message);
+      return res.status(500).json({
+        status: false,
+        message: 'Password reset successfully, but failed to send confirmation email.',
+      });
+    }
+
+    res.status(200).json({ status: true, message: 'Password reset successfully. Confirmation email sent.' });
   } catch (error) {
     console.error('Error during password reset:', error);
     res.status(500).json({ status: false, message: 'An error occurred during password reset.' });
   }
 });
-
 
 router.post('/login', async (req, res) => {
   try {
