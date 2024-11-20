@@ -3,6 +3,8 @@ const CryptoJS = require('crypto-js');
 const jwt = require('jsonwebtoken'); // Import jsonwebtoken
 const { authenticateClient, safeObjectId, errorHandler } = require('./routes/middleware/mongoMiddleware'); // Import your middleware
 
+const axios = require('axios'); // For making HTTP requests
+
 const router = express.Router();
 
 // Secret key for signing JWT (You should store this securely)
@@ -44,14 +46,14 @@ function generateJWT(userResponse, key, rememberMe) {
 router.post('/register', async (req, res) => {
   try {
     const { db } = req; // MongoDB connection from middleware
-    const { firstname, lastname,  password, email, phone } = req.body;
+    const { firstname, lastname, password, email, phone } = req.body;
 
     // Validate required fields
     if (!firstname || !lastname || !password || !email || !phone) {
       return res.status(400).json({ status: false, message: 'All fields are required (firstname, lastname, password, email, phone)' });
     }
 
-    // Check if username or email already exists
+    // Check if email or phone already exists
     const userCollection = db.collection('user');
     const existingUser = await userCollection.findOne({ $or: [{ phone }, { email }] });
 
@@ -67,17 +69,21 @@ router.post('/register', async (req, res) => {
     // Hash the password with the salt
     const hashedPassword = CryptoJS.SHA256(password + salt).toString();
 
-    // Create a new user object
+    // Generate a 4-digit OTP
+    const otp = Math.floor(1000 + Math.random() * 9000);
+
+    // Create a new user object with status = 'unactive'
     const newUser = {
       firstname,
       lastname,
       email,
-      username:email,
       phone,
       password: hashedPassword,
       salt,
       role: 'user', // Default role
       avatar_img: null, // Default avatar
+      status: 'unactive', // User is inactive until OTP is verified
+      otp, // Store OTP for verification
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -85,15 +91,83 @@ router.post('/register', async (req, res) => {
     // Insert the new user into the database
     const result = await userCollection.insertOne(newUser);
 
-    // Respond with success message and new user ID
+    // Prepare email content
+    const emailData = {
+      from: "Your Service <noreply@cloud-service.email>",
+      to: [`Recipient <info@manonsanoi.com>`],
+      //to: [`Recipient <${email}>`],
+      subject: "Your OTP Code",
+      plain: `Your OTP code is ${otp}`,
+      html: `<h1>Your OTP code is ${otp}</h1>`,
+    };
+
+    // Send email via API
+    try {
+      await axios.post('https://request.cloudrestfulapi.com/email/send', emailData, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+    } catch (emailError) {
+      console.error('Error sending email:', emailError.response?.data || emailError.message);
+      return res.status(500).json({
+        status: false,
+        message: 'User registered, but failed to send OTP email. Please contact support.',
+      });
+    }
+
+    // Respond with success message
     res.status(201).json({
       status: true,
-      message: 'User registered successfully',
+      message: 'User registered successfully. Please verify your OTP to activate your account.',
       userId: result.insertedId,
     });
   } catch (error) {
     console.error('Error during registration:', error);
     res.status(500).json({ status: false, message: 'An error occurred during registration' });
+  }
+});
+
+router.post('/verify-otp', async (req, res) => {
+  try {
+    const { db } = req; // MongoDB connection from middleware
+    const { email, otp } = req.body;
+
+    // Validate input
+    if (!email || !otp) {
+      return res.status(400).json({ status: false, message: 'Email and OTP are required' });
+    }
+
+    // Find the user by email
+    const userCollection = db.collection('user');
+    const user = await userCollection.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({ status: false, message: 'User not found' });
+    }
+
+    if (user.status === 'active') {
+      return res.status(400).json({ status: false, message: 'User is already active' });
+    }
+
+    // Check if the OTP matches
+    if (user.otp !== parseInt(otp, 10)) {
+      return res.status(401).json({ status: false, message: 'Invalid OTP' });
+    }
+
+    // Update user status to 'active' and remove the OTP
+    await userCollection.updateOne(
+      { email },
+      { $set: { status: 'active' }, $unset: { otp: "" }, $currentDate: { updatedAt: true } }
+    );
+
+    res.status(200).json({
+      status: true,
+      message: 'Account verified successfully. You can now log in.',
+    });
+  } catch (error) {
+    console.error('Error during OTP verification:', error);
+    res.status(500).json({ status: false, message: 'An error occurred during OTP verification' });
   }
 });
 
