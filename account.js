@@ -1,6 +1,7 @@
 const express = require('express');
 const CryptoJS = require('crypto-js');
 const jwt = require('jsonwebtoken'); // Import jsonwebtoken
+const builderRender = require('./builderRender');
 const { authenticateClient, safeObjectId, errorHandler } = require('./routes/middleware/mongoMiddleware'); // Import your middleware
 
 const axios = require('axios'); // For making HTTP requests
@@ -67,6 +68,48 @@ async function getSiteSpecificDb(client, site) {
 
   return { targetDb, userCollection, siteData };
 }
+/**
+ * Endpoint to render builder configuration and view output in the browser.
+ */
+router.get('/render-builder', async (req, res) => {
+  try {
+    const { siteId } = req.query; // Assume `siteId` is passed as a query parameter
+    const client = req.client; // MongoDB client from middleware
+    const postCollection = client.db('DU1eYMDG7j8yb199YDPg3').collection('post');
+
+    // Fetch the email template
+    const emailTemplate = await postCollection.findOne({
+      _id: safeObjectId(siteId),
+    });
+
+    if (!emailTemplate || !emailTemplate.builder) {
+      return res.status(404).json({
+        status: false,
+        message: 'Email template not found.',
+      });
+    }
+
+    const builder = emailTemplate.builder; // Extract the builder configuration
+    const dynamicData = `
+      <strong>Password Recovery OTP</strong><br/><br/>
+      <br/>
+      Your OTP for password recovery is <strong>1234</strong>.<br/><br/>Please use this code within the next 15 minutes.<br/>
+      If you didn’t request this, please ignore this email or contact support.
+    `;
+
+    // Render the HTML content using the builderRender function
+    const htmlContent = builderRender(builder, dynamicData);
+
+    // Wrap the rendered content in basic HTML for browser display
+    const fullHTML = `${htmlContent}`;
+
+    // Send the rendered HTML as the response
+    res.status(200).send(fullHTML);
+  } catch (error) {
+    console.error('Error rendering builder:', error);
+    res.status(500).send('An error occurred while rendering the builder.');
+  }
+});
 
 router.post('/register', async (req, res) => {
   try {
@@ -122,13 +165,34 @@ router.post('/register', async (req, res) => {
     // Insert the new user into the database
     const result = await userCollection.insertOne(newUser);
 
+    // Fetch email template from the 'post' collection using theme configuration
+    const postCollection = client.db(siteData.key).collection('post');
+    const emailTemplate = await postCollection.findOne({ _id: safeObjectId(siteData.theme.emailTemplates.general) });
+
+    if (!emailTemplate) {
+      return res.status(404).json({
+        status: false,
+        message: 'Email template not found',
+      });
+    }
+    
+    // Render the email content using the builderRender plugin
+    const builderRender = require('./builderRender'); // Import the builderRender plugin
+    const dynamicData = `
+    <strong>Your OTP Code</strong><br/>
+    <br/>
+    Your OTP code is <strong>${newOtp}</strong>. Please use this code within the next 15 minutes.<br/>
+    If you didn’t request this, please ignore this email or contact support.
+  `;
+    const htmlContent = builderRender(emailTemplate.builder, dynamicData);
+
     // Prepare email content
     const emailData = {
       from: siteData.siteName + " <noreply@cloud-service.email>",
       to: [`Recipient <info@manonsanoi.com>`], // Replace with the user's email for production
       subject: "Your OTP Code",
       plain: `Your OTP code is ${otp}`,
-      html: `<h1>Your OTP code is ${otp}</h1>`,
+      html: htmlContent,
     };
 
     // Send email via API
@@ -199,13 +263,29 @@ router.post('/verify-otp', async (req, res) => {
       { $set: { status: 'active' }, $unset: { otp: "" }, $currentDate: { updatedAt: true } }
     );
 
+    // Fetch email template from the 'post' collection using theme configuration
+    const postCollection = client.db(siteData.key).collection('post');
+    const emailTemplate = await postCollection.findOne({ _id: safeObjectId(siteData.theme.emailTemplates.general) });
+
+    if (!emailTemplate) {
+      return res.status(404).json({
+        status: false,
+        message: 'Email template not found',
+      });
+    }
+    
+    // Render the email content using the builderRender plugin
+    const builderRender = require('./builderRender'); // Import the builderRender plugin
+    const dynamicData = `<h1>Welcome, ${user.firstname}!</h1><p>We're excited to have you join us. If you have any questions, feel free to reach out to our support team.</p><p>Best regards,<br>Your Service Team</p>`;
+    const htmlContent = builderRender(emailTemplate.builder, dynamicData);
+
     // Send welcome email
     const welcomeEmail = {
       from: siteData.siteName + " <noreply@cloud-service.email>",
       to: [`Recipient <info@manonsanoi.com>`], // Replace with the user's email for production
       subject: "Welcome to Our Service",
       plain: `Hello ${user.firstname},\n\nWelcome to Our Service! We're glad to have you on board.\n\nBest regards,\nYour Service Team`,
-      html: `<h1>Welcome, ${user.firstname}!</h1><p>We're excited to have you join us. If you have any questions, feel free to reach out to our support team.</p><p>Best regards,<br>Your Service Team</p>`,
+      html: htmlContent,
     };
 
     try {
@@ -268,13 +348,34 @@ router.post('/resend-otp', async (req, res) => {
       { $set: { otp: newOtp }, $currentDate: { updatedAt: true } }
     );
 
+    // Fetch email template from the 'post' collection using theme configuration
+    const postCollection = client.db(siteData.key).collection('post');
+    const emailTemplate = await postCollection.findOne({ _id: safeObjectId(siteData.theme.emailTemplates.general) });
+
+    if (!emailTemplate) {
+      return res.status(404).json({
+        status: false,
+        message: 'Email template not found',
+      });
+    }
+    
+    // Render the email content using the builderRender plugin
+    const builderRender = require('./builderRender'); // Import the builderRender plugin
+    const dynamicData = `
+    <strong>Your New OTP Code</strong><br/>
+    <br/>
+    Your new OTP code is <strong>${newOtp}</strong>. Please use this code within the next 15 minutes.<br/>
+    If you didn’t request this, please ignore this email or contact support.
+  `;
+    const htmlContent = builderRender(emailTemplate.builder, dynamicData);
+
     // Prepare email content
     const emailData = {
       from: siteData.siteName + " <noreply@cloud-service.email>",
       to: [`Recipient <info@manonsanoi.com>`], // Replace with the user's email for production
       subject: "Your New OTP Code",
       plain: `Your new OTP code is ${newOtp}.`,
-      html: `<h1>Your new OTP code is ${newOtp}</h1>`,
+      html: htmlContent,
     };
 
     // Send the new OTP to the user's email
@@ -300,7 +401,6 @@ router.post('/resend-otp', async (req, res) => {
   }
 });
 
-
 router.post('/recover-password', async (req, res) => {
   try {
     const { client } = req; // MongoDB client from middleware
@@ -316,9 +416,16 @@ router.post('/recover-password', async (req, res) => {
     // Get site-specific database, user collection, and site data
     const { userCollection, siteData } = await getSiteSpecificDb(client, site);
 
+    // Validate if theme and emailTemplates are configured
+    if (!siteData.theme?.emailTemplates?.general) {
+      return res.status(400).json({ 
+        status: false, 
+        message: 'Email template configuration not found for this site' 
+      });
+    }
+
     // Find the user by email
     const user = await userCollection.findOne({ email });
-
     if (!user) {
       return res.status(404).json({ status: false, message: 'User not found' });
     }
@@ -332,13 +439,34 @@ router.post('/recover-password', async (req, res) => {
       { $set: { otp: recoveryOtp, status: 'unactive' }, $currentDate: { updatedAt: true } }
     );
 
+    // Fetch email template from the 'post' collection using theme configuration
+    const postCollection = client.db(siteData.key).collection('post');
+    const emailTemplate = await postCollection.findOne({ _id: safeObjectId(siteData.theme.emailTemplates.general) });
+
+    if (!emailTemplate) {
+      return res.status(404).json({
+        status: false,
+        message: 'Email template not found',
+      });
+    }
+
+    // Render the email content using the builderRender plugin
+    const builderRender = require('./builderRender'); // Import the builderRender plugin
+    const dynamicData = `
+      <strong>Password Recovery OTP</strong><br/>
+      <br/>
+      Your OTP for password recovery is <strong>${recoveryOtp}</strong>. Please use this code within the next 15 minutes.<br/>
+      If you didn’t request this, please ignore this email or contact support.
+    `;
+    const htmlContent = builderRender(emailTemplate.builder, dynamicData);
+
     // Prepare the email content
     const emailData = {
-      from: siteData.siteName + " <noreply@cloud-service.email>",
-      to: [`Recipient <info@manonsanoi.com>`], // Replace with the user's email for production
+      from: `${siteData.siteName} <noreply@cloud-service.email>`,
+      to: [`Recipient <info@manonsanoi.com>`], // Send to the user's actual email
       subject: "Password Recovery OTP",
       plain: `Your OTP for password recovery is ${recoveryOtp}.`,
-      html: `<h1>Your OTP for password recovery is ${recoveryOtp}</h1><p>Please use this OTP to reset your password.</p>`,
+      html: htmlContent, // Use rendered HTML content
     };
 
     // Send the OTP email
@@ -398,16 +526,34 @@ router.post('/reset-password', async (req, res) => {
       { $set: { password: hashedPassword, salt }, $unset: { otp: "" }, $currentDate: { updatedAt: true } }
     );
 
+
+
+    // Fetch email template from the 'post' collection using theme configuration
+    const postCollection = client.db(siteData.key).collection('post');
+    const emailTemplate = await postCollection.findOne({ _id: safeObjectId(siteData.theme.emailTemplates.general) });
+
+    if (!emailTemplate) {
+      return res.status(404).json({
+        status: false,
+        message: 'Email template not found',
+      });
+    }
+    
+    // Render the email content using the builderRender plugin
+    const builderRender = require('./builderRender'); // Import the builderRender plugin
+    const dynamicData = `<h1>Password Changed Successfully</h1>
+    <p>Hello ${user.firstname},</p>
+    <p>Your password has been successfully changed. If you did not request this change, please contact our support team immediately.</p>
+    <p>Best regards,<br>Your Service Team</p>`;
+    const htmlContent = builderRender(emailTemplate.builder, dynamicData);
+
     // Prepare a password change confirmation email
     const emailData = {
       from: siteData.siteName + " <noreply@cloud-service.email>",
       to: [`Recipient <info@manonsanoi.com>`], // Replace with the user's email for production
       subject: "Password Changed Successfully",
       plain: `Hello ${user.firstname},\n\nYour password has been successfully changed. If you did not request this change, please contact our support team immediately.\n\nBest regards,\nYour Service Team`,
-      html: `<h1>Password Changed Successfully</h1>
-             <p>Hello ${user.firstname},</p>
-             <p>Your password has been successfully changed. If you did not request this change, please contact our support team immediately.</p>
-             <p>Best regards,<br>Your Service Team</p>`,
+      html: htmlContent,
     };
 
     // Send confirmation email
