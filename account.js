@@ -274,7 +274,7 @@ router.post('/recover-password', async (req, res) => {
     // Update the user record with the recovery OTP
     await userCollection.updateOne(
       { email },
-      { $set: { otp: recoveryOtp }, $currentDate: { updatedAt: true } }
+      { $set: { otp: recoveryOtp, status:'unactive' }, $currentDate: { updatedAt: true } }
     );
 
     // Send the OTP to the user's email
