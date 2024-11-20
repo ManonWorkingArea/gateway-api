@@ -125,9 +125,10 @@ router.post('/register', async (req, res) => {
     }
 
     // Get site-specific database, user collection, and site data
-    const { userCollection, siteData } = await getSiteSpecificDb(client, site);
+    const { siteData } = await getSiteSpecificDb(client, site);
 
     // Check if email or phone already exists
+    const userCollection = client.db(siteData.key).collection('user');
     const existingUser = await userCollection.findOne({ $or: [{ phone }, { email }] });
 
     if (existingUser) {
@@ -181,7 +182,7 @@ router.post('/register', async (req, res) => {
     const dynamicData = `
     <strong>Your OTP Code</strong><br/>
     <br/>
-    Your OTP code is <strong>${newOtp}</strong>. Please use this code within the next 15 minutes.<br/>
+    Your OTP code is <strong>${otp}</strong>. Please use this code within the next 15 minutes.<br/>
     If you didn’t request this, please ignore this email or contact support.
   `;
     const htmlContent = builderRender(emailTemplate.builder, dynamicData);
@@ -239,8 +240,9 @@ router.post('/verify-otp', async (req, res) => {
     }
 
     // Get site-specific database, user collection, and site data
-    const { userCollection, siteData } = await getSiteSpecificDb(client, site);
-
+    const { siteData } = await getSiteSpecificDb(client, site);
+    
+    const userCollection = client.db(siteData.key).collection('user');
     // Find the user by email
     const user = await userCollection.findOne({ email });
 
@@ -326,7 +328,9 @@ router.post('/resend-otp', async (req, res) => {
     }
 
     // Get site-specific database, user collection, and site data
-    const { userCollection, siteData } = await getSiteSpecificDb(client, site);
+    const { siteData } = await getSiteSpecificDb(client, site);
+
+    const userCollection = client.db(siteData.key).collection('user');
 
     // Find the user
     const user = await userCollection.findOne({ email });
@@ -414,8 +418,8 @@ router.post('/recover-password', async (req, res) => {
     }
 
     // Get site-specific database, user collection, and site data
-    const { userCollection, siteData } = await getSiteSpecificDb(client, site);
-
+    const { siteData } = await getSiteSpecificDb(client, site);
+    const userCollection = client.db(siteData.key).collection('user');
     // Validate if theme and emailTemplates are configured
     if (!siteData.theme?.emailTemplates?.general) {
       return res.status(400).json({ 
@@ -508,8 +512,8 @@ router.post('/reset-password', async (req, res) => {
     }
 
     // Get site-specific database, user collection, and site data
-    const { userCollection, siteData } = await getSiteSpecificDb(client, site);
-
+    const { siteData } = await getSiteSpecificDb(client, site);
+    const userCollection = client.db(siteData.key).collection('user');
     // Find the user by email
     const user = await userCollection.findOne({ email });
     if (!user) {
@@ -525,8 +529,6 @@ router.post('/reset-password', async (req, res) => {
       { email },
       { $set: { password: hashedPassword, salt }, $unset: { otp: "" }, $currentDate: { updatedAt: true } }
     );
-
-
 
     // Fetch email template from the 'post' collection using theme configuration
     const postCollection = client.db(siteData.key).collection('post');
@@ -590,8 +592,8 @@ router.post('/login', async (req, res) => {
     }
 
     // Get site-specific database, user collection, and site data
-    const { targetDb, userCollection, siteData } = await getSiteSpecificDb(client, site);
-
+    const { targetDb, siteData } = await getSiteSpecificDb(client, site);
+    const userCollection = client.db(siteData.key).collection('user');
     // Use siteData as needed, for example:
     console.log('Site Data:', siteData);
 
