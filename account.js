@@ -308,9 +308,9 @@ router.post('/recover-password', async (req, res) => {
 router.post('/reset-password', async (req, res) => {
   try {
     const { db } = req;
-    const { email, otp, newPassword } = req.body;
+    const { email, newPassword } = req.body;
 
-    if (!email || !otp || !newPassword) {
+    if (!email || !newPassword) {
       return res.status(400).json({ status: false, message: 'Email, OTP, and new password are required.' });
     }
 
@@ -320,11 +320,6 @@ router.post('/reset-password', async (req, res) => {
 
     if (!user) {
       return res.status(404).json({ status: false, message: 'User not found' });
-    }
-
-    // Verify the OTP
-    if (user.otp !== parseInt(otp, 10)) {
-      return res.status(401).json({ status: false, message: 'Invalid OTP' });
     }
 
     // Generate a new salt and hash the new password
