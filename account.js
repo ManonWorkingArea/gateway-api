@@ -172,7 +172,6 @@ router.post('/verify-otp', async (req, res) => {
   }
 });
 
-
 router.post('/login', async (req, res) => {
   try {
     const { db } = req; // MongoDB connection is attached by authenticateClient middleware
@@ -200,12 +199,6 @@ router.post('/login', async (req, res) => {
     if (inputHash !== storedHash) {
       return res.status(401).json({ status: false, message: 'Invalid username or password' });
     }
-    /*
-    // Check user role
-    if (userResponse.role !== 'user') {
-      return res.status(403).json({ status: false, message: 'Unauthorized to access this site' });
-    }
-    */
 
     // Get User Enroll (if necessary)
     const enrollCollection = db.collection('enroll');
@@ -233,11 +226,17 @@ router.post('/login', async (req, res) => {
     // Save the new session in the database
     await sessionCollection.insertOne(newSession);
 
-    // Respond with session data and the JWT token
+    // Respond with session data, token, and user data
     res.status(200).json({
       status: true,
       message: 'Signin successful',
       token,
+      user: {
+        username: userResponse.username,
+        email: userResponse.email,
+        role: userResponse.role,
+        status: userResponse.status || 'active',
+      },
     });
 
   } catch (error) {
@@ -245,6 +244,7 @@ router.post('/login', async (req, res) => {
     res.status(500).json({ status: false, message: 'An error occurred during sign-in' });
   }
 });
+
 
 // Endpoint to check session validity
 router.get('/recheck', async (req, res) => {
