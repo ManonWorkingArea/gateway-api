@@ -94,7 +94,7 @@ router.post('/register', async (req, res) => {
 
     // Prepare email content
     const emailData = {
-      from: "Your Service <noreply@cloud-service.email>",
+      from: "noreply@fti.academy <noreply@cloud-service.email>",
       to: [`Recipient <info@manonsanoi.com>`],
       //to: [`Recipient <${email}>`],
       subject: "Your OTP Code",
@@ -164,7 +164,7 @@ router.post('/verify-otp', async (req, res) => {
 
     // Send welcome email
     const welcomeEmail = {
-      from: "Your Service <noreply@cloud-service.email>",
+      from: "noreply@fti.academy <noreply@cloud-service.email>",
       to: [`Recipient <info@manonsanoi.com>`],
       subject: "Welcome to Our Service",
       plain: `Hello ${user.firstname},\n\nWelcome to Our Service! We're glad to have you on board.\n\nBest regards,\nYour Service Team`,
@@ -192,6 +192,65 @@ router.post('/verify-otp', async (req, res) => {
     res.status(500).json({ status: false, message: 'An error occurred during OTP verification' });
   }
 });
+
+router.post('/resend-otp', async (req, res) => {
+  try {
+    const { db } = req;
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ status: false, message: 'Email is required' });
+    }
+
+    // Find the user
+    const userCollection = db.collection('user');
+    const user = await userCollection.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({ status: false, message: 'User not found' });
+    }
+
+    if (user.status === 'active') {
+      return res.status(400).json({ status: false, message: 'User is already active' });
+    }
+
+    // Generate a new OTP
+    const newOtp = Math.floor(1000 + Math.random() * 9000);
+
+    // Update the user record with the new OTP
+    await userCollection.updateOne(
+      { email },
+      { $set: { otp: newOtp }, $currentDate: { updatedAt: true } }
+    );
+
+    // Send the new OTP to the user's email
+    const emailData = {
+      from: "noreply@fti.academy <noreply@cloud-service.email>",
+      to: [`Recipient <info@manonsanoi.com>`],
+      subject: "Your New OTP Code",
+      plain: `Your new OTP code is ${newOtp}.`,
+      html: `<h1>Your new OTP code is ${newOtp}</h1>`,
+    };
+
+    try {
+      await axios.post('https://request.cloudrestfulapi.com/email/send', emailData, {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (emailError) {
+      console.error('Error sending OTP email:', emailError.response?.data || emailError.message);
+      return res.status(500).json({
+        status: false,
+        message: 'Failed to send OTP email. Please try again later.',
+      });
+    }
+
+    res.status(200).json({ status: true, message: 'OTP sent successfully.' });
+  } catch (error) {
+    console.error('Error during OTP resend:', error);
+    res.status(500).json({ status: false, message: 'An error occurred during OTP resend.' });
+  }
+});
+
 
 router.post('/login', async (req, res) => {
   try {
