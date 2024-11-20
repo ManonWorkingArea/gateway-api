@@ -124,7 +124,7 @@ router.post('/register', async (req, res) => {
 
     // Prepare email content
     const emailData = {
-      from: siteData.name + " <noreply@cloud-service.email>",
+      from: siteData.siteName + " <noreply@cloud-service.email>",
       to: [`Recipient <info@manonsanoi.com>`], // Replace with the user's email for production
       subject: "Your OTP Code",
       plain: `Your OTP code is ${otp}`,
@@ -201,7 +201,7 @@ router.post('/verify-otp', async (req, res) => {
 
     // Send welcome email
     const welcomeEmail = {
-      from: siteData.name + " <noreply@cloud-service.email>",
+      from: siteData.siteName + " <noreply@cloud-service.email>",
       to: [`Recipient <info@manonsanoi.com>`], // Replace with the user's email for production
       subject: "Welcome to Our Service",
       plain: `Hello ${user.firstname},\n\nWelcome to Our Service! We're glad to have you on board.\n\nBest regards,\nYour Service Team`,
@@ -270,7 +270,7 @@ router.post('/resend-otp', async (req, res) => {
 
     // Prepare email content
     const emailData = {
-      from: siteData.name + " <noreply@cloud-service.email>",
+      from: siteData.siteName + " <noreply@cloud-service.email>",
       to: [`Recipient <info@manonsanoi.com>`], // Replace with the user's email for production
       subject: "Your New OTP Code",
       plain: `Your new OTP code is ${newOtp}.`,
@@ -334,7 +334,7 @@ router.post('/recover-password', async (req, res) => {
 
     // Prepare the email content
     const emailData = {
-      from: siteData.name + " <noreply@cloud-service.email>",
+      from: siteData.siteName + " <noreply@cloud-service.email>",
       to: [`Recipient <info@manonsanoi.com>`], // Replace with the user's email for production
       subject: "Password Recovery OTP",
       plain: `Your OTP for password recovery is ${recoveryOtp}.`,
@@ -400,7 +400,7 @@ router.post('/reset-password', async (req, res) => {
 
     // Prepare a password change confirmation email
     const emailData = {
-      from: siteData.name + " <noreply@cloud-service.email>",
+      from: siteData.siteName + " <noreply@cloud-service.email>",
       to: [`Recipient <info@manonsanoi.com>`], // Replace with the user's email for production
       subject: "Password Changed Successfully",
       plain: `Hello ${user.firstname},\n\nYour password has been successfully changed. If you did not request this change, please contact our support team immediately.\n\nBest regards,\nYour Service Team`,
