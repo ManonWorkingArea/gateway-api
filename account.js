@@ -43,18 +43,48 @@ function generateJWT(userResponse, key, rememberMe) {
   return { token, data };
 }
 
+/**
+ * Helper function to get site-specific database, user collection, and site data
+ * @param {Object} client - MongoDB client
+ * @param {String} site - Site ID
+ * @returns {Object} - { targetDb, userCollection, siteData }
+ * @throws {Error} - If site is invalid or not found
+ */
+async function getSiteSpecificDb(client, site) {
+  // Connect to the 'API' database
+  const apiDb = client.db('API');
+  const siteCollection = apiDb.collection('hostname');
+
+  // Fetch site data by site ID
+  const siteData = await siteCollection.findOne({ _id: safeObjectId(site) });
+  if (!siteData) {
+    throw new Error(`Invalid site ID. Site not found: ${site}`);
+  }
+
+  // Use site data to determine the target database
+  const targetDb = client.db(siteData.key); // Connect to the site-specific database
+  const userCollection = targetDb.collection('user'); // Target user collection
+
+  return { targetDb, userCollection, siteData };
+}
+
 router.post('/register', async (req, res) => {
   try {
-    const { db } = req; // MongoDB connection from middleware
-    const { firstname, lastname, password, email, phone } = req.body;
+    const { client } = req; // MongoDB client from middleware
+    const { site, firstname, lastname, password, email, phone } = req.body;
 
     // Validate required fields
-    if (!firstname || !lastname || !password || !email || !phone) {
-      return res.status(400).json({ status: false, message: 'All fields are required (firstname, lastname, password, email, phone)' });
+    if (!site || !firstname || !lastname || !password || !email || !phone) {
+      return res.status(400).json({ 
+        status: false, 
+        message: 'Site, firstname, lastname, password, email, and phone are required.' 
+      });
     }
 
+    // Get site-specific database, user collection, and site data
+    const { userCollection, siteData } = await getSiteSpecificDb(client, site);
+
     // Check if email or phone already exists
-    const userCollection = db.collection('user');
     const existingUser = await userCollection.findOne({ $or: [{ phone }, { email }] });
 
     if (existingUser) {
@@ -77,7 +107,7 @@ router.post('/register', async (req, res) => {
       firstname,
       lastname,
       email,
-      username:email,
+      username: email,
       phone,
       password: hashedPassword,
       salt,
@@ -94,9 +124,8 @@ router.post('/register', async (req, res) => {
 
     // Prepare email content
     const emailData = {
-      from: "noreply@fti.academy <noreply@cloud-service.email>",
-      to: [`Recipient <info@manonsanoi.com>`],
-      //to: [`Recipient <${email}>`],
+      from: siteData.name + " <noreply@cloud-service.email>",
+      to: [`Recipient <info@manonsanoi.com>`], // Replace with the user's email for production
       subject: "Your OTP Code",
       plain: `Your OTP code is ${otp}`,
       html: `<h1>Your OTP code is ${otp}</h1>`,
@@ -125,22 +154,30 @@ router.post('/register', async (req, res) => {
     });
   } catch (error) {
     console.error('Error during registration:', error);
-    res.status(500).json({ status: false, message: 'An error occurred during registration' });
+    res.status(500).json({ 
+      status: false, 
+      message: 'An error occurred during registration.' 
+    });
   }
 });
 
 router.post('/verify-otp', async (req, res) => {
   try {
-    const { db } = req; // MongoDB connection from middleware
-    const { email, otp } = req.body;
+    const { client } = req; // MongoDB client from middleware
+    const { site, email, otp } = req.body;
 
     // Validate input
-    if (!email || !otp) {
-      return res.status(400).json({ status: false, message: 'Email and OTP are required' });
+    if (!site || !email || !otp) {
+      return res.status(400).json({ 
+        status: false, 
+        message: 'Site, email, and OTP are required' 
+      });
     }
 
+    // Get site-specific database, user collection, and site data
+    const { userCollection, siteData } = await getSiteSpecificDb(client, site);
+
     // Find the user by email
-    const userCollection = db.collection('user');
     const user = await userCollection.findOne({ email });
 
     if (!user) {
@@ -164,8 +201,8 @@ router.post('/verify-otp', async (req, res) => {
 
     // Send welcome email
     const welcomeEmail = {
-      from: "noreply@fti.academy <noreply@cloud-service.email>",
-      to: [`Recipient <info@manonsanoi.com>`],
+      from: siteData.name + " <noreply@cloud-service.email>",
+      to: [`Recipient <info@manonsanoi.com>`], // Replace with the user's email for production
       subject: "Welcome to Our Service",
       plain: `Hello ${user.firstname},\n\nWelcome to Our Service! We're glad to have you on board.\n\nBest regards,\nYour Service Team`,
       html: `<h1>Welcome, ${user.firstname}!</h1><p>We're excited to have you join us. If you have any questions, feel free to reach out to our support team.</p><p>Best regards,<br>Your Service Team</p>`,
@@ -189,21 +226,29 @@ router.post('/verify-otp', async (req, res) => {
     });
   } catch (error) {
     console.error('Error during OTP verification:', error);
-    res.status(500).json({ status: false, message: 'An error occurred during OTP verification' });
+    res.status(500).json({ 
+      status: false, 
+      message: 'An error occurred during OTP verification' 
+    });
   }
 });
 
 router.post('/resend-otp', async (req, res) => {
   try {
-    const { db } = req;
-    const { email } = req.body;
+    const { client } = req; // MongoDB client from middleware
+    const { site, email } = req.body;
 
-    if (!email) {
-      return res.status(400).json({ status: false, message: 'Email is required' });
+    if (!site || !email) {
+      return res.status(400).json({ 
+        status: false, 
+        message: 'Site and email are required' 
+      });
     }
 
+    // Get site-specific database, user collection, and site data
+    const { userCollection, siteData } = await getSiteSpecificDb(client, site);
+
     // Find the user
-    const userCollection = db.collection('user');
     const user = await userCollection.findOne({ email });
 
     if (!user) {
@@ -223,15 +268,16 @@ router.post('/resend-otp', async (req, res) => {
       { $set: { otp: newOtp }, $currentDate: { updatedAt: true } }
     );
 
-    // Send the new OTP to the user's email
+    // Prepare email content
     const emailData = {
-      from: "noreply@fti.academy <noreply@cloud-service.email>",
-      to: [`Recipient <info@manonsanoi.com>`],
+      from: siteData.name + " <noreply@cloud-service.email>",
+      to: [`Recipient <info@manonsanoi.com>`], // Replace with the user's email for production
       subject: "Your New OTP Code",
       plain: `Your new OTP code is ${newOtp}.`,
       html: `<h1>Your new OTP code is ${newOtp}</h1>`,
     };
 
+    // Send the new OTP to the user's email
     try {
       await axios.post('https://request.cloudrestfulapi.com/email/send', emailData, {
         headers: { 'Content-Type': 'application/json' },
@@ -247,21 +293,30 @@ router.post('/resend-otp', async (req, res) => {
     res.status(200).json({ status: true, message: 'OTP sent successfully.' });
   } catch (error) {
     console.error('Error during OTP resend:', error);
-    res.status(500).json({ status: false, message: 'An error occurred during OTP resend.' });
+    res.status(500).json({ 
+      status: false, 
+      message: 'An error occurred during OTP resend.' 
+    });
   }
 });
 
+
 router.post('/recover-password', async (req, res) => {
   try {
-    const { db } = req;
-    const { email } = req.body;
+    const { client } = req; // MongoDB client from middleware
+    const { site, email } = req.body;
 
-    if (!email) {
-      return res.status(400).json({ status: false, message: 'Email is required' });
+    if (!site || !email) {
+      return res.status(400).json({ 
+        status: false, 
+        message: 'Site and email are required' 
+      });
     }
 
+    // Get site-specific database, user collection, and site data
+    const { userCollection, siteData } = await getSiteSpecificDb(client, site);
+
     // Find the user by email
-    const userCollection = db.collection('user');
     const user = await userCollection.findOne({ email });
 
     if (!user) {
@@ -274,18 +329,19 @@ router.post('/recover-password', async (req, res) => {
     // Update the user record with the recovery OTP
     await userCollection.updateOne(
       { email },
-      { $set: { otp: recoveryOtp, status:'unactive' }, $currentDate: { updatedAt: true } }
+      { $set: { otp: recoveryOtp, status: 'unactive' }, $currentDate: { updatedAt: true } }
     );
 
-    // Send the OTP to the user's email
+    // Prepare the email content
     const emailData = {
-      from: "noreply@fti.academy <noreply@cloud-service.email>",
-      to: [`Recipient <info@manonsanoi.com>`],
+      from: siteData.name + " <noreply@cloud-service.email>",
+      to: [`Recipient <info@manonsanoi.com>`], // Replace with the user's email for production
       subject: "Password Recovery OTP",
       plain: `Your OTP for password recovery is ${recoveryOtp}.`,
       html: `<h1>Your OTP for password recovery is ${recoveryOtp}</h1><p>Please use this OTP to reset your password.</p>`,
     };
 
+    // Send the OTP email
     try {
       await axios.post('https://request.cloudrestfulapi.com/email/send', emailData, {
         headers: { 'Content-Type': 'application/json' },
@@ -298,26 +354,36 @@ router.post('/recover-password', async (req, res) => {
       });
     }
 
-    res.status(200).json({ status: true, message: 'OTP sent successfully to your email.' });
+    res.status(200).json({ 
+      status: true, 
+      message: 'OTP sent successfully to your email.' 
+    });
   } catch (error) {
     console.error('Error during password recovery:', error);
-    res.status(500).json({ status: false, message: 'An error occurred during password recovery.' });
+    res.status(500).json({ 
+      status: false, 
+      message: 'An error occurred during password recovery.' 
+    });
   }
 });
 
 router.post('/reset-password', async (req, res) => {
   try {
-    const { db } = req;
-    const { email, newPassword } = req.body;
+    const { client } = req; // MongoDB client from middleware
+    const { site, email, newPassword } = req.body;
 
-    if (!email || !newPassword) {
-      return res.status(400).json({ status: false, message: 'Email, OTP, and new password are required.' });
+    if (!site || !email || !newPassword) {
+      return res.status(400).json({ 
+        status: false, 
+        message: 'Site, email, and new password are required.' 
+      });
     }
 
-    // Find the user by email
-    const userCollection = db.collection('user');
-    const user = await userCollection.findOne({ email });
+    // Get site-specific database, user collection, and site data
+    const { userCollection, siteData } = await getSiteSpecificDb(client, site);
 
+    // Find the user by email
+    const user = await userCollection.findOne({ email });
     if (!user) {
       return res.status(404).json({ status: false, message: 'User not found' });
     }
@@ -332,10 +398,10 @@ router.post('/reset-password', async (req, res) => {
       { $set: { password: hashedPassword, salt }, $unset: { otp: "" }, $currentDate: { updatedAt: true } }
     );
 
-    // Send a password change confirmation email
+    // Prepare a password change confirmation email
     const emailData = {
-      from: "noreply@fti.academy <noreply@cloud-service.email>",
-      to: [`Recipient <info@manonsanoi.com>`],
+      from: siteData.name + " <noreply@cloud-service.email>",
+      to: [`Recipient <info@manonsanoi.com>`], // Replace with the user's email for production
       subject: "Password Changed Successfully",
       plain: `Hello ${user.firstname},\n\nYour password has been successfully changed. If you did not request this change, please contact our support team immediately.\n\nBest regards,\nYour Service Team`,
       html: `<h1>Password Changed Successfully</h1>
@@ -344,6 +410,7 @@ router.post('/reset-password', async (req, res) => {
              <p>Best regards,<br>Your Service Team</p>`,
     };
 
+    // Send confirmation email
     try {
       await axios.post('https://request.cloudrestfulapi.com/email/send', emailData, {
         headers: { 'Content-Type': 'application/json' },
@@ -365,18 +432,26 @@ router.post('/reset-password', async (req, res) => {
 
 router.post('/login', async (req, res) => {
   try {
-    const { db } = req; // MongoDB connection is attached by authenticateClient middleware
-    const { username, password, rememberMe } = req.body; // Get "rememberMe" flag from request body
+    const { client } = req; // MongoDB client from middleware
+    const { site, username, password, rememberMe } = req.body; // Extract fields from request body
     const { key } = req.query; // Extract 'key' from query parameters
 
-    if (!username || !password) {
-      return res.status(400).json({ status: false, message: 'Username and password are required' });
+    if (!username || !password || !site) {
+      return res.status(400).json({
+        status: false,
+        message: 'Username, password, and site are required',
+      });
     }
 
+    // Get site-specific database, user collection, and site data
+    const { targetDb, userCollection, siteData } = await getSiteSpecificDb(client, site);
+
+    // Use siteData as needed, for example:
+    console.log('Site Data:', siteData);
+
     // Find the user in the database
-    const collection = db.collection('user'); // Adjust the collection name if necessary
-    const userQuery = { username }; // Simplified user query
-    const userResponse = await collection.findOne(userQuery);
+    const userQuery = { username };
+    const userResponse = await userCollection.findOne(userQuery);
 
     if (!userResponse) {
       return res.status(404).json({ status: false, message: 'User not found' });
@@ -391,16 +466,16 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ status: false, message: 'Invalid username or password' });
     }
 
-    // Get User Enroll (if necessary)
-    const enrollCollection = db.collection('enroll');
+    // Fetch user enrollments from the site-specific database
+    const enrollCollection = targetDb.collection('enroll');
     const enrollments = await enrollCollection.find({ userID: userResponse._id }).toArray();
 
     // Handle single-session login by removing any existing sessions
-    const sessionCollection = db.collection('sessions');
+    const sessionCollection = targetDb.collection('sessions');
     await sessionCollection.deleteOne({ userID: userResponse._id });
 
     // Generate JWT with "Remember Me" handling
-    const { token, data } = generateJWT(userResponse, key, rememberMe);
+    const { token } = generateJWT(userResponse, key, rememberMe);
 
     // Prepare new session data
     const newSession = {
@@ -417,7 +492,7 @@ router.post('/login', async (req, res) => {
     // Save the new session in the database
     await sessionCollection.insertOne(newSession);
 
-    // Respond with session data, token, and user data
+    // Respond with session data, token, user data, and site data
     res.status(200).json({
       status: true,
       message: 'Signin successful',
@@ -427,9 +502,8 @@ router.post('/login', async (req, res) => {
         email: userResponse.email,
         role: userResponse.role,
         status: userResponse.status || 'active',
-      },
+      }
     });
-
   } catch (error) {
     console.error('Error during sign-in:', error);
     res.status(500).json({ status: false, message: 'An error occurred during sign-in' });
