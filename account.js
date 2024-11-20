@@ -252,6 +252,101 @@ router.post('/resend-otp', async (req, res) => {
 });
 
 
+router.post('/recover-password', async (req, res) => {
+  try {
+    const { db } = req;
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ status: false, message: 'Email is required' });
+    }
+
+    // Find the user by email
+    const userCollection = db.collection('user');
+    const user = await userCollection.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({ status: false, message: 'User not found' });
+    }
+
+    // Generate a new OTP for password recovery
+    const recoveryOtp = Math.floor(1000 + Math.random() * 9000);
+
+    // Update the user record with the recovery OTP
+    await userCollection.updateOne(
+      { email },
+      { $set: { otp: recoveryOtp }, $currentDate: { updatedAt: true } }
+    );
+
+    // Send the OTP to the user's email
+    const emailData = {
+      from: "Your Service <noreply@yourdomain.com>",
+      to: [`${email}`],
+      subject: "Password Recovery OTP",
+      plain: `Your OTP for password recovery is ${recoveryOtp}.`,
+      html: `<h1>Your OTP for password recovery is ${recoveryOtp}</h1><p>Please use this OTP to reset your password.</p>`,
+    };
+
+    try {
+      await axios.post('https://request.cloudrestfulapi.com/email/send', emailData, {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (emailError) {
+      console.error('Error sending OTP email:', emailError.response?.data || emailError.message);
+      return res.status(500).json({
+        status: false,
+        message: 'Failed to send OTP email. Please try again later.',
+      });
+    }
+
+    res.status(200).json({ status: true, message: 'OTP sent successfully to your email.' });
+  } catch (error) {
+    console.error('Error during password recovery:', error);
+    res.status(500).json({ status: false, message: 'An error occurred during password recovery.' });
+  }
+});
+
+
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { db } = req;
+    const { email, otp, newPassword } = req.body;
+
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({ status: false, message: 'Email, OTP, and new password are required.' });
+    }
+
+    // Find the user by email
+    const userCollection = db.collection('user');
+    const user = await userCollection.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({ status: false, message: 'User not found' });
+    }
+
+    // Verify the OTP
+    if (user.otp !== parseInt(otp, 10)) {
+      return res.status(401).json({ status: false, message: 'Invalid OTP' });
+    }
+
+    // Generate a new salt and hash the new password
+    const salt = CryptoJS.lib.WordArray.random(16).toString();
+    const hashedPassword = CryptoJS.SHA256(newPassword + salt).toString();
+
+    // Update the user's password and remove the OTP
+    await userCollection.updateOne(
+      { email },
+      { $set: { password: hashedPassword, salt }, $unset: { otp: "" }, $currentDate: { updatedAt: true } }
+    );
+
+    res.status(200).json({ status: true, message: 'Password reset successfully.' });
+  } catch (error) {
+    console.error('Error during password reset:', error);
+    res.status(500).json({ status: false, message: 'An error occurred during password reset.' });
+  }
+});
+
+
 router.post('/login', async (req, res) => {
   try {
     const { db } = req; // MongoDB connection is attached by authenticateClient middleware
@@ -324,7 +419,6 @@ router.post('/login', async (req, res) => {
     res.status(500).json({ status: false, message: 'An error occurred during sign-in' });
   }
 });
-
 
 // Endpoint to check session validity
 router.get('/recheck', async (req, res) => {
