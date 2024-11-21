@@ -180,11 +180,15 @@ router.post('/register', async (req, res) => {
     // Render the email content using the builderRender plugin
     const builderRender = require('./builderRender'); // Import the builderRender plugin
     const dynamicData = `
-    <strong>Your OTP Code</strong><br/>
-    <br/>
-    Your OTP code is <strong>${otp}</strong>. Please use this code within the next 15 minutes.<br/>
-    If you didn’t request this, please ignore this email or contact support.
-  `;
+      <strong>Activate Your Account</strong><br/>
+      <br/>
+      Thank you for registering with us! Your OTP for account activation is <strong>${otp}</strong>. Please use this code within the next 15 minutes to activate your account.<br/>
+      If you didn’t request this, please ignore this email or contact support.<br/><br/>
+      Alternatively, you can activate your account using the following link:<br/>
+      <a href="https://${siteData.hostname}/user/activate?email=${encodeURIComponent(email)}&otp=${otp}">
+        Activate Account
+      </a>
+    `;
     const htmlContent = builderRender(emailTemplate.builder, dynamicData);
 
     // Prepare email content
@@ -229,7 +233,7 @@ router.post('/register', async (req, res) => {
 router.post('/verify-otp', async (req, res) => {
   try {
     const { client } = req; // MongoDB client from middleware
-    const { site, email, otp } = req.body;
+    const { site, email, otp, mode } = req.body;
 
     // Validate input
     if (!site || !email || !otp) {
@@ -265,41 +269,44 @@ router.post('/verify-otp', async (req, res) => {
       { $set: { status: 'active' }, $unset: { otp: "" }, $currentDate: { updatedAt: true } }
     );
 
-    // Fetch email template from the 'post' collection using theme configuration
-    const postCollection = client.db(siteData.key).collection('post');
-    const emailTemplate = await postCollection.findOne({ _id: safeObjectId(siteData.theme.emailTemplates.general) });
+    // If mode is 'activate', send the welcome email
+    if (mode === 'activate') {
+      // Fetch email template from the 'post' collection using theme configuration
+      const postCollection = client.db(siteData.key).collection('post');
+      const emailTemplate = await postCollection.findOne({ _id: safeObjectId(siteData.theme.emailTemplates.general) });
 
-    if (!emailTemplate) {
-      return res.status(404).json({
-        status: false,
-        message: 'Email template not found',
-      });
-    }
-    
-    // Render the email content using the builderRender plugin
-    const builderRender = require('./builderRender'); // Import the builderRender plugin
-    const dynamicData = `<h1>Welcome, ${user.firstname}!</h1><p>We're excited to have you join us. If you have any questions, feel free to reach out to our support team.</p><p>Best regards,<br>Your Service Team</p>`;
-    const htmlContent = builderRender(emailTemplate.builder, dynamicData);
+      if (!emailTemplate) {
+        return res.status(404).json({
+          status: false,
+          message: 'Email template not found',
+        });
+      }
+      
+      // Render the email content using the builderRender plugin
+      const builderRender = require('./builderRender'); // Import the builderRender plugin
+      const dynamicData = `<h1>Welcome, ${user.firstname}!</h1><p>We're excited to have you join us. If you have any questions, feel free to reach out to our support team.</p><p>Best regards,<br>Your Service Team</p>`;
+      const htmlContent = builderRender(emailTemplate.builder, dynamicData);
 
-    // Send welcome email
-    const welcomeEmail = {
-      from: siteData.siteName + " <noreply@cloud-service.email>",
-      to: [`Recipient <info@manonsanoi.com>`], // Replace with the user's email for production
-      subject: "Welcome to Our Service",
-      plain: `Hello ${user.firstname},\n\nWelcome to Our Service! We're glad to have you on board.\n\nBest regards,\nYour Service Team`,
-      html: htmlContent,
-    };
+      // Send welcome email
+      const welcomeEmail = {
+        from: siteData.siteName + " <noreply@cloud-service.email>",
+        to: [`Recipient <info@manonsanoi.com>`], // Replace with the user's email for production
+        subject: "Welcome to Our Service",
+        plain: `Hello ${user.firstname},\n\nWelcome to Our Service! We're glad to have you on board.\n\nBest regards,\nYour Service Team`,
+        html: htmlContent,
+      };
 
-    try {
-      await axios.post('https://request.cloudrestfulapi.com/email/send', welcomeEmail, {
-        headers: { 'Content-Type': 'application/json' },
-      });
-    } catch (emailError) {
-      console.error('Error sending welcome email:', emailError.response?.data || emailError.message);
-      return res.status(500).json({
-        status: true, // Still returning success for OTP verification
-        message: 'Account verified successfully, but welcome email failed to send.',
-      });
+      try {
+        await axios.post('https://request.cloudrestfulapi.com/email/send', welcomeEmail, {
+          headers: { 'Content-Type': 'application/json' },
+        });
+      } catch (emailError) {
+        console.error('Error sending welcome email:', emailError.response?.data || emailError.message);
+        return res.status(500).json({
+          status: true, // Still returning success for OTP verification
+          message: 'Account verified successfully, but welcome email failed to send.',
+        });
+      }
     }
 
     res.status(200).json({
@@ -366,11 +373,16 @@ router.post('/resend-otp', async (req, res) => {
     // Render the email content using the builderRender plugin
     const builderRender = require('./builderRender'); // Import the builderRender plugin
     const dynamicData = `
-    <strong>Your New OTP Code</strong><br/>
-    <br/>
-    Your new OTP code is <strong>${newOtp}</strong>. Please use this code within the next 15 minutes.<br/>
-    If you didn’t request this, please ignore this email or contact support.
-  `;
+      <strong>Your New OTP Code</strong><br/>
+      <br/>
+      Your new OTP code is <strong>${newOtp}</strong>. Please use this code within the next 15 minutes to activate your account.<br/>
+      If you didn’t request this, please ignore this email or contact support.<br/><br/>
+      Alternatively, you can activate your account using the following link:<br/>
+      <a href="https://${siteData.hostname}/user/activate?email=${encodeURIComponent(email)}&otp=${newOtp}">
+        Activate Account
+      </a>
+    `;
+    
     const htmlContent = builderRender(emailTemplate.builder, dynamicData);
 
     // Prepare email content
@@ -456,11 +468,16 @@ router.post('/recover-password', async (req, res) => {
 
     // Render the email content using the builderRender plugin
     const builderRender = require('./builderRender'); // Import the builderRender plugin
+    // Render the email content using the builderRender plugin
     const dynamicData = `
       <strong>Password Recovery OTP</strong><br/>
       <br/>
       Your OTP for password recovery is <strong>${recoveryOtp}</strong>. Please use this code within the next 15 minutes.<br/>
-      If you didn’t request this, please ignore this email or contact support.
+      If you didn’t request this, please ignore this email or contact support.<br/><br/>
+      Alternatively, you can verify your OTP using the following link:<br/>
+      <a href="https://${siteData.hostname}/user/recovery?email=${encodeURIComponent(email)}&otp=${recoveryOtp}">
+        Verify OTP
+      </a>
     `;
     const htmlContent = builderRender(emailTemplate.builder, dynamicData);
 
