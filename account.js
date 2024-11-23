@@ -189,9 +189,6 @@ router.post('/register', async (req, res) => {
       Thank you for registering with us! Your OTP for account activation is <strong>${otp}</strong>. Please use this code within the next 15 minutes to activate your account.<br/>
       If you didn’t request this, please ignore this email or contact support.<br/><br/>
       Alternatively, you can activate your account using the following link:<br/>
-      <a href="https://${siteData.hostname}/user/activate?email=${encodeURIComponent(email)}&otp=${otp}">
-        Activate Account
-      </a>
     `;
     const htmlContent = builderRender(emailTemplate.builder, dynamicData);
 
