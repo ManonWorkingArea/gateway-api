@@ -129,7 +129,10 @@ router.post('/register', async (req, res) => {
 
     // Check if email or phone already exists
     const userCollection = client.db(siteData.key).collection('user');
-    const existingUser = await userCollection.findOne({ $or: [{ phone }, { email }] });
+    const existingUser = await userCollection.findOne({
+      parent: site, // Match the parent field with the value of site
+      $or: [{ phone }, { email }], // Match either phone or email
+    });
 
     if (existingUser) {
       return res.status(409).json({
@@ -159,6 +162,7 @@ router.post('/register', async (req, res) => {
       avatar_img: null, // Default avatar
       status: 'unactive', // User is inactive until OTP is verified
       otp, // Store OTP for verification
+      parent:site,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -248,8 +252,11 @@ router.post('/verify-otp', async (req, res) => {
     
     const userCollection = client.db(siteData.key).collection('user');
     // Find the user by email
-    const user = await userCollection.findOne({ email });
-
+    const user = await userCollection.findOne({
+      parent: site, // Ensure the user belongs to the correct site
+      email,        // Match the email
+    });
+    
     if (!user) {
       return res.status(404).json({ status: false, message: 'User not found' });
     }
@@ -340,8 +347,11 @@ router.post('/resend-otp', async (req, res) => {
     const userCollection = client.db(siteData.key).collection('user');
 
     // Find the user
-    const user = await userCollection.findOne({ email });
-
+    const user = await userCollection.findOne({
+      parent: site, // Ensure the user belongs to the correct site
+      email,        // Match the email
+    });
+    
     if (!user) {
       return res.status(404).json({ status: false, message: 'User not found' });
     }
@@ -441,7 +451,11 @@ router.post('/recover-password', async (req, res) => {
     }
 
     // Find the user by email
-    const user = await userCollection.findOne({ email });
+    const user = await userCollection.findOne({
+      parent: site, // Ensure the user belongs to the correct site
+      email,        // Match the email
+    });
+    
     if (!user) {
       return res.status(404).json({ status: false, message: 'User not found' });
     }
@@ -532,7 +546,11 @@ router.post('/reset-password', async (req, res) => {
     const { siteData } = await getSiteSpecificDb(client, site);
     const userCollection = client.db(siteData.key).collection('user');
     // Find the user by email
-    const user = await userCollection.findOne({ email });
+    const user = await userCollection.findOne({
+      parent: site, // Ensure the user belongs to the correct site
+      email,        // Match the email
+    });
+    
     if (!user) {
       return res.status(404).json({ status: false, message: 'User not found' });
     }
@@ -615,7 +633,10 @@ router.post('/login', async (req, res) => {
     console.log('Site Data:', siteData);
 
     // Find the user in the database
-    const userQuery = { username };
+    const userQuery = {
+      parent: site, // Ensure the user belongs to the correct site
+      username,     // Match the username
+    };
     const userResponse = await userCollection.findOne(userQuery);
 
     if (!userResponse) {
