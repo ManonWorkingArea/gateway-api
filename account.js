@@ -280,7 +280,7 @@ router.post('/verify-otp', async (req, res) => {
       }
     );
 
-    // If mode is 'activate', send the welcome email
+    // If mode is 'activate', send the welcome email and add wallet credit
     if (mode === 'activate') {
       // Fetch email template from the 'post' collection using theme configuration
       const postCollection = client.db(siteData.key).collection('post');
@@ -292,7 +292,7 @@ router.post('/verify-otp', async (req, res) => {
           message: 'Email template not found',
         });
       }
-      
+
       // Render the email content using the builderRender plugin
       const builderRender = require('./builderRender'); // Import the builderRender plugin
       const dynamicData = `<h1>Welcome, ${user.firstname}!</h1><p>We're excited to have you join us. If you have any questions, feel free to reach out to our support team.</p><p>Best regards,<br>Your Service Team</p>`;
@@ -318,7 +318,54 @@ router.post('/verify-otp', async (req, res) => {
           message: 'Account verified successfully, but welcome email failed to send.',
         });
       }
+
+      // Add 10 credits to the user's wallet
+      const walletCollection = client.db(siteData.key).collection('wallet');
+      const walletTransactionCollection = client.db(siteData.key).collection('wallet_transaction'); // Collection for transactions
+
+      // Check if the wallet already exists
+      let wallet = await walletCollection.findOne({ userID: safeObjectId(user._id) });
+      if (!wallet) {
+        // Create a new wallet if it doesn't exist
+        wallet = {
+          userID: safeObjectId(user._id),
+          balance: 0,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        await walletCollection.insertOne(wallet);
+
+        // Log wallet creation transaction
+        await walletTransactionCollection.insertOne({
+          userID: safeObjectId(user._id),
+          action: 'create',
+          amount: 0,
+          balanceBefore: 0,
+          balanceAfter: 0,
+          timestamp: new Date(),
+        });
+      }
+
+      // Update wallet balance and log the transaction
+      const balanceBefore = wallet.balance;
+      const updatedBalance = balanceBefore + 10; // Add 10 credits
+
+      await walletCollection.updateOne(
+        { userID: safeObjectId(user._id) },
+        { $set: { balance: updatedBalance, updatedAt: new Date() } }
+      );
+
+      // Record the transaction in the wallet_transaction collection
+      await walletTransactionCollection.insertOne({
+        userID: safeObjectId(user._id),
+        action: 'increase',
+        amount: 10,
+        balanceBefore: balanceBefore,
+        balanceAfter: updatedBalance,   
+        timestamp: new Date(),
+      });
     }
+
 
     res.status(200).json({
       status: true,
