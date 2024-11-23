@@ -195,7 +195,7 @@ router.post('/register', async (req, res) => {
     // Prepare email content
     const emailData = {
       from: siteData.siteName + " <noreply@cloud-service.email>",
-      to: [`Recipient <info@manonsanoi.com>`], // Replace with the user's email for production
+      to: [firstname + ' ' + lastname + ' <' + email + '>'], // Replace with the user's email for production
       subject: "Your OTP Code",
       plain: `Your OTP code is ${otp}`,
       html: htmlContent,
@@ -301,7 +301,7 @@ router.post('/verify-otp', async (req, res) => {
       // Send welcome email
       const welcomeEmail = {
         from: siteData.siteName + " <noreply@cloud-service.email>",
-        to: [`Recipient <info@manonsanoi.com>`], // Replace with the user's email for production
+        to: [user.firstname + ' ' + user.lastname + ' <' + email + '>'],
         subject: "Welcome to Our Service",
         plain: `Hello ${user.firstname},\n\nWelcome to Our Service! We're glad to have you on board.\n\nBest regards,\nYour Service Team`,
         html: htmlContent,
@@ -405,7 +405,7 @@ router.post('/resend-otp', async (req, res) => {
     // Prepare email content
     const emailData = {
       from: siteData.siteName + " <noreply@cloud-service.email>",
-      to: [`Recipient <info@manonsanoi.com>`], // Replace with the user's email for production
+      to: [user.firstname + ' ' + user.lastname + ' <' + email + '>'], // Replace with the user's email for production
       subject: "Your New OTP Code",
       plain: `Your new OTP code is ${newOtp}.`,
       html: htmlContent,
@@ -508,7 +508,7 @@ router.post('/recover-password', async (req, res) => {
     // Prepare the email content
     const emailData = {
       from: `${siteData.siteName} <noreply@cloud-service.email>`,
-      to: [`Recipient <info@manonsanoi.com>`], // Send to the user's actual email
+      to: [user.firstname + ' ' + user.lastname + ' <' + email + '>'], // Send to the user's actual email
       subject: "Password Recovery OTP",
       plain: `Your OTP for password recovery is ${recoveryOtp}.`,
       html: htmlContent, // Use rendered HTML content
@@ -600,7 +600,7 @@ router.post('/reset-password', async (req, res) => {
     // Prepare a password change confirmation email
     const emailData = {
       from: siteData.siteName + " <noreply@cloud-service.email>",
-      to: [`Recipient <info@manonsanoi.com>`], // Replace with the user's email for production
+      to: [user.firstname + ' ' + user.lastname + ' <' + email + '>'], // Replace with the user's email for production
       subject: "Password Changed Successfully",
       plain: `Hello ${user.firstname},\n\nYour password has been successfully changed. If you did not request this change, please contact our support team immediately.\n\nBest regards,\nYour Service Team`,
       html: htmlContent,
