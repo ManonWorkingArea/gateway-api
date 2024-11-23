@@ -272,8 +272,15 @@ router.post('/verify-otp', async (req, res) => {
 
     // Update user status to 'active' and remove the OTP
     await userCollection.updateOne(
-      { email },
-      { $set: { status: 'active' }, $unset: { otp: "" }, $currentDate: { updatedAt: true } }
+      {
+        parent: site, // Ensure the user belongs to the correct site
+        email,        // Match the user's email
+      },
+      {
+        $set: { status: 'active' }, // Update the status to 'active'
+        $unset: { otp: "" },        // Remove the OTP
+        $currentDate: { updatedAt: true }, // Update the `updatedAt` timestamp
+      }
     );
 
     // If mode is 'activate', send the welcome email
@@ -365,7 +372,10 @@ router.post('/resend-otp', async (req, res) => {
 
     // Update the user record with the new OTP
     await userCollection.updateOne(
-      { email },
+      {
+        parent: site, // Ensure the user belongs to the correct site
+        email,        // Match the user's email
+      },
       { $set: { otp: newOtp }, $currentDate: { updatedAt: true } }
     );
 
@@ -465,7 +475,10 @@ router.post('/recover-password', async (req, res) => {
 
     // Update the user record with the recovery OTP
     await userCollection.updateOne(
-      { email },
+      {
+        parent: site, // Ensure the user belongs to the correct site
+        email,        // Match the user's email
+      },
       { $set: { otp: recoveryOtp, status: 'unactive' }, $currentDate: { updatedAt: true } }
     );
 
@@ -561,7 +574,10 @@ router.post('/reset-password', async (req, res) => {
 
     // Update the user's password and remove the OTP
     await userCollection.updateOne(
-      { email },
+      {
+        parent: site, // Ensure the user belongs to the correct site
+        email,        // Match the user's email
+      },
       { $set: { password: hashedPassword, salt }, $unset: { otp: "" }, $currentDate: { updatedAt: true } }
     );
 
