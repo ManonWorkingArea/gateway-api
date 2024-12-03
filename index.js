@@ -10,6 +10,9 @@ const authRouter    = require('./auth');  // Import the auth router
 const voteRouter    = require('./vote');  // Updated to 'authen'
 const billingRouter    = require('./billing');  // Updated to 'authen'
 const filemanagerRouter    = require('./filemanager');  // Updated to 'authen'
+
+const cmsRouter    = require('./cms');  // Updated to 'authen'
+
 const http          = require('http');
 const socketio      = require('socket.io');
 const verifySlipRouter = require('./routes/verifySlip'); 
@@ -66,6 +69,7 @@ async function initializeApp() {
     app.use('/account', accountRouter);  // Updated route to 'authen'
     app.use('/slip', verifySlipRouter);
     app.use('/filemanager', filemanagerRouter);
+    app.use('/cms', cmsRouter);
 
     server.listen(process.env.PORT, () => {
       console.log(`Server is running on port ${process.env.PORT}`);
