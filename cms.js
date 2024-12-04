@@ -46,69 +46,100 @@ async function getSiteSpecificDb(client, site) {
   return { db: targetDb, postCollection, siteData };
 }
 
-router.post('/retrieve', async (req, res) => {
+router.post('/page', async (req, res) => {
     try {
-      console.log('[DEBUG] Incoming request:', req.body); // Log the incoming request
-  
-      const { slug, site } = req.body; // Read slug and site from the request body
-      const client = req.client; // MongoDB client is attached by authenticateClient middleware
-  
-      if (!site) {
-        console.error('[ERROR] Site ID is missing in the request body.');
-        return res.status(400).json({ status: false, message: 'Site ID is required' });
-      }
-      console.log('[DEBUG] Site ID:', site);
-  
-      // Fetch site-specific database and post collection
-      console.log('[DEBUG] Fetching site-specific database...');
-      const { postCollection } = await getSiteSpecificDb(client, site);
-      console.log('[DEBUG] Successfully fetched postCollection.');
-  
-      if (slug) {
-        console.log('[DEBUG] Slug provided. Attempting to retrieve specific post...');
-        // Retrieve a specific post by slug, owner, type, and status
-        const post = await postCollection.findOne({
-          slug,
-          owner: site,
-          type: 'page',
-          status: true,
-        });
-        console.log('[DEBUG] Query for specific post executed.');
-  
-        if (!post) {
-          console.warn('[WARN] No post found with the provided slug:', slug);
-          // Explicitly set 404 status for not found
-          return res.status(404).json({ status: false, message: 'Post not found' });
+        const { page, post, site } = req.body; // Read page, post, and site from the request body
+        const client = req.client; // MongoDB client is attached by authenticateClient middleware
+
+        if (!site) {
+            return res.status(400).json({ status: false, message: 'Site ID is required' });
         }
-  
-        console.log('[DEBUG] Post retrieved successfully:', post);
-        return res.status(200).json({ status: true, message: 'Post retrieved successfully', post });
-      }
-  
-      console.log('[DEBUG] No slug provided. Retrieving all posts...');
-      // Retrieve all posts with owner, type, and status
-      const posts = await postCollection
-        .find({
-          owner: site,
-          type: 'page',
-          status: true,
-        })
-        .toArray();
-  
-      if (posts.length === 0) {
-        console.warn('[WARN] No posts found for site:', site);
-        // Explicitly set 404 status for empty list
-        return res.status(404).json({ status: false, message: 'No posts found' });
-      }
-  
-      console.log('[DEBUG] Query for all posts executed. Posts retrieved:', posts.length);
-      res.status(200).json({ status: true, message: 'Posts retrieved successfully', posts });
+
+        if (!page) {
+            return res.status(400).json({ status: false, message: 'Page is required' });
+        }
+
+        const { postCollection } = await getSiteSpecificDb(client, site);
+
+        // Retrieve the page document
+        const pageDoc = await postCollection.findOne({
+            slug: page,
+            owner: site,
+            type: 'page',
+            status: true,
+        });
+
+        if (!pageDoc) {
+            return res.status(404).json({ status: false, message: 'Page not found' });
+        }
+
+        // If a specific post is requested
+        if (typeof post === 'string' && post.trim() !== '') {
+            const postDoc = await postCollection.findOne({
+                slug: post,
+                owner: site,
+                parent: pageDoc._id.toString(),
+                type: 'post',
+                status: true,
+            });
+
+            if (!postDoc) {
+                return res.status(404).json({ status: false, message: 'Post not found for the given page' });
+            }
+
+            // Retrieve the last 5 posts
+            const lastPosts = await postCollection
+                .find({
+                    owner: site,
+                    parent: pageDoc._id.toString(),
+                    type: 'post',
+                    status: true,
+                })
+                .sort({ createdAt: -1 }) // Assuming you have a `createdAt` field for sorting
+                .limit(5)
+                .toArray();
+
+            // Return page, specific post, and last 5 posts
+            return res.status(200).json({
+                status: true,
+                message: 'Data retrieved successfully',
+                page: pageDoc,
+                post: postDoc,
+                last: lastPosts,
+            });
+        }
+
+        // Check if the page's display is 'group'
+        if (pageDoc.display === 'group') {
+            // Retrieve all child posts
+            const childPosts = await postCollection.find({
+                owner: site,
+                parent: pageDoc._id.toString(),
+                type: 'post',
+                status: true,
+            }).toArray();
+
+            return res.status(200).json({
+                status: true,
+                message: 'Page and group posts retrieved successfully',
+                page: pageDoc,
+                posts: childPosts,
+            });
+        }
+
+        // Return only the page data if no post is requested
+        return res.status(200).json({
+            status: true,
+            message: 'Page retrieved successfully',
+            page: pageDoc,
+        });
     } catch (error) {
-      console.error('[ERROR] Error retrieving posts:', error);
-      res.status(500).json({ status: false, message: 'An error occurred while retrieving posts' });
+        console.error(error);
+        res.status(500).json({ status: false, message: 'An error occurred while retrieving the data' });
     }
-  });
-  
+});
+
+
 // Use error handling middleware
 router.use(errorHandler);
 
