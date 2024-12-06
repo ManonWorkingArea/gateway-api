@@ -12,6 +12,7 @@ const billingRouter    = require('./billing');  // Updated to 'authen'
 const filemanagerRouter    = require('./filemanager');  // Updated to 'authen'
 
 const cmsRouter    = require('./cms');  // Updated to 'authen'
+const certificationRouter    = require('./certification');  // Updated to 'authen'
 
 const http          = require('http');
 const socketio      = require('socket.io');
@@ -70,6 +71,7 @@ async function initializeApp() {
     app.use('/slip', verifySlipRouter);
     app.use('/filemanager', filemanagerRouter);
     app.use('/cms', cmsRouter);
+    app.use('/certification', certificationRouter);
 
     server.listen(process.env.PORT, () => {
       console.log(`Server is running on port ${process.env.PORT}`);
