@@ -13,6 +13,7 @@ const filemanagerRouter    = require('./filemanager');  // Updated to 'authen'
 
 const cmsRouter    = require('./cms');  // Updated to 'authen'
 const certificationRouter    = require('./certification');  // Updated to 'authen'
+const aiRouter = require('./ai'); // Import the AI router
 
 const http          = require('http');
 const socketio      = require('socket.io');
@@ -72,6 +73,7 @@ async function initializeApp() {
     app.use('/filemanager', filemanagerRouter);
     app.use('/cms', cmsRouter);
     app.use('/certification', certificationRouter);
+    app.use('/ai', aiRouter); // Add the /ai route
 
     server.listen(process.env.PORT, () => {
       console.log(`Server is running on port ${process.env.PORT}`);
