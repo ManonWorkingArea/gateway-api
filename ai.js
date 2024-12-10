@@ -3,10 +3,26 @@ const fetch = require('node-fetch');
 
 const router = express.Router();
 
+// Function to fetch remote image and convert it to Base64
+const fetchImageAsBase64 = async (imageUrl) => {
+  try {
+    const response = await fetch(imageUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image. Status: ${response.status}`);
+    }
+
+    const buffer = await response.buffer();
+    return buffer.toString('base64');
+  } catch (error) {
+    console.error("Error fetching remote image:", error);
+    throw error;
+  }
+};
+
 // Function to process the image with a prompt
 const processImageWithPrompt = async (imageBase64, prompt) => {
-    const apiKey = "AIzaSyB_DNNNAbBpaQ41rKHgDeL-zzGpQmjcRH4"; // Replace with your actual API key
-    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-pro:analyzeImage?key=${apiKey}`;
+  const apiKey = "AIzaSyB_DNNNAbBpaQ41rKHgDeL-zzGpQmjcRH4"; // Replace with your actual API key
+  const url = `https://generativelanguage.googleapis.com/v1/models/gemini-pro:analyzeImage?key=${apiKey}`;
 
   const headers = {
     "Content-Type": "application/json",
@@ -40,15 +56,19 @@ const processImageWithPrompt = async (imageBase64, prompt) => {
 
 // Define /ai POST endpoint
 router.post('/', async (req, res) => {
-  const { imageBase64, prompt } = req.body;
+  const { imageUrl, prompt } = req.body;
 
-  if (!imageBase64 || !prompt) {
+  if (!imageUrl || !prompt) {
     return res.status(400).json({
-      error: "Both 'imageBase64' and 'prompt' fields are required.",
+      error: "Both 'imageUrl' and 'prompt' fields are required.",
     });
   }
 
   try {
+    // Fetch the remote image and convert to Base64
+    const imageBase64 = await fetchImageAsBase64(imageUrl);
+
+    // Process the image with the prompt
     const result = await processImageWithPrompt(imageBase64, prompt);
     res.status(200).json({ result });
   } catch (error) {
