@@ -288,12 +288,16 @@ module.exports = function () {
       const translateCollection = db.collection('translate'); // Adjust collection name accordingly
       const translateResult = await translateCollection.find().toArray();
 
+      // Query the 'hostname' collection to get all data
+      const allHostData = await hostnameCollection.find().toArray();
+
       // Return the combined data from hostname, space, and translate collections
       res.status(200).json({
         status: true,
         hostData: hostResult,
         spaceData: spaceResult,
         translateData: translateResult,
+        hosts: allHostData, // Include all hostname data in the response
       });
     } catch (err) {
       console.error('Error retrieving data by hostname:', err);
