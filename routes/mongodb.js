@@ -291,13 +291,21 @@ module.exports = function () {
       // Query the 'hostname' collection to get all data
       const allHostData = await hostnameCollection.find().toArray();
 
+      // Process allHostData to include only hostname and siteName, sorted alphabetically by hostname
+      const hosts = allHostData
+        .map((host) => ({
+          hostname: host.hostname,
+          siteName: host.siteName,
+        }))
+        .sort((a, b) => a.hostname.localeCompare(b.hostname));
+
       // Return the combined data from hostname, space, and translate collections
       res.status(200).json({
         status: true,
         hostData: hostResult,
         spaceData: spaceResult,
         translateData: translateResult,
-        hosts: allHostData, // Include all hostname data in the response
+        hosts, // Include processed hostname and siteName data in the response
       });
     } catch (err) {
       console.error('Error retrieving data by hostname:', err);
