@@ -268,15 +268,12 @@ module.exports = function () {
         return res.status(400).json({ status: false, message: 'Hostname is required' });
       }
 
-      // Query the 'hostnameCollection' for the given hostname with condition siteView = 'frontend'
+      // Query the 'hostnameCollection' for the given hostname
       const hostnameCollection = db.collection('hostname'); // Adjust collection name accordingly
-      const hostResult = await hostnameCollection.findOne({
-        hostname: hostname,
-        siteView: 'frontend', // Only fetch records where siteView = 'frontend'
-      });
+      const hostResult = await hostnameCollection.findOne({ hostname: hostname });
 
       if (!hostResult) {
-        return res.status(404).json({ status: false, message: 'No data found for the provided hostname with siteView = frontend' });
+        return res.status(404).json({ status: false, message: 'No data found for the provided hostname' });
       }
 
       // Query the 'space' collection using the spaceId from the hostResult
@@ -305,7 +302,7 @@ module.exports = function () {
       // Return the combined data from hostname, space, and translate collections
       res.status(200).json({
         status: true,
-        hostData: hostResult, // Host data filtered by siteView = 'frontend'
+        hostData: hostResult,
         spaceData: spaceResult,
         translateData: translateResult,
         hosts, // Include processed hostname and siteName data in the response
