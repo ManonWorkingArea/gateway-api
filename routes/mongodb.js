@@ -288,8 +288,8 @@ module.exports = function () {
       const translateCollection = db.collection('translate'); // Adjust collection name accordingly
       const translateResult = await translateCollection.find().toArray();
 
-      // Query the 'hostname' collection to get all data
-      const allHostData = await hostnameCollection.find().toArray();
+      // Query the 'hostname' collection to get data with siteView = 'frontend'
+      const allHostData = await hostnameCollection.find({ siteView: 'frontend' }).toArray();
 
       // Process allHostData to include only hostname and siteName, sorted alphabetically by hostname
       const hosts = allHostData
