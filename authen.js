@@ -8,7 +8,7 @@ const axios = require('axios'); // For making HTTP requests
 const router = express.Router();
 
 // Secret key for signing JWT (Use environment variables for security)
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secure-secret-key';
+const JWT_SECRET = 'ZCOKU1v3TO2flcOqCdrJ3vWbWhmnZNQn';
 
 // Middleware to authenticate client
 router.use(authenticateClient);
