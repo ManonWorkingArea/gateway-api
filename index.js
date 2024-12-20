@@ -19,6 +19,8 @@ const http          = require('http');
 const socketio      = require('socket.io');
 const verifySlipRouter = require('./routes/verifySlip'); 
 
+const authenRouter    = require('./authen');  // Import the auth router
+
 dotenv.config();
 
 const app = express();
@@ -74,6 +76,7 @@ async function initializeApp() {
     app.use('/cms', cmsRouter);
     app.use('/certification', certificationRouter);
     app.use('/ai', aiRouter); // Add the /ai route
+    app.use('/authen', authenRouter); // Add the /ai route
 
     server.listen(process.env.PORT, () => {
       console.log(`Server is running on port ${process.env.PORT}`);
