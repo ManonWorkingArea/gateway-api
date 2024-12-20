@@ -120,7 +120,7 @@ const sendMessage = async (channelAccessToken, userId, messageText) => {
 };
 // Endpoint to handle LINE login callback and send a welcome message
 router.post('/callback', async (req, res) => {
-    const { code, site } = req.body;
+    const { code, site, host } = req.body;
   
     try {
       // Validate input
@@ -130,7 +130,7 @@ router.post('/callback', async (req, res) => {
   
       // Get site-specific database, user collection, and site data
       const { client } = req; // MongoDB client from middleware
-      const { siteData, userCollection } = await getSiteSpecificDb(client, site);
+      const { siteData, userCollection } = await getSiteSpecificDb(client, host);
   
       // Exchange the authorization code for an access token
       const tokenResponse = await fetch('https://api.line.me/oauth2/v2.1/token', {
