@@ -216,6 +216,64 @@ router.post('/login', async (req, res) => {
     }
 });
 
+// New login endpoint to fetch user data by LINE userId
+router.post('/liff', async (req, res) => {
+    const { userId, site } = req.body;
+
+    if (!userId || !site) {
+        return res.status(400).json({ error: 'UserId and site are required' });
+    }
+
+    try {
+        const { client } = req;
+        const { userCollection, siteData } = await getSiteSpecificDb(client, site);
+
+        // Find user by LINE userId
+        const userResponse = await userCollection.findOne({ channel: 'line', userId });
+
+        if (!userResponse) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        const sessionCollection = client.db(siteData.key).collection('sessions');
+        await sessionCollection.deleteOne({ userID: userResponse._id });
+
+        const { token } = generateJWT(userResponse, siteData.key, false);
+
+        const newSession = {
+            userID: userResponse._id,
+            token,
+            login: true,
+            role: userResponse.role,
+            channel: 'line',
+            key: siteData.key,
+            createdAt: new Date(),
+        };
+
+        await sessionCollection.insertOne(newSession);
+
+        const welcomeMessage = `Welcome to ${siteData.siteName || 'our service'}!`;
+        await sendMessage(siteData.line.channel_access_token, userId, welcomeMessage);
+
+        // Return user data if found
+        res.status(200).json({
+            success: true,
+            token,
+            url_return: siteData.line?.url_liff || '/user/profile',
+            userData: {
+                username: userResponse.username,
+                email: userResponse.email,
+                role: userResponse.role,
+                status: userResponse.status || 'active',
+            },
+            message: 'Welcome message sent successfully.',
+        });
+    } catch (error) {
+        console.error('Error during login:', error.message);
+        res.status(500).json({ error: 'An error occurred during login.' });
+    }
+});
+
 // Endpoint to send custom messages
 router.post('/send-message', async (req, res) => {
     const { hostname, userId, messageText } = req.body;
