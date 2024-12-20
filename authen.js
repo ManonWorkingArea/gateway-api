@@ -44,13 +44,6 @@ function generateJWT(userResponse, key, rememberMe) {
   return { token, data };
 }
 
-/**
- * Helper function to get site-specific database, user collection, and site data
- * @param {Object} client - MongoDB client
- * @param {String} site - Site ID
- * @returns {Object} - { targetDb, userCollection, siteData }
- * @throws {Error} - If site is invalid or not found
- */
 async function getSiteSpecificDb(client, site) {
   // Connect to the 'API' database
   const apiDb = client.db('API');
@@ -118,9 +111,10 @@ const sendMessage = async (channelAccessToken, userId, messageText) => {
     throw error;
   }
 };
+
 // Endpoint to handle LINE login callback and send a welcome message
 router.post('/callback', async (req, res) => {
-    const { code, site, host } = req.body;
+    const { code, site } = req.body;
   
     try {
       // Validate input
@@ -133,33 +127,28 @@ router.post('/callback', async (req, res) => {
       const { siteData, userCollection } = await getSiteSpecificDb(client, site);
   
       // Exchange the authorization code for an access token
-      const tokenResponse = await fetch('https://api.line.me/oauth2/v2.1/token', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({
+      const tokenResponse = await axios.post(
+        'https://api.line.me/oauth2/v2.1/token',
+        new URLSearchParams({
           grant_type: 'authorization_code',
           code,
           redirect_uri: siteData.line.callback,
           client_id: siteData.line.client_id,
           client_secret: siteData.line.client_secret,
         }),
-      });
+        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+      );
   
-      const tokenData = await tokenResponse.json();
-  
-      if (!tokenResponse.ok) {
-        throw new Error(tokenData.error_description || 'Failed to exchange code for token');
-      }
+      const tokenData = tokenResponse.data;
   
       // Fetch user profile using the access token
-      const profileResponse = await fetch('https://api.line.me/v2/profile', {
+      const profileResponse = await axios.get('https://api.line.me/v2/profile', {
         headers: {
           Authorization: `Bearer ${tokenData.access_token}`,
         },
       });
-      const userData = await profileResponse.json();
+  
+      const userData = profileResponse.data;
   
       // Check if the user exists
       const existingUser = await userCollection.findOne({
@@ -231,11 +220,10 @@ router.post('/callback', async (req, res) => {
         message: 'Welcome message sent successfully.',
       });
     } catch (error) {
-      console.error('Error during LINE callback:', error);
+      console.error('Error during LINE callback:', error.response?.data || error.message);
       res.status(500).json({ error: 'An error occurred during LINE callback.' });
     }
   });
-  
   
 
 // Endpoint to send custom messages
