@@ -57,7 +57,7 @@ async function getSiteSpecificDb(client, site) {
   const siteCollection = apiDb.collection('hostname');
 
   // Fetch site data by site ID
-  const siteData = await siteCollection.findOne({ _id: safeObjectId(site) });
+  const siteData = await siteCollection.findOne({ hostname: site });
   if (!siteData) {
     throw new Error(`Invalid site ID. Site not found: ${site}`);
   }
@@ -130,7 +130,7 @@ router.post('/callback', async (req, res) => {
   
       // Get site-specific database, user collection, and site data
       const { client } = req; // MongoDB client from middleware
-      const { siteData, userCollection } = await getSiteSpecificDb(client, host);
+      const { siteData, userCollection } = await getSiteSpecificDb(client, site);
   
       // Exchange the authorization code for an access token
       const tokenResponse = await fetch('https://api.line.me/oauth2/v2.1/token', {
