@@ -85,25 +85,31 @@ router.post('/callback', async (req, res) => {
 
         const userData = profileResponse.data;
 
+        // Extract relevant data from the profile response
+        const { userId, displayName, pictureUrl, statusMessage } = userData;
+
+        // Check if the user exists in the database
         let userResponse = await userCollection.findOne({
             channel: 'line',
-            userId: userData.userId,
+            userId: userId,
         });
 
         if (!userResponse) {
+            // Register the user if they do not exist
             const newUser = {
-                firstname: userData.displayName || 'Unknown',
+                firstname: displayName || 'Unknown',
                 lastname: '',
                 email: null,
-                username: userData.userId,
+                username: userId,
                 phone: null,
                 password: null,
                 salt: null,
                 role: 'user',
-                avatar_img: userData.pictureUrl || null,
+                avatar_img: pictureUrl || null,
+                statusMessage: statusMessage || null, // Include the status message
                 status: 'active',
                 channel: 'line',
-                userId: userData.userId,
+                userId: userId,
                 parent: site,
                 createdAt: new Date(),
                 updatedAt: new Date(),
@@ -131,7 +137,7 @@ router.post('/callback', async (req, res) => {
         await sessionCollection.insertOne(newSession);
 
         const welcomeMessage = `Welcome to ${siteData.siteName || 'our service'}!`;
-        await sendMessage(siteData.line.channel_access_token, userData.userId, welcomeMessage);
+        await sendMessage(siteData.line.channel_access_token, userId, welcomeMessage);
 
         res.status(200).json({
             success: true,
