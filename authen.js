@@ -142,6 +142,7 @@ router.post('/callback', async (req, res) => {
         res.status(200).json({
             success: true,
             token,
+            url_return:siteData.line.url_return,
             userData: {
                 username: userResponse.username,
                 email: userResponse.email,
@@ -200,6 +201,7 @@ router.post('/login', async (req, res) => {
         res.status(200).json({
             success: true,
             token,
+            url_return:siteData.line.url_return,
             userData: {
                 username: userResponse.username,
                 email: userResponse.email,
