@@ -68,7 +68,6 @@ const getHostname = async (hostname) => {
     }
 };
 
-
 // New endpoint to fetch data from the 'category' collection
 router.post('/categories', async (req, res) => {
     const { site } = req.body;
@@ -90,12 +89,37 @@ router.post('/categories', async (req, res) => {
 
         // Access the 'category' collection
         const categoryCollection = targetDb.collection('category');
+        const courseCollection = targetDb.collection('course');
 
         // Query for all categories (main and subcategories)
         const allCategories = await categoryCollection
             .find({ unit: siteIdString })
             .project({ _id: 1, name: 1, code: 1, description: 1, type: 1, parent: 1 })
             .toArray();
+
+        // Query for course counts grouped by category codes
+        const courseCounts = await courseCollection
+            .aggregate([
+                { $match: { 
+                    unit: siteIdString,
+                    status: true, // Only include active courses
+                    },
+                }, // Match courses within the site
+                { $unwind: '$category' }, // Unwind category array for individual codes
+                {
+                    $group: {
+                        _id: '$category',
+                        count: { $sum: 1 }, // Count courses for each category code
+                    },
+                },
+            ])
+            .toArray();
+
+        // Create a mapping of category codes to counts
+        const courseCountMap = courseCounts.reduce((map, item) => {
+            map[item._id] = item.count;
+            return map;
+        }, {});
 
         // Convert all categories into a flat list with parent-child relationships
         const flatCategories = allCategories.map((category) => ({
@@ -104,6 +128,7 @@ router.post('/categories', async (req, res) => {
             code: category.code,
             type: category.type,
             parent: category.type === 'main' ? null : category.parent, // `null` for main categories, use `parent` for subcategories
+            count: courseCountMap[category.code] || 0, // Add course count (default to 0 if no courses found)
         }));
 
         res.status(200).json({
@@ -117,5 +142,6 @@ router.post('/categories', async (req, res) => {
         });
     }
 });
+
 
 module.exports = router;
