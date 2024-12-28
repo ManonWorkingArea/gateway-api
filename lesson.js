@@ -70,7 +70,7 @@ const getHostname = async (hostname) => {
 
 
 // New endpoint to fetch data from the 'category' collection
-router.get('/categories', async (req, res) => {
+router.post('/categories', async (req, res) => {
     const { site } = req.body;
 
     try {
