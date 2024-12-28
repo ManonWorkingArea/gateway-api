@@ -187,6 +187,7 @@ router.post('/course', async (req, res) => {
                 status: 1,
                 updatedAt: 1,
             })
+            .limit(10) // Limit to 10 results
             .toArray();
 
         res.status(200).json({
