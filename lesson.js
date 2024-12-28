@@ -67,8 +67,6 @@ const getHostname = async (hostname) => {
         await client.close();
     }
 };
-
-// New endpoint to fetch data from the 'category' collection
 router.post('/categories', async (req, res) => {
     const { site } = req.body;
 
@@ -100,9 +98,10 @@ router.post('/categories', async (req, res) => {
         // Query for course counts grouped by category codes
         const courseCounts = await courseCollection
             .aggregate([
-                { $match: { 
-                    unit: siteIdString,
-                    status: true, // Only include active courses
+                { 
+                    $match: { 
+                        unit: siteIdString,
+                        status: true, // Only include active courses
                     },
                 }, // Match courses within the site
                 { $unwind: '$category' }, // Unwind category array for individual codes
@@ -131,9 +130,37 @@ router.post('/categories', async (req, res) => {
             count: courseCountMap[category.code] || 0, // Add course count (default to 0 if no courses found)
         }));
 
+        // Function to build the nested structure
+        const buildNestedCategories = (categories) => {
+            const map = {};
+            const roots = [];
+
+            // Create a map of categories by ID
+            categories.forEach(category => {
+                map[category._id] = { ...category, children: [] };
+            });
+
+            // Assign children to their parent categories
+            categories.forEach(category => {
+                if (category.parent) {
+                    const parent = map[category.parent];
+                    if (parent) {
+                        parent.children.push(map[category._id]);
+                    }
+                } else {
+                    roots.push(map[category._id]);
+                }
+            });
+
+            return roots;
+        };
+
+        // Build the hierarchical structure
+        const nestedCategories = buildNestedCategories(flatCategories);
+
         res.status(200).json({
             success: true,
-            data: flatCategories,
+            data: nestedCategories,
         });
     } catch (error) {
         console.error('Error fetching categories:', error);
@@ -142,6 +169,7 @@ router.post('/categories', async (req, res) => {
         });
     }
 });
+
 
 // New endpoint to fetch courses
 router.post('/course', async (req, res) => {
