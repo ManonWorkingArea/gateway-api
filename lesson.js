@@ -143,5 +143,64 @@ router.post('/categories', async (req, res) => {
     }
 });
 
+// New endpoint to fetch courses
+router.post('/course', async (req, res) => {
+    const { site } = req.body;
+
+    try {
+        if (!site) {
+            return res.status(400).json({ error: 'Site parameter is required' });
+        }
+
+        const { client } = req;
+        const { targetDb, siteData } = await getSiteSpecificDb(client, site);
+
+        if (!siteData || !siteData._id) {
+            return res.status(404).json({ error: 'Site data not found or invalid.' });
+        }
+
+        const siteIdString = siteData._id.toString();
+
+        // Access the 'course' collection
+        const courseCollection = targetDb.collection('course');
+
+        // Query for all courses with relevant fields
+        const courses = await courseCollection
+            .find({ unit: siteIdString, status: true }) // Only active courses
+            .project({
+                _id: 1,
+                name: 1,
+                slug: 1,
+                lecturer: 1,
+                hours: 1,
+                days: 1,
+                category: 1,
+                type: 1,
+                mode: 1,
+                display: 1,
+                regular_price: 1,
+                sale_price: 1,
+                description: 1,
+                short_description: 1,
+                cover: 1,
+                lesson_type: 1,
+                status: 1,
+                updatedAt: 1,
+            })
+            .toArray();
+
+        res.status(200).json({
+            success: true,
+            data: courses,
+        });
+    } catch (error) {
+        console.error('Error fetching courses:', error);
+        res.status(500).json({
+            error: 'An error occurred while fetching courses.',
+        });
+    }
+});
+
+
 
 module.exports = router;
