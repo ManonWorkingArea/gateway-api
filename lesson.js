@@ -67,6 +67,7 @@ const getHostname = async (hostname) => {
         await client.close();
     }
 };
+
 router.post('/categories', async (req, res) => {
     const { site } = req.body;
 
@@ -170,10 +171,9 @@ router.post('/categories', async (req, res) => {
     }
 });
 
-
 // New endpoint to fetch courses
 router.post('/course', async (req, res) => {
-    const { site } = req.body;
+    const { site, page = 1, limit = 10, searchQuery = '', selectedCodes = [] } = req.body;
 
     try {
         if (!site) {
@@ -188,13 +188,30 @@ router.post('/course', async (req, res) => {
         }
 
         const siteIdString = siteData._id.toString();
-
-        // Access the 'course' collection
         const courseCollection = targetDb.collection('course');
 
-        // Query for all courses with relevant fields
-        const courses = await courseCollection
-            .find({ unit: siteIdString, status: true }) // Only active courses
+        // Build the query object dynamically
+        const query = { unit: siteIdString, status: true };
+
+        // Apply search filter on multiple fields
+        if (searchQuery) {
+            query.$or = [
+                { name: { $regex: searchQuery, $options: 'i' } },        // Search in `name`
+                { description: { $regex: searchQuery, $options: 'i' } }, // Search in `description`
+                { slug: { $regex: searchQuery, $options: 'i' } },        // Search in `slug`
+            ];
+        }
+
+        // Apply category filter
+        if (selectedCodes && selectedCodes.length > 0) {
+            query.category = { $in: selectedCodes }; // Use `query` instead of `filter`
+        }
+
+        console.log('Query:', JSON.stringify(query)); // Debug query object
+
+        // Fetch all matching courses
+        const allCourses = await courseCollection
+            .find(query)
             .project({
                 _id: 1,
                 name: 1,
@@ -217,15 +234,46 @@ router.post('/course', async (req, res) => {
             })
             .toArray();
 
+        // Calculate total items and pagination
+        const totalItems = allCourses.length;
+        const totalPages = Math.ceil(totalItems / limit);
+
+        console.log(`Total Items: ${totalItems}, Total Pages: ${totalPages}`);
+
+        // Correct slicing logic
+        const startIndex = (page - 1) * limit;
+        const endIndex = page * limit; // This ensures it gets the last item on the final page
+        const paginatedCourses = allCourses.slice(startIndex, Math.min(endIndex, totalItems));
+
+        console.log(`Start Index: ${startIndex}, End Index: ${endIndex}`);
+        // Handle cases where the requested page exceeds total pages
+        if (page > totalPages) {
+            return res.status(200).json({
+                success: true,
+                data: [],
+                meta: {
+                    totalItems,
+                    totalPages,
+                    currentPage: page,
+                    limit,
+                },
+            });
+        }
+
+        // Send response
         res.status(200).json({
             success: true,
-            data: courses,
+            data: paginatedCourses,
+            meta: {
+                totalItems,
+                totalPages,
+                currentPage: page,
+                limit,
+            },
         });
     } catch (error) {
-        console.error('Error fetching courses:', error);
-        res.status(500).json({
-            error: 'An error occurred while fetching courses.',
-        });
+        console.error('Error fetching courses:', error.message, error.stack);
+        res.status(500).json({ error: 'An error occurred while fetching courses.' });
     }
 });
 
