@@ -675,7 +675,7 @@ router.post('/course/:id/:playerID?', async (req, res) => {
                 isEnroll: !!enrollment,
             },
             playlist: syncedPlayersWithProgress,
-            stats: {
+            analytics: {
                 total: counts.total,
                 complete: counts.complete,
                 processing: counts.processing,
