@@ -643,6 +643,32 @@ router.post('/course/:id/:playerID?', async (req, res) => {
             ? ((counts.complete / counts.total) * 100).toFixed(2)
             : 0;
 
+
+        const findLatestUpdatedAt = (items) => {
+            let latestDate = null;
+        
+            const checkDate = (date) => {
+                const current = new Date(date);
+                if (!latestDate || current > new Date(latestDate)) {
+                    latestDate = date;
+                }
+            };
+        
+            const traverse = (list) => {
+                list.forEach((item) => {
+                    if (item.updatedAt) checkDate(item.updatedAt);
+                    if (item.progress?.updatedAt) checkDate(item.progress.updatedAt);
+                    if (item.child && item.child.length > 0) traverse(item.child);
+                });
+            };
+        
+            traverse(items);
+            return latestDate;
+        };
+        
+        // Example usage
+        const latestUpdatedAt = findLatestUpdatedAt(syncedPlayersWithProgress);
+
         // Fetch enrollment status
         const enrollment = user
             ? await enrollCollection.findOne({ courseID: course._id.toString(), userID: user })
@@ -671,6 +697,7 @@ router.post('/course/:id/:playerID?', async (req, res) => {
                     mode: course.mode,
                     status: course.status,
                     updatedAt: course.updatedAt,
+                    playlistUpdatedAt: latestUpdatedAt,
                 },
                 isEnroll: !!enrollment,
             },
