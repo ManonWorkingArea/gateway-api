@@ -392,7 +392,8 @@ router.post('/course/:id/:playerID?', async (req, res) => {
                             duration: 1,
                             createdAt: 1,
                             updatedAt: 1,
-                            demo: 1
+                            demo: 1,
+                            mode: 1
                         })
                         .toArray();
 
