@@ -676,10 +676,10 @@ router.post('/course/:id/:playerID?', async (req, res) => {
             },
             playlist: syncedPlayersWithProgress,
             stats: {
-                totalItems: counts.total,
-                completeItems: counts.complete,
-                processingItems: counts.processing,
-                completePercent: counts.completePercent,
+                total: counts.total,
+                complete: counts.complete,
+                processing: counts.processing,
+                percent: counts.percent,
             },
             ...(enrollment && { enrollment }), // Add enrollment if present
             ...(player && { player }), // Add specific player data if present
