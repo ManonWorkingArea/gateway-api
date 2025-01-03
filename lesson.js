@@ -679,7 +679,7 @@ router.post('/course/:id/:playerID?', async (req, res) => {
                 total: counts.total,
                 complete: counts.complete,
                 processing: counts.processing,
-                percent: counts.percent,
+                percent: counts.completePercent,
             },
             ...(enrollment && { enrollment }), // Add enrollment if present
             ...(player && { player }), // Add specific player data if present
