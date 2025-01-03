@@ -641,6 +641,7 @@ router.post('/course/:id/:playerID?', async (req, res) => {
                     sale: course.sale_price,
                 },
                 meta: {
+                    display: course.display,
                     type: course.type,
                     mode: course.mode,
                     status: course.status,
