@@ -618,6 +618,31 @@ router.post('/course/:id/:playerID?', async (req, res) => {
         // Use the syncIsPlay function after assigning isPlay values
         const syncedPlayersWithProgress = syncIsPlay(playersWithProgress, updatedPlayersWithPlay);
 
+         // Function to calculate counts and percentages
+         const calculateCounts = (items) =>
+            items.reduce(
+                (acc, item) => {
+                    if (item.type === 'folder' && item.child) {
+                        const childCounts = calculateCounts(item.child);
+                        acc.total += childCounts.total;
+                        acc.complete += childCounts.complete;
+                        acc.processing += childCounts.processing;
+                    } else if (item.type !== 'folder') {
+                        acc.total += 1;
+                        if (item.progress?.status === 'complete') acc.complete += 1;
+                        if (item.progress?.status === 'processing') acc.processing += 1;
+                    }
+                    return acc;
+                },
+                { total: 0, complete: 0, processing: 0 }
+            );
+
+        // Calculate counts from syncedPlayersWithProgress
+        const counts = calculateCounts(syncedPlayersWithProgress);
+        counts.completePercent = counts.total > 0
+            ? ((counts.complete / counts.total) * 100).toFixed(2)
+            : 0;
+
         // Fetch enrollment status
         const enrollment = user
             ? await enrollCollection.findOne({ courseID: course._id.toString(), userID: user })
@@ -650,6 +675,12 @@ router.post('/course/:id/:playerID?', async (req, res) => {
                 isEnroll: !!enrollment,
             },
             playlist: syncedPlayersWithProgress,
+            stats: {
+                totalItems: counts.total,
+                completeItems: counts.complete,
+                processingItems: counts.processing,
+                completePercent: counts.completePercent,
+            },
             ...(enrollment && { enrollment }), // Add enrollment if present
             ...(player && { player }), // Add specific player data if present
         };
