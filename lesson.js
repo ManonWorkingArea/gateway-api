@@ -6,11 +6,14 @@ const { crossOriginResourcePolicy } = require('helmet');
 const CryptoJS = require('crypto-js');
 const router = express.Router();
 
+
 // Secret key for signing JWT (Use environment variables for security)
 const JWT_SECRET = 'ZCOKU1v3TO2flcOqCdrJ3vWbWhmnZNQn';
 
+
 // Middleware to authenticate client
 router.use(authenticateClient);
+
 
 // Function to verify token
 function verifyToken(token) {
