@@ -22,6 +22,9 @@ const verifySlipRouter = require('./routes/verifySlip');
 const authenRouter    = require('./authen');  // Import the auth router
 const lessonRouter    = require('./lesson');  // Import the auth router
 
+const messageRouter    = require('./message');  // Import the auth router
+
+
 dotenv.config();
 
 const app = express();
@@ -79,6 +82,7 @@ async function initializeApp() {
     app.use('/ai', aiRouter); // Add the /ai route
     app.use('/authen', authenRouter); // Add the /ai route
     app.use('/lesson', lessonRouter); // Add the /ai route
+    app.use('/message', messageRouter); // Add the /ai route
 
     server.listen(process.env.PORT, () => {
       console.log(`Server is running on port ${process.env.PORT}`);
