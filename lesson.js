@@ -6,14 +6,11 @@ const { crossOriginResourcePolicy } = require('helmet');
 const CryptoJS = require('crypto-js');
 const router = express.Router();
 
-
 // Secret key for signing JWT (Use environment variables for security)
 const JWT_SECRET = 'ZCOKU1v3TO2flcOqCdrJ3vWbWhmnZNQn';
 
-
 // Middleware to authenticate client
 router.use(authenticateClient);
-
 
 // Function to verify token
 function verifyToken(token) {
@@ -27,17 +24,22 @@ function verifyToken(token) {
     });
 }
 
-// Function to generate JWT with adjustable expiration time
-function generateJWT(userResponse, key, rememberMe) {
-    const expiration = rememberMe ? '30d' : '24h'; // 30 days or 1 day
-    const data = {
-        user: userResponse._id,
-        role: userResponse.role,
-        site: key,
-    };
+// Middleware to authenticate user and return user ID
+async function authenticateUserToken(authen, res) {
+    if (!authen) {
+        return { status: false, response: res.status(401).json({ status: false, message: 'Authentication token is required.' }) };
+    }
 
-    const token = jwt.sign(data, JWT_SECRET, { expiresIn: expiration });
-    return { token, data };
+    try {
+        const decodedToken = await verifyToken(authen.replace('Bearer ', ''));
+        if (!decodedToken.status) {
+            return { status: false, response: res.status(401).json({ status: false, message: 'Invalid or expired token.' }) };
+        }
+        return { status: true, user: decodedToken.decoded.user };
+    } catch (error) {
+        console.warn('Token verification failed:', error.message);
+        return { status: false, response: res.status(401).json({ status: false, message: 'Invalid or expired token.' }) };
+    }
 }
 
 // Function to get site-specific database and collection
@@ -55,20 +57,174 @@ async function getSiteSpecificDb(client, site) {
     return { targetDb, userCollection, siteData };
 }
 
-// Function to retrieve hostname data
-const getHostname = async (hostname) => {
-    const client = new MongoClient(process.env.MONGODB_URI, {
-        useNewUrlParser: true,
-        useUnifiedTopology: true,
-    });
+// Define your secret key
+const SALT_KEY = '4KLj7y[Am@/}+J{C1S`k*>qts81HV[>>Q|Qk8*gwv./ij#R.%q=gb<TMh>d*Kn-:';
 
+// Decrypt function
+const decrypt = (encryptedText) => {
+  try {
+    const bytes = CryptoJS.AES.decrypt(encryptedText, SALT_KEY);
+    return JSON.parse(bytes.toString(CryptoJS.enc.Utf8)); // Parse decrypted JSON
+  } catch (error) {
+    throw new Error('Decryption failed'); // Handle decryption errors
+  }
+};
+
+const getDbCollections = async (client, site, collections) => {
+    const db = client.db((await client.db('API').collection('hostname').findOne({ hostname: site })).key);
+    return collections.reduce((acc, col) => (acc[col] = db.collection(col), acc), {});
+};
+
+const handleResponse = (res, promise) => {
+    promise
+        .then(data => res.status(200).json({ success: true, data }))
+        .catch(err => res.status(500).json({ success: false, message: err.message }));
+};
+
+const getAnalytics = async (targetDb, courseId, userId) => {
+    // Fetch the course
+    const course = await targetDb.collection('course').findOne({ _id: safeObjectId(courseId) });
+    if (!course) {
+        throw new Error('Course not found');
+    }
+
+    // Fetch all players associated with the course
+    const coursePlayers = await targetDb.collection('player')
+        .find({ courseId: course.master })
+        .toArray();
+
+    // Fetch progress data for the user and course
+    const playerIds = coursePlayers.map((player) => player._id.toString());
+    const progressData = await targetDb.collection('progress')
+        .find({
+            courseID: course._id.toString(),
+            playerID: { $in: playerIds },
+            userID: userId,
+        })
+        .toArray();
+
+    // Map progress data to players
+    const mapProgressToPlayers = (players, progressData) => {
+        return players.map((player) => {
+            const playerProgress = progressData.find((p) => p.playerID === player._id.toString());
+            return {
+                ...player,
+                isProgress: !!playerProgress,
+                progress: playerProgress
+                    ? {
+                        progress: playerProgress.progress,
+                        lastplay: playerProgress.lastplay,
+                        status: playerProgress.status,
+                        updatedAt: playerProgress.updatedAt,
+                    }
+                    : null,
+            };
+        });
+    };
+
+    const playersWithProgress = mapProgressToPlayers(coursePlayers, progressData);
+
+    // Calculate counts and percentages
+    const calculateCounts = (items) =>
+        items.reduce(
+            (acc, item) => {
+                if (item.type === 'folder' && item.child) {
+                    const childCounts = calculateCounts(item.child);
+                    acc.total += childCounts.total;
+                    acc.complete += childCounts.complete;
+                    acc.processing += childCounts.processing;
+                } else if (item.type !== 'folder') {
+                    acc.total += 1;
+                    // Include both "complete" and "revising" statuses in the complete count
+                    if (item.progress?.status === 'complete' || item.progress?.status === 'revising') {
+                        acc.complete += 1;
+                    }
+                    if (item.progress?.status === 'processing') {
+                        acc.processing += 1;
+                    }
+                }
+                return acc;
+            },
+            { total: 0, complete: 0, processing: 0 }
+        );
+
+    const counts = calculateCounts(playersWithProgress);
+    counts.completePercent = counts.total > 0
+        ? ((counts.complete / counts.total) * 100).toFixed(2)
+        : 0;
+
+    const analytics = {
+        total: counts.total,
+        complete: counts.complete,
+        processing: counts.processing,
+        percent: counts.completePercent,
+    };
+
+    // Pass analytics to updateEnrollAnalytics
+    await updateEnrollAnalytics(targetDb, courseId, userId, analytics);
+
+    return { analytics };
+};
+
+const updateEnrollAnalytics = async (targetDb, courseId, userId, analytics) => {
     try {
-        await client.connect();
-        const db = client.db('API');
-        const clientsCollection = db.collection('hostname');
-        return await clientsCollection.findOne({ hostname });
-    } finally {
-        await client.close();
+        console.log("Analytics Data:", analytics);
+
+        // Fetch the enrollment document for the user and course
+        const enrollment = await targetDb.collection('enroll').findOne({ courseID: courseId, userID: userId });
+        if (!enrollment) {
+            throw new Error('Enrollment not found for the specified course and user.');
+        }
+
+        // Adjust `complete` count to include `revising` as a valid completion level
+        const adjustedComplete = analytics.complete;
+
+        // Map the analytics data to the enrollment format
+        const updatedAnalytics = {
+            total: analytics.total,
+            pending: analytics.total - (analytics.processing + adjustedComplete),
+            processing: analytics.processing,
+            complete: adjustedComplete,
+            percent: analytics.percent,
+            status: adjustedComplete === analytics.total
+                ? 'complete'
+                : analytics.processing > 0
+                ? 'processing'
+                : adjustedComplete > 0
+                ? 'revising'
+                : 'pending', // Treat `revising` as intermediate if progress exists
+            message: adjustedComplete === analytics.total
+                ? 'คุณได้เรียนครบทุกบทเรียนเรียบร้อยแล้ว'
+                : analytics.processing > 0
+                ? 'คุณกำลังอยู่ระหว่างการเรียน'
+                : adjustedComplete > 0
+                ? 'คุณกำลังอยู่ระหว่างการทบทวนบทเรียน'
+                : 'คุณยังไม่ได้เริ่มต้นการเรียน', // Update message for 'revising'
+        };
+
+        console.log("Enrollment ID:", enrollment._id);
+
+        // Update the enrollment document with the new analytics
+        const result = await targetDb.collection('enroll').updateOne(
+            { _id: enrollment._id },
+            {
+                $set: {
+                    'analytics.total': updatedAnalytics.total,
+                    'analytics.pending': updatedAnalytics.pending,
+                    'analytics.processing': updatedAnalytics.processing,
+                    'analytics.complete': updatedAnalytics.complete,
+                    'analytics.percent': updatedAnalytics.percent,
+                    'analytics.status': updatedAnalytics.status,
+                    'analytics.message': updatedAnalytics.message,
+                    updatedAt: new Date(),
+                },
+            }
+        );
+
+        return result.modifiedCount > 0;
+    } catch (error) {
+        console.error("Error updating enrollment analytics:", error.message);
+        throw error;
     }
 };
 
@@ -76,9 +232,7 @@ router.post('/categories', async (req, res) => {
     const { site } = req.body;
 
     try {
-        if (!site) {
-            return res.status(400).json({ error: 'Site parameter is required' });
-        }
+        if (!site) {return res.status(400).json({ error: 'Site parameter is required' });}
 
         const { client } = req;
         const { targetDb, siteData } = await getSiteSpecificDb(client, site);
@@ -91,17 +245,16 @@ router.post('/categories', async (req, res) => {
         const siteIdString = siteData._id.toString();
 
         // Access the 'category' collection
-        const categoryCollection = targetDb.collection('category');
-        const courseCollection = targetDb.collection('course');
+        const { category, course } = await getDbCollections(client, site, ['category', 'course']);
 
         // Query for all categories (main and subcategories)
-        const allCategories = await categoryCollection
+        const allCategories = await category
             .find({ unit: siteIdString })
             .project({ _id: 1, name: 1, code: 1, description: 1, type: 1, parent: 1 })
             .toArray();
 
         // Query for course counts grouped by category codes
-        const courseCounts = await courseCollection
+        const courseCounts = await course
             .aggregate([
                 { 
                     $match: { 
@@ -192,7 +345,7 @@ router.post('/course', async (req, res) => {
         }
 
         const siteIdString = siteData._id.toString();
-        const courseCollection = targetDb.collection('course');
+        const { course } = await getDbCollections(client, site, ['course']);
 
         // Build the query object dynamically
         const query = { unit: siteIdString, status: true };
@@ -211,10 +364,8 @@ router.post('/course', async (req, res) => {
             query.category = { $in: selectedCodes }; // Use `query` instead of `filter`
         }
 
-        //console.log('Query:', JSON.stringify(query)); // Debug query object
-
         // Fetch all matching courses
-        const allCourses = await courseCollection
+        const allCourses = await course
             .find(query)
             .project({
                 _id: 1,
@@ -241,8 +392,6 @@ router.post('/course', async (req, res) => {
         // Calculate total items and pagination
         const totalItems = allCourses.length;
         const totalPages = Math.ceil(totalItems / limit);
-
-        //console.log(`Total Items: ${totalItems}, Total Pages: ${totalPages}`);
 
         // Correct slicing logic
         const startIndex = (page - 1) * limit;
@@ -286,21 +435,10 @@ router.post('/course/:id/:playerID?', async (req, res) => {
     const { id, playerID } = req.params;
     const { site, authen } = req.body;
 
-    let user = null;
-
-    // Authenticate user
-    if (authen) {
-        try {
-            const decodedToken = await verifyToken(authen.replace('Bearer ', ''));
-            if (!decodedToken.status) {
-                return res.status(401).json({ status: false, message: 'Invalid or expired token' });
-            }
-            user = decodedToken.decoded.user;
-        } catch (error) {
-            console.warn('Token verification failed:', error.message);
-            return res.status(401).json({ status: false, message: 'Invalid or expired token' });
-        }
-    }
+    // Authen User Middleware
+    const authResult = await authenticateUserToken(authen, res);
+    if (!authResult.status) return authResult.response;
+    const user = authResult.user;
 
     try {
         const courseId = safeObjectId(id);
@@ -324,6 +462,7 @@ router.post('/course/:id/:playerID?', async (req, res) => {
         const playerCollection = targetDb.collection('player');
         const progressCollection = targetDb.collection('progress');
         const enrollCollection = targetDb.collection('enroll');
+        const surveySubmissionCollection = targetDb.collection('survey_submission');
 
         // Fetch course details
         const course = await courseCollection.findOne({ _id: courseId, unit: siteIdString });
@@ -763,7 +902,20 @@ router.post('/course/:id/:playerID?', async (req, res) => {
         if (course.survey === 'yes' && course.surveyId) {
             surveyData = await surveyCollection.findOne({ _id: safeObjectId(course.surveyId) });
         }
-        
+
+        // Fetch user survey submission
+        const surveySubmission = await surveySubmissionCollection.findOne({
+            userId: user,
+            courseId: courseId.toString(),
+            surveyId: course.surveyId
+        });
+
+        // Merge survey data with submission status
+        if (surveySubmission) {
+            surveyData = { ...surveySubmission.survey, isSubmit: true };
+        } else if (surveyData) {
+            surveyData.isSubmit = false;
+        }
 
         // Format response
         const formattedResponse = {
@@ -800,7 +952,8 @@ router.post('/course/:id/:playerID?', async (req, res) => {
                     updatedAt: course.updatedAt,
                     playlistUpdatedAt: latestUpdatedAt,
                 },
-                isEnroll: !!enrollment,
+                isEnroll: !! enrollment,
+                isSurvey: !! surveyData,
                 isComplete,
             },
             playlist: syncedPlayersWithProgress,
@@ -827,7 +980,8 @@ router.post('/course/:id/:playerID?', async (req, res) => {
                 score: surveyData.score,
                 labels: surveyData.label,
                 createdAt: surveyData.createdAt,
-                updatedAt: surveyData.updatedAt
+                updatedAt: surveyData.updatedAt,
+                isSubmit: surveyData.isSubmit
             }
             : {
                 has: course.survey,
@@ -850,21 +1004,10 @@ router.post('/assessment/:id/:exam?', async (req, res) => {
     const { id, exam } = req.params;
     const { site, authen } = req.body;
 
-    let user = null;
-
-    // Authenticate user
-    if (authen) {
-        try {
-            const decodedToken = await verifyToken(authen.replace('Bearer ', ''));
-            if (!decodedToken.status) {
-                return res.status(401).json({ status: false, message: 'Invalid or expired token' });
-            }
-            user = decodedToken.decoded.user;
-        } catch (error) {
-            console.warn('Token verification failed:', error.message);
-            return res.status(401).json({ status: false, message: 'Invalid or expired token' });
-        }
-    }
+    // Authen User Middleware
+    const authResult = await authenticateUserToken(authen, res);
+    if (!authResult.status) return authResult.response;
+    const user = authResult.user;
 
     try {
         const courseId = safeObjectId(id);
@@ -1055,23 +1198,10 @@ router.post('/score/submit', async (req, res) => {
         const decryptedData = decrypt(req.body.data);
         const { site, examID, courseID, score, remark, startTime, submitTime, answer, authen, status } = decryptedData;
 
-        let user = null;
-
-        console.log("decryptedData",decryptedData)
-
-        // Authenticate user
-        if (authen) {
-            try {
-                const decodedToken = await verifyToken(authen.replace('Bearer ', ''));
-                if (!decodedToken.status) {
-                    return res.status(401).json({ status: false, message: 'Invalid or expired token' });
-                }
-                user = decodedToken.decoded.user; // Extract user ID from token
-            } catch (error) {
-                console.warn('Token verification failed:', error.message);
-                return res.status(401).json({ status: false, message: 'Invalid or expired token' });
-            }
-        }
+        // Authen User Middleware
+        const authResult = await authenticateUserToken(authen, res);
+        if (!authResult.status) return authResult.response;
+        const user = authResult.user;
 
         if (!user) {
             return res.status(401).json({ error: 'User authentication failed. Token is required.' });
@@ -1136,21 +1266,10 @@ router.post('/score/status', async (req, res) => {
         // Extract properties from the decrypted data
         const { site, scoreID, newStatus, authen } = decryptedData;
 
-        let user = null;
-
-        // Authenticate user
-        if (authen) {
-            try {
-                const decodedToken = await verifyToken(authen.replace('Bearer ', ''));
-                if (!decodedToken.status) {
-                    return res.status(401).json({ status: false, message: 'Invalid or expired token' });
-                }
-                user = decodedToken.decoded.user; // Extract user ID from token
-            } catch (error) {
-                console.warn('Token verification failed:', error.message);
-                return res.status(401).json({ status: false, message: 'Invalid or expired token' });
-            }
-        }
+        // Authen User Middleware
+        const authResult = await authenticateUserToken(authen, res);
+        if (!authResult.status) return authResult.response;
+        const user = authResult.user;
 
         if (!user) {
             return res.status(401).json({ error: 'User authentication failed. Token is required.' });
@@ -1189,167 +1308,6 @@ router.post('/score/status', async (req, res) => {
     }
 });
 
-// Define your secret key
-const SALT_KEY = '4KLj7y[Am@/}+J{C1S`k*>qts81HV[>>Q|Qk8*gwv./ij#R.%q=gb<TMh>d*Kn-:';
-
-// Decrypt function
-const decrypt = (encryptedText) => {
-  try {
-    const bytes = CryptoJS.AES.decrypt(encryptedText, SALT_KEY);
-    return JSON.parse(bytes.toString(CryptoJS.enc.Utf8)); // Parse decrypted JSON
-  } catch (error) {
-    throw new Error('Decryption failed'); // Handle decryption errors
-  }
-};
-
-const getAnalytics = async (targetDb, courseId, userId) => {
-    // Fetch the course
-    const course = await targetDb.collection('course').findOne({ _id: safeObjectId(courseId) });
-    if (!course) {
-        throw new Error('Course not found');
-    }
-
-    // Fetch all players associated with the course
-    const coursePlayers = await targetDb.collection('player')
-        .find({ courseId: course.master })
-        .toArray();
-
-    // Fetch progress data for the user and course
-    const playerIds = coursePlayers.map((player) => player._id.toString());
-    const progressData = await targetDb.collection('progress')
-        .find({
-            courseID: course._id.toString(),
-            playerID: { $in: playerIds },
-            userID: userId,
-        })
-        .toArray();
-
-    // Map progress data to players
-    const mapProgressToPlayers = (players, progressData) => {
-        return players.map((player) => {
-            const playerProgress = progressData.find((p) => p.playerID === player._id.toString());
-            return {
-                ...player,
-                isProgress: !!playerProgress,
-                progress: playerProgress
-                    ? {
-                        progress: playerProgress.progress,
-                        lastplay: playerProgress.lastplay,
-                        status: playerProgress.status,
-                        updatedAt: playerProgress.updatedAt,
-                    }
-                    : null,
-            };
-        });
-    };
-
-    const playersWithProgress = mapProgressToPlayers(coursePlayers, progressData);
-
-    // Calculate counts and percentages
-    const calculateCounts = (items) =>
-        items.reduce(
-            (acc, item) => {
-                if (item.type === 'folder' && item.child) {
-                    const childCounts = calculateCounts(item.child);
-                    acc.total += childCounts.total;
-                    acc.complete += childCounts.complete;
-                    acc.processing += childCounts.processing;
-                } else if (item.type !== 'folder') {
-                    acc.total += 1;
-                    // Include both "complete" and "revising" statuses in the complete count
-                    if (item.progress?.status === 'complete' || item.progress?.status === 'revising') {
-                        acc.complete += 1;
-                    }
-                    if (item.progress?.status === 'processing') {
-                        acc.processing += 1;
-                    }
-                }
-                return acc;
-            },
-            { total: 0, complete: 0, processing: 0 }
-        );
-
-    const counts = calculateCounts(playersWithProgress);
-    counts.completePercent = counts.total > 0
-        ? ((counts.complete / counts.total) * 100).toFixed(2)
-        : 0;
-
-    const analytics = {
-        total: counts.total,
-        complete: counts.complete,
-        processing: counts.processing,
-        percent: counts.completePercent,
-    };
-
-    // Pass analytics to updateEnrollAnalytics
-    await updateEnrollAnalytics(targetDb, courseId, userId, analytics);
-
-    return { analytics };
-};
-
-const updateEnrollAnalytics = async (targetDb, courseId, userId, analytics) => {
-    try {
-        console.log("Analytics Data:", analytics);
-
-        // Fetch the enrollment document for the user and course
-        const enrollment = await targetDb.collection('enroll').findOne({ courseID: courseId, userID: userId });
-        if (!enrollment) {
-            throw new Error('Enrollment not found for the specified course and user.');
-        }
-
-        // Adjust `complete` count to include `revising` as a valid completion level
-        const adjustedComplete = analytics.complete;
-
-        // Map the analytics data to the enrollment format
-        const updatedAnalytics = {
-            total: analytics.total,
-            pending: analytics.total - (analytics.processing + adjustedComplete),
-            processing: analytics.processing,
-            complete: adjustedComplete,
-            percent: analytics.percent,
-            status: adjustedComplete === analytics.total
-                ? 'complete'
-                : analytics.processing > 0
-                ? 'processing'
-                : adjustedComplete > 0
-                ? 'revising'
-                : 'pending', // Treat `revising` as intermediate if progress exists
-            message: adjustedComplete === analytics.total
-                ? 'คุณได้เรียนครบทุกบทเรียนเรียบร้อยแล้ว'
-                : analytics.processing > 0
-                ? 'คุณกำลังอยู่ระหว่างการเรียน'
-                : adjustedComplete > 0
-                ? 'คุณกำลังอยู่ระหว่างการทบทวนบทเรียน'
-                : 'คุณยังไม่ได้เริ่มต้นการเรียน', // Update message for 'revising'
-        };
-
-        console.log("Enrollment ID:", enrollment._id);
-
-        // Update the enrollment document with the new analytics
-        const result = await targetDb.collection('enroll').updateOne(
-            { _id: enrollment._id },
-            {
-                $set: {
-                    'analytics.total': updatedAnalytics.total,
-                    'analytics.pending': updatedAnalytics.pending,
-                    'analytics.processing': updatedAnalytics.processing,
-                    'analytics.complete': updatedAnalytics.complete,
-                    'analytics.percent': updatedAnalytics.percent,
-                    'analytics.status': updatedAnalytics.status,
-                    'analytics.message': updatedAnalytics.message,
-                    updatedAt: new Date(),
-                },
-            }
-        );
-
-        return result.modifiedCount > 0;
-    } catch (error) {
-        console.error("Error updating enrollment analytics:", error.message);
-        throw error;
-    }
-};
-
-
 router.post('/progress/:option', async (req, res) => {
     
     const { option } = req.params; // Extract the option from the URL
@@ -1361,21 +1319,10 @@ router.post('/progress/:option', async (req, res) => {
     // Extract properties from the decrypted data
     const { site, courseID, playerID, progressID, progress, lastplay, status, authen } = decryptedData;
 
-    let user = null;
-
-    // Authenticate user
-    if (authen) {
-        try {
-            const decodedToken = await verifyToken(authen.replace('Bearer ', ''));
-            if (!decodedToken.status) {
-                return res.status(401).json({ status: false, message: 'Invalid or expired token' });
-            }
-            user = decodedToken.decoded.user; // Extract user ID from token
-        } catch (error) {
-            console.warn('Token verification failed:', error.message);
-            return res.status(401).json({ status: false, message: 'Invalid or expired token' });
-        }
-    }
+    // Authen User Middleware
+    const authResult = await authenticateUserToken(authen, res);
+    if (!authResult.status) return authResult.response;
+    const user = authResult.user;
 
     if (!user) {
         return res.status(401).json({ error: 'User authentication failed. Token is required.' });
@@ -1550,7 +1497,6 @@ router.post('/progress/:option', async (req, res) => {
     }
 });
 
-
 router.post('/is_enroll', async (req, res) => {
     try {
         // Decrypt the data from the request body
@@ -1560,21 +1506,10 @@ router.post('/is_enroll', async (req, res) => {
         // Extract properties from the decrypted data
         const { site, courseID, authen } = decryptedData;
 
-        let user = null;
-
-        // Authenticate user
-        if (authen) {
-            try {
-                const decodedToken = await verifyToken(authen.replace('Bearer ', ''));
-                if (!decodedToken.status) {
-                    return res.status(401).json({ status: false, message: 'Invalid or expired token' });
-                }
-                user = decodedToken.decoded.user; // Extract user ID from token
-            } catch (error) {
-                console.warn('Token verification failed:', error.message);
-                return res.status(401).json({ status: false, message: 'Invalid or expired token' });
-            }
-        }
+        // Authen User Middleware
+        const authResult = await authenticateUserToken(authen, res);
+        if (!authResult.status) return authResult.response;
+        const user = authResult.user;
 
         if (!user) {
             return res.status(401).json({ error: 'User authentication failed. Token is required.' });
@@ -1622,21 +1557,10 @@ router.post('/assign', async (req, res) => {
         // Extract properties from the decrypted data
         const { site, courseID, authen } = decryptedData;
 
-        let user = null;
-
-        // Authenticate user
-        if (authen) {
-            try {
-                const decodedToken = await verifyToken(authen.replace('Bearer ', ''));
-                if (!decodedToken.status) {
-                    return res.status(401).json({ status: false, message: 'Invalid or expired token' });
-                }
-                user = decodedToken.decoded.user; // Extract user ID from token
-            } catch (error) {
-                console.warn('Token verification failed:', error.message);
-                return res.status(401).json({ status: false, message: 'Invalid or expired token' });
-            }
-        }
+        // Authen User Middleware
+        const authResult = await authenticateUserToken(authen, res);
+        if (!authResult.status) return authResult.response;
+        const user = authResult.user;
 
         if (!user) {
             return res.status(401).json({ error: 'User authentication failed. Token is required.' });
@@ -1738,21 +1662,10 @@ router.post('/enroll', async (req, res) => {
         // Extract properties from the decrypted data
         const { site, authen } = decryptedData;
 
-        let user = null;
-
-        // Authenticate user
-        if (authen) {
-            try {
-                const decodedToken = await verifyToken(authen.replace('Bearer ', ''));
-                if (!decodedToken.status) {
-                    return res.status(401).json({ status: false, message: 'Invalid or expired token' });
-                }
-                user = decodedToken.decoded.user; // Extract user ID from token
-            } catch (error) {
-                console.warn('Token verification failed:', error.message);
-                return res.status(401).json({ status: false, message: 'Invalid or expired token' });
-            }
-        }
+        // Authen User Middleware
+        const authResult = await authenticateUserToken(authen, res);
+        if (!authResult.status) return authResult.response;
+        const user = authResult.user;
 
         if (!user) {
             return res.status(401).json({ error: 'User authentication failed. Token is required.' });
@@ -1833,21 +1746,10 @@ router.post('/transaction', async (req, res) => {
         // Extract properties from the decrypted data
         const { site, authen } = decryptedData;
 
-        let user = null;
-
-        // Authenticate user
-        if (authen) {
-            try {
-                const decodedToken = await verifyToken(authen.replace('Bearer ', ''));
-                if (!decodedToken.status) {
-                    return res.status(401).json({ status: false, message: 'Invalid or expired token' });
-                }
-                user = decodedToken.decoded.user; // Extract user ID from token
-            } catch (error) {
-                console.warn('Token verification failed:', error.message);
-                return res.status(401).json({ status: false, message: 'Invalid or expired token' });
-            }
-        }
+        // Authen User Middleware
+        const authResult = await authenticateUserToken(authen, res);
+        if (!authResult.status) return authResult.response;
+        const user = authResult.user;
 
         if (!user) {
             return res.status(401).json({ error: 'User authentication failed. Token is required.' });
@@ -1926,27 +1828,15 @@ router.post('/transaction', async (req, res) => {
     }
 });
 
-
 // New endpoint to fetch or create certification details
 router.post('/certification/:id', async (req, res) => {
     const { id } = req.params;
     const { site, authen } = req.body;
 
-    let user = null;
-
-    // Authenticate user
-    if (authen) {
-        try {
-            const decodedToken = await verifyToken(authen.replace('Bearer ', ''));
-            if (!decodedToken.status) {
-                return res.status(401).json({ status: false, message: 'Invalid or expired token' });
-            }
-            user = decodedToken.decoded.user;
-        } catch (error) {
-            console.warn('Token verification failed:', error.message);
-            return res.status(401).json({ status: false, message: 'Invalid or expired token' });
-        }
-    }
+    // Authen User Middleware
+    const authResult = await authenticateUserToken(authen, res);
+    if (!authResult.status) return authResult.response;
+    const user = authResult.user;
 
     try {
         const courseId = safeObjectId(id);
@@ -2138,17 +2028,17 @@ router.post('/certification/public/:id', async (req, res) => {
                 createdAt: certification.createdAt,
             },
             template: certificationTemplate
-                ? {
-                    id: certificationTemplate._id,
-                    name: certificationTemplate.name,
-                    description: certificationTemplate.description,
-                    pages: certificationTemplate.pages,
-                    meta: {
-                        createdAt: certificationTemplate.createdAt,
-                        updatedAt: certificationTemplate.updatedAt,
-                    },
-                }
-                : null,
+            ? {
+                id: certificationTemplate._id,
+                name: certificationTemplate.name,
+                description: certificationTemplate.description,
+                pages: certificationTemplate.pages,
+                meta: {
+                    createdAt: certificationTemplate.createdAt,
+                    updatedAt: certificationTemplate.updatedAt,
+                },
+            }
+            : null,
         };
 
         res.status(200).json(formattedResponse);
@@ -2158,28 +2048,16 @@ router.post('/certification/public/:id', async (req, res) => {
     }
 });
 
-
 router.post('/survey/submit', async (req, res) => {
     try {
         // Decrypt the incoming data
         const decryptedData = decrypt(req.body.data);
         const { site, courseId, surveyId, survey, authen } = decryptedData;
 
-        let user = null;
-
-        // Authenticate user
-        if (authen) {
-            try {
-                const decodedToken = await verifyToken(authen.replace('Bearer ', ''));
-                if (!decodedToken.status) {
-                    return res.status(401).json({ status: false, message: 'Invalid or expired token' });
-                }
-                user = decodedToken.decoded.user; // Extract user ID from token
-            } catch (error) {
-                console.warn('Token verification failed:', error.message);
-                return res.status(401).json({ status: false, message: 'Invalid or expired token' });
-            }
-        }
+        // Authen User Middleware
+        const authResult = await authenticateUserToken(authen, res);
+        if (!authResult.status) return authResult.response;
+        const user = authResult.user;
 
         // Validate required fields
         if (!site || !courseId || !surveyId || !survey) {
@@ -2193,7 +2071,7 @@ router.post('/survey/submit', async (req, res) => {
             return res.status(404).json({ error: 'Site data not found or invalid.' });
         }
 
-        const surveyResponsesCollection = targetDb.collection('survey_responses');
+        const surveyResponsesCollection = targetDb.collection('survey_submission');
 
         // Check if the user has already submitted the survey
         const existingResponse = await surveyResponsesCollection.findOne({
@@ -2228,8 +2106,5 @@ router.post('/survey/submit', async (req, res) => {
         res.status(500).json({ error: 'An error occurred while submitting the survey.' });
     }
 });
-
-
-
 
 module.exports = router;
