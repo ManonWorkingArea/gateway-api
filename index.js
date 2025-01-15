@@ -21,14 +21,10 @@ const verifySlipRouter = require('./routes/verifySlip');
 
 const authenRouter    = require('./authen');  // Import the auth router
 const lessonRouter    = require('./lesson');  // Import the auth router
-
 const messageRouter    = require('./message');  // Import the auth router
 
-
 dotenv.config();
-
 const app = express();
-
 const rateLimit = require('express-rate-limit');
 
 // Rate limiting
@@ -44,7 +40,7 @@ app.set('trust proxy', false);
 app.use(bodyParser.json());
 app.use(cors());
 app.use((req, res, next) => {
-  console.log(`Incoming request: ${req.method} ${req.url}`);
+  console.log(`REQ :: [${req.hostname}] ${req.method} ${req.url}`);
   next();
 });
 
@@ -85,7 +81,7 @@ async function initializeApp() {
     app.use('/message', messageRouter); // Add the /ai route
 
     server.listen(process.env.PORT, () => {
-      console.log(`Server is running on port ${process.env.PORT}`);
+      console.log(`PRT :: ${process.env.PORT}`);
     });
   } catch (err) {
     console.error('Failed to fetch client configurations from MongoDB', err);

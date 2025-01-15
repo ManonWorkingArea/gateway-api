@@ -240,9 +240,10 @@ router.post('/categories', async (req, res) => {
         const cachedCategories = await redisClient.get(cacheKey);
 
         if (cachedCategories) {
+            console.log('DAT :: Redis');
             return res.status(200).json({ success: true, data: JSON.parse(cachedCategories), cache: true });
         }
-
+        console.log('DAT :: MongoDB');
         const { client } = req;
         const { targetDb, siteData } = await getSiteSpecificDb(client, site);
 
@@ -324,7 +325,7 @@ router.post('/course', async (req, res) => {
         const cachedCourses = await redisClient.get(cacheKey);
 
         if (cachedCourses) {
-            console.log('Loaded data from Redis cache');
+            console.log('DAT :: Redis');
             const parsedCourses = JSON.parse(cachedCourses);
             const totalItems = parsedCourses.length;
             const totalPages = Math.ceil(totalItems / limit);
@@ -367,7 +368,7 @@ router.post('/course', async (req, res) => {
             query.category = { $in: selectedCodes };
         }
 
-        console.log('Loaded data from MongoDB');
+        console.log('DAT :: MongoDB');
         const allCourses = await course
             .find(query)
             .project({
