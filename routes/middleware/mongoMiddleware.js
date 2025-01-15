@@ -1,23 +1,10 @@
 const { MongoClient, ObjectId } = require('mongodb');
 const CryptoJS = require('crypto-js');
-const redis = require('redis');
+const { redisClient, getCachedData, setCachedData } = require('./redis');  // Import Redis helpers
 
 // Singleton MongoClient instance
 let mongoClient;
 let isConnecting = false;
-
-const redisClient = redis.createClient({
-  url: 'redis://default:e3PHPsEo92tMA5mNmWmgV8O6cn4tlblB@redis-19867.fcrce171.ap-south-1-1.ec2.redns.redis-cloud.com:19867',
-  socket: {
-    tls: true, // Enable TLS for secure connection
-    reconnectStrategy: retries => Math.min(retries * 100, 3000)
-  }
-});
-
-redisClient.on('error', (err) => console.error('Redis Client Error', err));
-(async () => {
-  await redisClient.connect();
-})();
 
 const maxCacheAge = 60 * 60; // 1 hour in seconds
 
@@ -119,16 +106,16 @@ async function getClientData(headers, keyQueryParam) {
 
   try {
     const cacheKey = `clientData:${clientToken}`;
-    const cachedClientData = await redisClient.get(cacheKey);
+    const cachedClientData = await getCachedData(cacheKey);
     if (cachedClientData) {
-      return JSON.parse(cachedClientData);
+      return cachedClientData;
     }
 
     await connectToMongoDB();
     const db = mongoClient.db('API');
     const clientData = await db.collection('clients').findOne({ clientToken });
     if (clientData) {
-      await redisClient.setEx(cacheKey, maxCacheAge, JSON.stringify(clientData));
+      await setCachedData(cacheKey, clientData, maxCacheAge);
     }
     return clientData;
   } catch (err) {

@@ -6,23 +6,7 @@ const { crossOriginResourcePolicy } = require('helmet');
 const CryptoJS = require('crypto-js');
 const router = express.Router();
 
-const redis = require('redis');
-
-// Initialize Redis client
-const redisClient = redis.createClient({
-  url: 'redis://default:e3PHPsEo92tMA5mNmWmgV8O6cn4tlblB@redis-19867.fcrce171.ap-south-1-1.ec2.redns.redis-cloud.com:19867',
-  socket: {
-    tls: true, // Enable TLS for secure connection
-    reconnectStrategy: retries => Math.min(retries * 100, 3000)
-  }
-});
-
-redisClient.on('error', (err) => console.error('Redis Client Error', err));
-(async () => {
-    await redisClient.connect();
-})();
-
-
+const { redisClient } = require('./routes/middleware/redis');  // Import Redis helpers
 
 // Secret key for signing JWT (Use environment variables for security)
 const JWT_SECRET = 'ZCOKU1v3TO2flcOqCdrJ3vWbWhmnZNQn';
@@ -445,6 +429,9 @@ router.post('/course/:id/:playerID?', async (req, res) => {
         if (!site) {
             return res.status(400).json({ error: 'Site parameter is required.' });
         }
+
+        const cacheKey = `playerData:${courseId}`;
+        const cachedPlayerData = await redisClient.get(cacheKey);
 
         const { client } = req;
         const { targetDb, siteData } = await getSiteSpecificDb(client, site);

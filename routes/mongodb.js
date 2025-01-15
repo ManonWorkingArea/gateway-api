@@ -4,6 +4,8 @@ const { Router } = require('express');
 const CryptoJS = require('crypto-js');
 const { createEvent, createEvents } = require('ics');
 
+const { redisClient, getCachedData, setCachedData }= require('./middleware/redis');  // Import Redis helpers
+
 const {
   authenticateClient,
   safeObjectId,
@@ -256,102 +258,89 @@ module.exports = function () {
         return res.status(200).json({ status: false, message: 'An error occurred while checking the request' });
     }
   });
+// New /getHost endpoint to retrieve data by hostname with Redis Cache
+router.get('/getHost', async (req, res) => {
+  try {
+    const { db } = req;
+    const { hostname } = req.query;
 
-  // New /getHost endpoint to retrieve data by hostname
-  router.get('/getHost', async (req, res) => {
-    try {
-      const { db } = req;
-      const { hostname } = req.query;
-
-      // Validate hostname parameter
-      if (!hostname) {
-        return res.status(400).json({ status: false, message: 'Hostname is required' });
-      }
-
-      // Query the 'hostnameCollection' for the given hostname
-      const hostnameCollection = db.collection('hostname'); // Adjust collection name accordingly
-      const hostResult = await hostnameCollection.findOne({ hostname: hostname });
-
-      if (!hostResult) {
-        return res.status(404).json({ status: false, message: 'No data found for the provided hostname' });
-      }
-
-      // Query the 'space' collection using the spaceId from the hostResult
-      const spaceCollection = db.collection('space'); // Adjust collection name accordingly
-      const spaceResult = await spaceCollection.findOne({ _id: safeObjectId(hostResult.spaceId) });
-
-      if (!spaceResult) {
-        return res.status(404).json({ status: false, message: 'No space data found for the provided spaceId' });
-      }
-
-      // Query the 'translate' collection to get all data
-      const translateCollection = db.collection('translate'); // Adjust collection name accordingly
-      const translateResult = await translateCollection.find().toArray();
-
-      // Query the 'hostname' collection to get data with siteView = 'frontend'
-      const allHostData = await hostnameCollection.find({ siteView: 'frontend' }).toArray();
-
-      // Process allHostData to include only hostname and siteName, sorted alphabetically by hostname
-      const hosts = allHostData
-        .map((host) => ({
-          hostname: host.hostname,
-          siteName: host.siteName,
-        }))
-        .sort((a, b) => a.hostname.localeCompare(b.hostname));
-
-      // Return the combined data from hostname, space, and translate collections
-      res.status(200).json({
-        status: true,
-        hostData: hostResult,
-        spaceData: spaceResult,
-        translateData: translateResult,
-        hosts, // Include processed hostname and siteName data in the response
-      });
-    } catch (err) {
-      console.error('Error retrieving data by hostname:', err);
-      res.status(500).json({ status: false, message: 'An error occurred while retrieving data' });
+    if (!hostname) {
+      return res.status(400).json({ status: false, message: 'Hostname is required' });
     }
-  });
 
+    const cacheKey = `getHost:${hostname}`;
+    const cachedData = await getCachedData(cacheKey);
 
-  router.post('/getTheme', async (req, res) => {
-    try {
-      const { db } = req;
-      const { data } = req.body;
-
-      // Validate input: Ensure data is an object and not empty
-      if (!data || typeof data !== 'object' || Object.keys(data).length === 0) {
-        return res.status(400).json({ status: false, message: 'Invalid input: Data object is required' });
-      }
-
-      // Filter out any empty values and convert the values of the input object to an array of ObjectIds
-      const objectIds = Object.values(data).filter(id => id).map(id => safeObjectId(id));
-
-      // Query the 'post' collection to find documents matching the provided ObjectIds, only selecting the 'builder' key
-      const postCollection = db.collection('post'); // Adjust collection name accordingly
-      const posts = await postCollection.find(
-        { _id: { $in: objectIds } },
-        { projection: { builder: 1, seo: 1 } } // Only return the 'builder' key
-      ).toArray();
-
-      // Create a response object that maps the input keys to the corresponding builder data
-      const result = Object.keys(data).reduce((acc, key) => {
-        if (data[key]) {
-          const post = posts.find(post => post._id.toString() === data[key]);
-          acc[key] = post ? { builder: post.builder, id: post._id, seo: post.seo } : null;
-        } else {
-          acc[key] = null;
-        }
-        return acc;
-      }, {});
-
-      // Return the found builder data
-      res.status(200).json({ status: true, data: result });
-    } catch (err) {
-      console.error('Error retrieving posts by IDs:', err);
-      res.status(500).json({ status: false, message: 'An error occurred while retrieving posts' });
+    if (cachedData) {
+      return res.status(200).json({ status: true, ...cachedData });
     }
-  });
+
+    const hostnameCollection = db.collection('hostname');
+    const hostResult = await hostnameCollection.findOne({ hostname });
+
+    if (!hostResult) {
+      return res.status(404).json({ status: false, message: 'No data found for the provided hostname' });
+    }
+
+    const spaceCollection = db.collection('space');
+    const spaceResult = await spaceCollection.findOne({ _id: safeObjectId(hostResult.spaceId) });
+
+    if (!spaceResult) {
+      return res.status(404).json({ status: false, message: 'No space data found for the provided spaceId' });
+    }
+
+    const translateCollection = db.collection('translate');
+    const translateResult = await translateCollection.find().toArray();
+
+    const allHostData = await hostnameCollection.find({ siteView: 'frontend' }).toArray();
+    const hosts = allHostData.map((host) => ({ hostname: host.hostname, siteName: host.siteName })).sort((a, b) => a.hostname.localeCompare(b.hostname));
+
+    const responseData = { status: true, hostData: hostResult, spaceData: spaceResult, translateData: translateResult, hosts };
+    await setCachedData(cacheKey, responseData);
+
+    res.status(200).json(responseData);
+  } catch (err) {
+    console.error('Error retrieving data by hostname:', err);
+    res.status(500).json({ status: false, message: 'An error occurred while retrieving data' });
+  }
+});
+
+// /getTheme endpoint with Redis Cache
+router.post('/getTheme', async (req, res) => {
+  try {
+    const { db } = req;
+    const { data } = req.body;
+
+    if (!data || typeof data !== 'object' || Object.keys(data).length === 0) {
+      return res.status(400).json({ status: false, message: 'Invalid input: Data object is required' });
+    }
+
+    const cacheKey = `getTheme:${JSON.stringify(data)}`;
+    const cachedData = await getCachedData(cacheKey);
+
+    if (cachedData) {
+      return res.status(200).json({ status: true, data: cachedData });
+    }
+
+    const objectIds = Object.values(data).filter(id => id).map(id => safeObjectId(id));
+    const postCollection = db.collection('post');
+    const posts = await postCollection.find({ _id: { $in: objectIds } }, { projection: { builder: 1, seo: 1 } }).toArray();
+
+    const result = Object.keys(data).reduce((acc, key) => {
+      const post = posts.find(post => post._id.toString() === data[key]);
+      acc[key] = post ? { builder: post.builder, id: post._id, seo: post.seo } : null;
+      return acc;
+    }, {});
+
+    await setCachedData(cacheKey, result);
+
+    res.status(200).json({ status: true, data: result });
+  } catch (err) {
+    console.error('Error retrieving posts by IDs:', err);
+    res.status(500).json({ status: false, message: 'An error occurred while retrieving posts' });
+  }
+});
+
   
   router.post('/changepwd', async (req, res) => {
     try {
