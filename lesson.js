@@ -931,8 +931,8 @@ router.post('/course/:id/:playerID?', async (req, res) => {
                 hours: course.hours,
                 days: course.days,
                 prices: {
-                    regular: course.regular_price,
-                    sale: course.sale_price,
+                    regular: course.regular_price || 0,
+                    sale: course.sale_price || 0,
                 },
                 certification: {
                     has: course.certification,
