@@ -1,39 +1,66 @@
-// mongoMiddleware.js
-
 const { MongoClient, ObjectId } = require('mongodb');
 const CryptoJS = require('crypto-js');
 
-// Connection pool to reuse MongoClient instances
+// Singleton MongoClient instance
 let mongoClient;
+let isConnecting = false;  // Prevent multiple simultaneous connections
 
 // Cache for client data with timestamps
 const clientDataCache = new Map();
-
-// Maximum age (in milliseconds) for cached client data
 const maxCacheAge = 60 * 60 * 1000; // 1 hour
+
+// Establish a stable MongoDB connection
+async function connectToMongoDB() {
+  if (mongoClient && mongoClient.topology && mongoClient.topology.isConnected()) {
+    return; // Already connected
+  }
+
+  if (isConnecting) {
+    // Wait for ongoing connection attempt
+    await new Promise(resolve => setTimeout(resolve, 100));
+    return connectToMongoDB();
+  }
+
+  isConnecting = true;
+
+  try {
+    mongoClient = new MongoClient(process.env.MONGODB_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+    });
+
+    await mongoClient.connect();
+    console.log('MongoDB connected');
+  } catch (err) {
+    console.error('Failed to connect to MongoDB:', err);
+    throw err;
+  } finally {
+    isConnecting = false;
+  }
+}
 
 // Middleware function for custom headers and client data retrieval
 async function authenticateClient(req, res, next) {
   try {
+    await connectToMongoDB();  // Ensure connection is active
+
     const hToken = req.headers['client-token-key'];
-    const keyQueryParam = req.query.key; // Check for the ?key=xxxx query parameter
+    const keyQueryParam = req.query.key;
     let clientData = await getClientData(req.headers, keyQueryParam);
 
-    // If no client data is found and keyQueryParam is present, try again using keyQueryParam as clientToken
     if (!clientData && keyQueryParam) {
       clientData = await getClientData({ 'client-token-key': keyQueryParam });
     }
 
     if (!clientData) {
-      res.status(404).json({ message: 'Client not found' });
-      return;
+      return res.status(404).json({ message: 'Client not found' });
     }
 
-    // Set the custom X-Client-Token header
-    const clientToken = hToken || keyQueryParam; // Use hToken or fallback to keyQueryParam
+    const clientToken = hToken || keyQueryParam;
     res.set('X-Client-Token', clientToken);
 
-    // Attach the client and database objects to the request for further middleware and route handlers
     req.client = mongoClient;
     req.db = mongoClient.db(clientData.connection.database);
     req.clientData = clientData;
@@ -47,22 +74,16 @@ async function authenticateClient(req, res, next) {
 
 // Helper function to safely create an ObjectId
 function safeObjectId(id) {
-  if (!ObjectId.isValid(id)) {
-    return null;
-  }
-  return new ObjectId(id);
+  return ObjectId.isValid(id) ? new ObjectId(id) : null;
 }
 
 // Helper function to decrypt tokens
 function decryptToken(headerToken, key, iv, salt) {
   try {
     const saltWordArray = CryptoJS.enc.Utf8.parse(salt);
-    const combinedKey = CryptoJS.lib.WordArray.create()
-      .concat(key)
-      .concat(saltWordArray);
+    const combinedKey = CryptoJS.lib.WordArray.create().concat(key).concat(saltWordArray);
     const decryptedData = CryptoJS.AES.decrypt(headerToken, combinedKey, { iv: iv });
-    const decryptedJson = JSON.parse(decryptedData.toString(CryptoJS.enc.Utf8));
-    return decryptedJson;
+    return JSON.parse(decryptedData.toString(CryptoJS.enc.Utf8));
   } catch (error) {
     console.error('Error parsing decrypted data as JSON:', error);
     return {};
@@ -75,28 +96,21 @@ async function getClientData(headers, keyQueryParam) {
   let channel;
 
   if (keyQueryParam) {
-    // Use the key from the query parameter directly
     clientToken = keyQueryParam;
     channel = 'query';
   } else if (headers['x-content-token']) {
-    // Decrypt the token from the headers if no query parameter is provided
     const salt = process.env.TOKEN_SALT;
-    if (!salt) {
-      throw new Error('TOKEN_SALT environment variable is not set.');
-    }
+    if (!salt) throw new Error('TOKEN_SALT environment variable is not set.');
 
     const key = CryptoJS.enc.Hex.parse(headers['x-content-key']);
     const iv = CryptoJS.enc.Hex.parse(headers['x-content-sign']);
     const result = decryptToken(headers['x-content-token'], key, iv, salt);
 
-    if (!result || !result.key) {
-      throw new Error('Token decryption failed or invalid token format.');
-    }
+    if (!result || !result.key) throw new Error('Token decryption failed or invalid token format.');
 
     clientToken = result.key;
     channel = 'token';
   } else {
-    // Fall back to using the 'client-token-key' header if neither the query parameter nor 'x-content-token' is present
     clientToken = headers['client-token-key'];
     channel = 'header';
   }
@@ -104,32 +118,15 @@ async function getClientData(headers, keyQueryParam) {
   console.log('Channel:', channel);
   console.log('Client Token:', clientToken);
 
-  // Continue with the caching logic and MongoDB operations
   if (clientDataCache.has(clientToken)) {
     const { data, timestamp } = clientDataCache.get(clientToken);
-    const currentTime = Date.now();
-
-    // Check if the cached item has exceeded the maximum age
-    if (currentTime - timestamp <= maxCacheAge) {
+    if (Date.now() - timestamp <= maxCacheAge) {
       return data;
-    } else {
-      clientDataCache.delete(clientToken);
     }
+    clientDataCache.delete(clientToken);
   }
 
-  if (!mongoClient) {
-    mongoClient = new MongoClient(process.env.MONGODB_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    });
-
-    try {
-      await mongoClient.connect();
-    } catch (err) {
-      console.error('Failed to connect to MongoDB', err);
-      throw err;
-    }
-  }
+  await connectToMongoDB();  // Ensure the connection is alive before querying
 
   try {
     const db = mongoClient.db('API');
@@ -142,7 +139,14 @@ async function getClientData(headers, keyQueryParam) {
 
     return clientData;
   } catch (err) {
-    console.error('Failed to fetch client data from MongoDB', err);
+    console.error('Failed to fetch client data from MongoDB:', err);
+
+    if (err.name === 'MongoTopologyClosedError') {
+      console.error('Reconnecting to MongoDB...');
+      await connectToMongoDB();  // Attempt reconnection
+      return getClientData(headers, keyQueryParam);  // Retry
+    }
+
     throw err;
   }
 }
@@ -150,11 +154,11 @@ async function getClientData(headers, keyQueryParam) {
 // Error handling middleware
 function errorHandler(err, req, res, next) {
   console.error(err);
-  res.status(500).json({ err });
+  res.status(500).json({ message: 'An internal server error occurred' });
 }
 
 module.exports = {
   authenticateClient,
   safeObjectId,
-  errorHandler
+  errorHandler,
 };
