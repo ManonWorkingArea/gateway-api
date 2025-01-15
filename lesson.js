@@ -1771,7 +1771,8 @@ router.post('/transaction', async (req, res) => {
                         from: "course",
                         let: { courseID: { $toObjectId: "$courseID" } },
                         pipeline: [
-                            { $match: { $expr: { $eq: ["$_id", "$$courseID"] } } }
+                            { $match: { $expr: { $eq: ["$_id", "$$courseID"] } } },
+                            { $project: { _id: 1, name: 1 }}  // **Project only _id and name**
                         ],
                         as: "courseData"
                     }
