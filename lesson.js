@@ -436,9 +436,14 @@ router.post('/course/:id/:playerID?', async (req, res) => {
     const { site, authen } = req.body;
 
     // Authen User Middleware
-    const authResult = await authenticateUserToken(authen, res);
-    if (!authResult.status) return authResult.response;
-    const user = authResult.user;
+    // Authen User Middleware (optional)
+    let user = null;
+    if (authen) {
+        const authResult = await authenticateUserToken(authen, res);
+        if (authResult.status) {
+            user = authResult.user;
+        }
+    }
 
     try {
         const courseId = safeObjectId(id);
@@ -896,7 +901,7 @@ router.post('/course/:id/:playerID?', async (req, res) => {
             }
         }
 
-        
+
         const surveyCollection = targetDb.collection('survey');
         let surveyData = null;
 
