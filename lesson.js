@@ -896,6 +896,7 @@ router.post('/course/:id/:playerID?', async (req, res) => {
             }
         }
 
+        
         const surveyCollection = targetDb.collection('survey');
         let surveyData = null;
 
