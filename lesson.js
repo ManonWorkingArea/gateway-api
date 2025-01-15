@@ -6,6 +6,24 @@ const { crossOriginResourcePolicy } = require('helmet');
 const CryptoJS = require('crypto-js');
 const router = express.Router();
 
+const redis = require('redis');
+
+// Initialize Redis client
+const redisClient = redis.createClient({
+  url: 'redis://default:e3PHPsEo92tMA5mNmWmgV8O6cn4tlblB@redis-19867.fcrce171.ap-south-1-1.ec2.redns.redis-cloud.com:19867',
+  socket: {
+    tls: true, // Enable TLS for secure connection
+    reconnectStrategy: retries => Math.min(retries * 100, 3000)
+  }
+});
+
+redisClient.on('error', (err) => console.error('Redis Client Error', err));
+(async () => {
+    await redisClient.connect();
+})();
+
+
+
 // Secret key for signing JWT (Use environment variables for security)
 const JWT_SECRET = 'ZCOKU1v3TO2flcOqCdrJ3vWbWhmnZNQn';
 
@@ -168,7 +186,7 @@ const getAnalytics = async (targetDb, courseId, userId) => {
 
 const updateEnrollAnalytics = async (targetDb, courseId, userId, analytics) => {
     try {
-        console.log("Analytics Data:", analytics);
+        //("Analytics Data:", analytics);
 
         // Fetch the enrollment document for the user and course
         const enrollment = await targetDb.collection('enroll').findOne({ courseID: courseId, userID: userId });
@@ -232,7 +250,14 @@ router.post('/categories', async (req, res) => {
     const { site } = req.body;
 
     try {
-        if (!site) {return res.status(400).json({ error: 'Site parameter is required' });}
+        if (!site) { return res.status(400).json({ error: 'Site parameter is required' }); }
+
+        const cacheKey = `categories:${site}`;
+        const cachedCategories = await redisClient.get(cacheKey);
+
+        if (cachedCategories) {
+            return res.status(200).json({ success: true, data: JSON.parse(cachedCategories), cache: true });
+        }
 
         const { client } = req;
         const { targetDb, siteData } = await getSiteSpecificDb(client, site);
@@ -241,64 +266,44 @@ router.post('/categories', async (req, res) => {
             return res.status(404).json({ error: 'Site data not found or invalid.' });
         }
 
-        // Convert siteData._id to a string
         const siteIdString = siteData._id.toString();
-
-        // Access the 'category' collection
         const { category, course } = await getDbCollections(client, site, ['category', 'course']);
 
-        // Query for all categories (main and subcategories)
         const allCategories = await category
             .find({ unit: siteIdString })
             .project({ _id: 1, name: 1, code: 1, description: 1, type: 1, parent: 1 })
             .toArray();
 
-        // Query for course counts grouped by category codes
         const courseCounts = await course
             .aggregate([
-                { 
-                    $match: { 
-                        unit: siteIdString,
-                        status: true, // Only include active courses
-                    },
-                }, // Match courses within the site
-                { $unwind: '$category' }, // Unwind category array for individual codes
-                {
-                    $group: {
-                        _id: '$category',
-                        count: { $sum: 1 }, // Count courses for each category code
-                    },
-                },
+                { $match: { unit: siteIdString, status: true } },
+                { $unwind: '$category' },
+                { $group: { _id: '$category', count: { $sum: 1 } } }
             ])
             .toArray();
 
-        // Create a mapping of category codes to counts
         const courseCountMap = courseCounts.reduce((map, item) => {
             map[item._id] = item.count;
             return map;
         }, {});
 
-        // Convert all categories into a flat list with parent-child relationships
         const flatCategories = allCategories.map((category) => ({
             _id: category._id,
             name: category.name,
             code: category.code,
             type: category.type,
-            parent: category.type === 'main' ? null : category.parent, // `null` for main categories, use `parent` for subcategories
-            count: courseCountMap[category.code] || 0, // Add course count (default to 0 if no courses found)
+            parent: category.type === 'main' ? null : category.parent,
+            count: courseCountMap[category.code] || 0,
         }));
 
-        // Function to build the nested structure
         const buildNestedCategories = (categories) => {
             const map = {};
             const roots = [];
 
-            // Create a map of categories by ID
             categories.forEach(category => {
                 map[category._id] = { ...category, children: [] };
             });
 
-            // Assign children to their parent categories
             categories.forEach(category => {
                 if (category.parent) {
                     const parent = map[category.parent];
@@ -313,28 +318,45 @@ router.post('/categories', async (req, res) => {
             return roots;
         };
 
-        // Build the hierarchical structure
         const nestedCategories = buildNestedCategories(flatCategories);
+        await redisClient.setEx(cacheKey, 3600, JSON.stringify(nestedCategories));
 
-        res.status(200).json({
-            success: true,
-            data: nestedCategories,
-        });
+        res.status(200).json({ success: true, data: nestedCategories, cache: false });
     } catch (error) {
         console.error('Error fetching categories:', error);
-        res.status(500).json({
-            error: 'An error occurred while fetching categories.',
-        });
+        res.status(500).json({ error: 'An error occurred while fetching categories.' });
     }
 });
 
-// New endpoint to fetch courses
 router.post('/course', async (req, res) => {
     const { site, page = 1, limit = 10, searchQuery = '', selectedCodes = [] } = req.body;
 
     try {
         if (!site) {
             return res.status(400).json({ error: 'Site parameter is required' });
+        }
+
+        const cacheKey = `courses:${site}`;
+        const cachedCourses = await redisClient.get(cacheKey);
+
+        if (cachedCourses) {
+            console.log('Loaded data from Redis cache');
+            const parsedCourses = JSON.parse(cachedCourses);
+            const totalItems = parsedCourses.length;
+            const totalPages = Math.ceil(totalItems / limit);
+            const paginatedCourses = parsedCourses.slice((page - 1) * limit, page * limit);
+
+            return res.status(200).json({
+                success: true,
+                data: paginatedCourses,
+                meta: {
+                    totalItems,
+                    totalPages,
+                    currentPage: page,
+                    limit
+                },
+                cache: true
+            });
         }
 
         const { client } = req;
@@ -347,88 +369,57 @@ router.post('/course', async (req, res) => {
         const siteIdString = siteData._id.toString();
         const { course } = await getDbCollections(client, site, ['course']);
 
-        // Build the query object dynamically
         const query = { unit: siteIdString, status: true };
 
-        // Apply search filter on multiple fields
         if (searchQuery) {
             query.$or = [
-                { name: { $regex: searchQuery, $options: 'i' } },        // Search in `name`
-                { description: { $regex: searchQuery, $options: 'i' } }, // Search in `description`
-                { slug: { $regex: searchQuery, $options: 'i' } },        // Search in `slug`
+                { name: { $regex: searchQuery, $options: 'i' } },
+                { description: { $regex: searchQuery, $options: 'i' } },
+                { slug: { $regex: searchQuery, $options: 'i' } },
             ];
         }
 
-        // Apply category filter
-        if (selectedCodes && selectedCodes.length > 0) {
-            query.category = { $in: selectedCodes }; // Use `query` instead of `filter`
+        if (Array.isArray(selectedCodes) && selectedCodes.length > 0) {
+            query.category = { $in: selectedCodes };
         }
 
-        // Fetch all matching courses
+        console.log('Loaded data from MongoDB');
         const allCourses = await course
             .find(query)
             .project({
-                _id: 1,
-                name: 1,
-                slug: 1,
-                lecturer: 1,
-                hours: 1,
-                days: 1,
-                category: 1,
-                type: 1,
-                mode: 1,
-                display: 1,
-                regular_price: 1,
-                sale_price: 1,
-                description: 1,
-                short_description: 1,
-                cover: 1,
-                lesson_type: 1,
-                status: 1,
-                updatedAt: 1,
+                _id: 1, name: 1, slug: 1, lecturer: 1, hours: 1, days: 1,
+                category: 1, type: 1, mode: 1, display: 1,
+                regular_price: 1, sale_price: 1,
+                description: 1, short_description: 1,
+                cover: 1, lesson_type: 1, status: 1, updatedAt: 1
             })
             .toArray();
 
-        // Calculate total items and pagination
         const totalItems = allCourses.length;
         const totalPages = Math.ceil(totalItems / limit);
+        const paginatedCourses = allCourses.slice((page - 1) * limit, page * limit);
 
-        // Correct slicing logic
-        const startIndex = (page - 1) * limit;
-        const endIndex = page * limit; // This ensures it gets the last item on the final page
-        const paginatedCourses = allCourses.slice(startIndex, Math.min(endIndex, totalItems));
-
-        //console.log(`Start Index: ${startIndex}, End Index: ${endIndex}`);
-        // Handle cases where the requested page exceeds total pages
-        if (page > totalPages) {
-            return res.status(200).json({
-                success: true,
-                data: [],
-                meta: {
-                    totalItems,
-                    totalPages,
-                    currentPage: page,
-                    limit,
-                },
-            });
-        }
-
-        // Send response
-        res.status(200).json({
+        const response = {
             success: true,
             data: paginatedCourses,
             meta: {
                 totalItems,
                 totalPages,
                 currentPage: page,
-                limit,
+                limit
             },
-        });
+            cache: false
+        };
+
+        await redisClient.setEx(cacheKey, 3600, JSON.stringify(allCourses));
+
+        res.status(200).json(response);
     } catch (error) {
-        console.error('Error fetching courses:', error.message, error.stack);
+        console.error('Error fetching courses:', error.message);
         res.status(500).json({ error: 'An error occurred while fetching courses.' });
     }
 });
+
 
 // Endpoint to fetch course details and related player data
 router.post('/course/:id/:playerID?', async (req, res) => {
@@ -837,7 +828,7 @@ router.post('/course/:id/:playerID?', async (req, res) => {
 
         const examData = await examCollection.find({ courseId: course.master }).toArray();
 
-        console.log("examData",examData);
+        //console.log("examData",examData);
 
         const contest = {};
         if (examData.length > 0) {
@@ -1217,7 +1208,7 @@ router.post('/score/submit', async (req, res) => {
             return res.status(400).json({ error: 'Site, examID, courseID, score, and answer parameters are required.' });
         }
 
-        console.log("user",user)
+        //console.log("user",user)
 
         const { client } = req;
         const { targetDb, siteData } = await getSiteSpecificDb(client, site);
@@ -1267,7 +1258,7 @@ router.post('/score/status', async (req, res) => {
     try {
         // Decrypt the data from the request body
         const decryptedData = decrypt(req.body.data);
-        console.log("decryptedData", decryptedData);
+        //console.log("decryptedData", decryptedData);
 
         // Extract properties from the decrypted data
         const { site, scoreID, newStatus, authen } = decryptedData;
@@ -1320,7 +1311,7 @@ router.post('/progress/:option', async (req, res) => {
 
     // Decrypt the data from the request body
     const decryptedData = decrypt(req.body.data);
-    console.log("decryptedData",decryptedData);
+    //console.log("decryptedData",decryptedData);
     
     // Extract properties from the decrypted data
     const { site, courseID, playerID, progressID, progress, lastplay, status, authen } = decryptedData;
@@ -1507,7 +1498,7 @@ router.post('/is_enroll', async (req, res) => {
     try {
         // Decrypt the data from the request body
         const decryptedData = decrypt(req.body.data);
-        console.log("decryptedData", decryptedData);
+        //console.log("decryptedData", decryptedData);
 
         // Extract properties from the decrypted data
         const { site, courseID, authen } = decryptedData;
@@ -1558,7 +1549,7 @@ router.post('/assign', async (req, res) => {
     try {
         // Decrypt the data from the request body
         const decryptedData = decrypt(req.body.data);
-        console.log("decryptedData", decryptedData);
+        //console.log("decryptedData", decryptedData);
 
         // Extract properties from the decrypted data
         const { site, courseID, authen } = decryptedData;
@@ -1663,7 +1654,7 @@ router.post('/enroll', async (req, res) => {
     try {
         // Decrypt the data from the request body
         const decryptedData = decrypt(req.body.data);
-        console.log("decryptedData", decryptedData);
+        //console.log("decryptedData", decryptedData);
 
         // Extract properties from the decrypted data
         const { site, authen } = decryptedData;
@@ -1747,7 +1738,7 @@ router.post('/transaction', async (req, res) => {
     try {
         // Decrypt the data from the request body
         const decryptedData = decrypt(req.body.data);
-        console.log("decryptedData", decryptedData);
+        //console.log("decryptedData", decryptedData);
 
         // Extract properties from the decrypted data
         const { site, authen } = decryptedData;
@@ -1906,7 +1897,7 @@ router.post('/certification/:id', async (req, res) => {
         
         // Fetch related certification template details
         const certificationTemplate = await targetDb.collection('certification_template').findOne({ _id: safeObjectId(course.certificationId) });
-        console.log("course",course);
+        //console.log("course",course);
         // Format the response
         const formattedResponse = {
             success: true,
