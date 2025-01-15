@@ -59,10 +59,10 @@ function setupRoutes(app) {
       const timeDifference        = currentTimestamp - result.timestamp;
       
       if (timeDifference > maxAllowedDifference) {
-        console.log("Authenticated expired");
+        console.log("AUT :: Expired");
         return res.status(500).json({ message: 'Authenticated expired' });
       } else {
-        console.log("Authenticated valid");
+        console.log("AUT :: Valid");
       }
     }
 
