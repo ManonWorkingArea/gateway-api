@@ -702,21 +702,24 @@ router.get('/appointment/:id', async (req, res) => {
         let result;
         let total;
 
-        // Performing the find operation with pagination and sorting
-        if (limit !== undefined) {
-          result = await collection[method](query, projection)
-            .skip(skip)
-            .limit(limit)
-            .sort(sort) // Add sorting option
-            .toArray();
+      // Performing the find operation with pagination and sorting
+      if (limit !== undefined) {
+        result = await collection.find(query, projection)
+          .skip(skip)
+          .limit(limit)
+          .sort(sort) // Add sorting option
+          .toArray();
 
-          total = await collection[method](query).count();
-        } else {
-          result = await collection[method](query, projection)
-            .sort(sort) // Add sorting option
-            .toArray();
-          total = result.length;
-        }
+        // Use countDocuments() instead of count()
+        total = await collection.countDocuments(query);
+      } else {
+        result = await collection.find(query, projection)
+          .sort(sort) // Add sorting option
+          .toArray();
+
+        total = result.length;
+      }
+
 
         const totalPages = Math.ceil(total / limit);
 
