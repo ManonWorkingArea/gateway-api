@@ -1782,7 +1782,8 @@ router.post('/transaction', async (req, res) => {
                         from: "player",
                         let: { playerID: { $toObjectId: "$playerID" } },
                         pipeline: [
-                            { $match: { $expr: { $eq: ["$_id", "$$playerID"] } } }
+                            { $match: { $expr: { $eq: ["$_id", "$$playerID"] } } },
+                            { $project: { _id: 1, name: 1 }}  // **Project only _id and name**
                         ],
                         as: "playerData"
                     }
