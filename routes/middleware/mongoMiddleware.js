@@ -41,7 +41,7 @@ async function connectToMongoDB(retries = 5) {
         retryWrites: true,
       });
       await mongoClient.connect();
-      console.log('MongoDB connected');
+      console.log('MON :: Connected');
       break;
     } catch (err) {
       console.error(`MongoDB connection attempt ${attempt} failed:`, err);

@@ -602,7 +602,6 @@ router.get('/appointment/:id', async (req, res) => {
     }
   });
 
-
   // Update a document by ID in a collection
   router.put(`/:collection/:id`, async (req, res) => {
     try {

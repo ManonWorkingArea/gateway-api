@@ -4,14 +4,28 @@ const redisClient = redis.createClient({
   url: 'redis://default:e3PHPsEo92tMA5mNmWmgV8O6cn4tlblB@redis-19867.fcrce171.ap-south-1-1.ec2.redns.redis-cloud.com:19867',
   socket: {
     tls: true,
-    reconnectStrategy: retries => Math.min(retries * 100, 3000)
+    connectTimeout: 10000,  // 10 seconds timeout for connection
+    keepAlive: 5000,        // Send keepalive packets every 5 seconds
+    reconnectStrategy: (retries) => {
+      const delay = Math.min(50 * 2 ** retries + Math.random() * 100, 3000);
+      console.warn(`Reconnecting to Redis... Attempt ${retries}, retrying in ${delay}ms`);
+      return delay;
+    }
   }
 });
 
-redisClient.on('error', (err) => console.error('Redis Client Error', err));
+redisClient.on('connect', () => console.log('RED :: Success.'));
+redisClient.on('ready', () => console.log('RED :: Ready.'));
+redisClient.on('error', (err) => console.error('RED :: Error:', err));
+redisClient.on('end', () => console.warn('RED :: Closed.'));
+redisClient.on('reconnecting', () => console.warn('RED :: Reconnecting...'));
 
 (async () => {
-  await redisClient.connect();
+  try {
+    await redisClient.connect();
+  } catch (err) {
+    console.error('Failed to connect to Redis:', err);
+  }
 })();
 
 const maxCacheAge = 60 * 60; // 1 hour in seconds
