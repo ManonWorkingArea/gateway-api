@@ -536,7 +536,6 @@ router.get('/appointment/:id', async (req, res) => {
       next(err);
     }
   });
-  
   // POST Method for Inserting a Document
   router.post('/:collection', async (req, res) => {
     try {
