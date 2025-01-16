@@ -490,36 +490,53 @@ router.get('/appointment/:id', async (req, res) => {
     }
   });
 
-  // GET Single Document
-  router.get('/:collection/:id', async (req, res) => {
+  // GET Single Document with Redis Caching (5 min)
+  router.get('/:collection/:id', async (req, res, next) => {
     try {
-      const { client, db } = req;
+      const { db } = req;
       const collectionName = req.params.collection;
       const documentId = req.params.id;
       const joinCollection = req.query.join;
       const arrayField = req.query.sub;
+
+      const cacheKey = `doc:${collectionName}:${documentId}:${joinCollection || 'none'}:${arrayField || 'none'}`;
+      
+      // Check if data exists in Redis cache
+      const cachedData = await getCachedData(cacheKey);
+      if (cachedData) {
+        return res.status(200).json(cachedData);
+      }
+
       const collection = db.collection(collectionName);
       const document = await collection.findOne({ _id: safeObjectId(documentId) });
 
       if (!document) {
-        res.status(404).json({ message: `Document not found` });
-        return;
+        return res.status(404).json({ message: `Document not found` });
       }
 
+      // If join and sub are specified, perform join operation
       if (joinCollection && arrayField) {
         const joinColl = db.collection(joinCollection);
         const idsToLookup = document[arrayField];
-        const joinedDocs = await joinColl
-          .find({ _id: { $in: idsToLookup.map(id => safeObjectId(id)) } })
-          .toArray();
-        document[arrayField] = joinedDocs;
+
+        if (Array.isArray(idsToLookup) && idsToLookup.length > 0) {
+          const joinedDocs = await joinColl
+            .find({ _id: { $in: idsToLookup.map(id => safeObjectId(id)) } })
+            .toArray();
+          document[arrayField] = joinedDocs;
+        }
       }
+
+      // Store the result in Redis for 5 minutes (300 seconds)
+      await setCachedData(cacheKey, document, 300);
 
       res.status(200).json(document);
     } catch (err) {
+      console.error('Error fetching document:', err);
       next(err);
     }
   });
+
 
   // POST Method for Inserting a Document
   router.post('/:collection', async (req, res) => {
