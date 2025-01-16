@@ -536,7 +536,7 @@ router.get('/appointment/:id', async (req, res) => {
       next(err);
     }
   });
-  
+
   // POST Method for Inserting a Document
   router.post('/:collection', async (req, res) => {
     try {
@@ -780,34 +780,49 @@ router.get('/appointment/:id', async (req, res) => {
   });
 
 
-  router.post(`/:collection/aggregate`, async (req, res, next) => {
-    try {
-      const { client, db } = req; // Access client and db from req object
-      const collectionName = req.params.collection;
-      const collection = db.collection(collectionName);
+// POST Aggregate with Redis Caching (5 min)
+router.post(`/:collection/aggregate`, async (req, res, next) => {
+  try {
+    const { db } = req;
+    const collectionName = req.params.collection;
+    const collection = db.collection(collectionName);
+    const { pipeline } = req.body || {};
 
-      const { pipeline } = req.body || {};
-
-      if (!Array.isArray(pipeline)) {
-        res.status(400).json({ message: `Invalid request format` });
-        return;
-      }
-
-      // Apply additional modifications to the pipeline as needed
-      const modifiedPipeline = pipeline.map((stage) => {
-        // Check if the stage has a $match operator and convert the _id field to ObjectId
-        if (stage.$match && stage.$match._id) {
-          stage.$match._id = safeObjectId(stage.$match._id);
-        }
-        return stage;
-      });
-
-      const result = await collection.aggregate(modifiedPipeline, { allowDiskUse: true }).toArray();
-      res.status(200).json(result);
-    } catch (err) {
-      next(err);
+    // Validate the pipeline format
+    if (!Array.isArray(pipeline)) {
+      return res.status(400).json({ message: `Invalid request format` });
     }
-  });
+
+    // Generate a unique cache key based on the collection and pipeline
+    const cacheKey = `agg:${collectionName}:${JSON.stringify(pipeline)}`;
+
+    // Check if the result exists in Redis
+    const cachedData = await getCachedData(cacheKey);
+    if (cachedData) {
+      return res.status(200).json(cachedData);
+    }
+
+    // Modify the pipeline to safely handle ObjectIds
+    const modifiedPipeline = pipeline.map((stage) => {
+      if (stage.$match && stage.$match._id) {
+        stage.$match._id = safeObjectId(stage.$match._id);
+      }
+      return stage;
+    });
+
+    // Execute the aggregation
+    const result = await collection.aggregate(modifiedPipeline, { allowDiskUse: true }).toArray();
+
+    // Cache the result in Redis for 5 minutes (300 seconds)
+    await setCachedData(cacheKey, result, 300);
+
+    res.status(200).json(result);
+  } catch (err) {
+    console.error('Error executing aggregation:', err);
+    next(err);
+  }
+});
+
 
   // Batch Update Endpoint
 router.post('/:collection/batchUpdate', async (req, res, next) => { // <-- Add `next` here
