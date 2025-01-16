@@ -782,32 +782,38 @@ router.get('/appointment/:id', async (req, res) => {
 
   router.post(`/:collection/aggregate`, async (req, res, next) => {
     try {
-      const { client, db } = req; // Access client and db from req object
+      const { db } = req;
       const collectionName = req.params.collection;
       const collection = db.collection(collectionName);
-
-      const { pipeline } = req.body || {};
-
+  
+      const { pipeline = [], page = 1, limit = 100 } = req.body;
+  
       if (!Array.isArray(pipeline)) {
-        res.status(400).json({ message: `Invalid request format` });
-        return;
+        return res.status(400).json({ message: `Invalid request format` });
       }
-
-      // Apply additional modifications to the pipeline as needed
+  
+      // Convert _id to ObjectId in $match stages
       const modifiedPipeline = pipeline.map((stage) => {
-        // Check if the stage has a $match operator and convert the _id field to ObjectId
         if (stage.$match && stage.$match._id) {
           stage.$match._id = safeObjectId(stage.$match._id);
         }
         return stage;
       });
-
-      const result = await collection.aggregate(modifiedPipeline, { allowDiskUse: true }).toArray();
+  
+      // Apply pagination
+      const skip = (page - 1) * limit;
+      modifiedPipeline.push({ $skip: skip });
+      modifiedPipeline.push({ $limit: limit });
+  
+      const result = await collection.aggregate(modifiedPipeline).toArray();
+  
       res.status(200).json(result);
     } catch (err) {
-      next(err);
+      console.error('Aggregation Error:', err);
+      res.status(500).json({ message: 'An internal server error occurred', error: err.message });
     }
   });
+  
 
   // Batch Update Endpoint
 router.post('/:collection/batchUpdate', async (req, res, next) => { // <-- Add `next` here
