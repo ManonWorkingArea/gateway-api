@@ -778,7 +778,6 @@ router.get('/appointment/:id', async (req, res) => {
     }
   });
 
-
   router.post(`/:collection/aggregate`, async (req, res, next) => {
     try {
       const { client, db } = req; // Access client and db from req object
