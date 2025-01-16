@@ -82,71 +82,101 @@ const getHostname = async (hostname) => {
     }
 };
 
-router.post('/new', async (req, res) => {
+async function generateCustomMessage(prompt) {
+    const GEMINI_API_KEY = "AIzaSyB_DNNNAbBpaQ41rKHgDeL-zzGpQmjcRH4"; // Replace with your actual API key
+    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
+    const headers = {
+      "Content-Type": "application/json"
+    };
+    const body = JSON.stringify({
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: prompt }]
+        }
+      ]
+    });
+  
     try {
-        const decryptedData = decrypt(req.body.data);
-        console.log("decryptedData", decryptedData);
-
-        const { site, content, course, player, authen } = decryptedData;
-
-        let user = null;
-
-        if (authen) {
-            try {
-                const decodedToken = await verifyToken(authen.replace('Bearer ', ''));
-                if (!decodedToken.status) {
-                    return res.status(401).json({ status: false, message: 'Invalid or expired token' });
-                }
-                user = decodedToken.decoded.user;
-            } catch (error) {
-                console.warn('Token verification failed:', error.message);
-                return res.status(401).json({ status: false, message: 'Invalid or expired token' });
-            }
-        }
-
-        if (!user) {
-            return res.status(401).json({ error: 'User authentication failed. Token is required.' });
-        }
-
-        if (!site) {
-            return res.status(400).json({ error: 'Site parameter is required.' });
-        }
-
-        if (!content) {
-            return res.status(400).json({ error: 'Content parameter is required.' });
-        }
-
-        const { client } = req;
-        const { targetDb, siteData } = await getSiteSpecificDb(client, site)
-        const messageCollection = targetDb.collection('message');
-
-        if (!siteData || !siteData._id) {
-            return res.status(404).json({ error: 'Site data not found or invalid.' });
-        }
-
-        const newMessage = {
-            userID: user,
-            courseID: course,
-            playerID: player,
-            content,
-            status: 'open',
-            replies: [],
-            createdAt: new Date(),
-            updatedAt: new Date(),
-        };
-
-        const result = await messageCollection.insertOne(newMessage);
-
-        res.status(201).json({
-            success: true,
-            message: 'Message submitted successfully.',
-            data: { insertedId: result.insertedId },
-        });
+      const response = await axios.post(url, body, { headers });
+      if (response.status === 200) {
+        const generatedText = response.data.candidates[0]?.content.parts[0]?.text.trim();
+        return generatedText || "ขออภัย ไม่สามารถสร้างข้อความตอบกลับได้ในขณะนี้.";
+      } else {
+        console.error("Error generating message:", response.data);
+        return "ขออภัย ไม่สามารถสร้างข้อความตอบกลับได้ในขณะนี้.";
+      }
     } catch (error) {
-        console.error('Error submitting message:', error.message, error.stack);
-        res.status(500).json({ error: 'An error occurred while submitting the message.' });
+      console.error("Network error generating message:", error);
+      return "ขออภัย ไม่สามารถสร้างข้อความตอบกลับได้ในขณะนี้.";
     }
-});
+  }
+
+
+  router.post('/new', async (req, res) => {
+    try {
+      const decryptedData = decrypt(req.body.data);
+      const { site, content, course, player, authen } = decryptedData;
+  
+      let user = null;
+  
+      if (authen) {
+        const decodedToken = await verifyToken(authen.replace('Bearer ', ''));
+        if (!decodedToken.status) {
+          return res.status(401).json({ status: false, message: 'Invalid or expired token' });
+        }
+        user = decodedToken.decoded.user;
+      }
+  
+      if (!user || !site || !content) {
+        return res.status(400).json({ error: 'Missing required fields.' });
+      }
+  
+      const { client } = req;
+      const { targetDb, siteData } = await getSiteSpecificDb(client, site);
+      const messageCollection = targetDb.collection('message');
+  
+      const newMessage = {
+        userID: user,
+        courseID: course,
+        playerID: player,
+        content,
+        status: 'open',
+        replies: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+  
+      const result = await messageCollection.insertOne(newMessage);
+  
+      const customPrompt = `โปรดตอบกลับอย่างสุภาพ กระชับ และเป็นมิตร โดยรับทราบปัญหาที่ผู้ใช้งานแจ้ง หากต้องการข้อมูลเพิ่มเติมให้สอบถามอย่างสุภาพ และหากไม่สามารถตอบได้ ให้แจ้งว่าทีมงานจะตรวจสอบและติดตามผลโดยเร็ว โดยไม่ต้องให้คำมั่นสัญญาหรือกำหนดเวลาในการแก้ไข ตอบกลับเป็นข้อความธรรมดา (Plain Text) โดยไม่ต้องมีรูปแบบหรือฟอร์แมตพิเศษ\n\nคำถามจากผู้ใช้งาน:\n"${content}"`;
+      
+      const autoReply = await generateCustomMessage(customPrompt);
+  
+      await messageCollection.updateOne(
+        { _id: result.insertedId },
+        {
+          $push: {
+            replies: {
+              userID: 'system',
+              content: autoReply,
+              createdAt: new Date(),
+            }
+          },
+          $set: { updatedAt: new Date() }
+        }
+      );
+  
+      res.status(201).json({
+        success: true,
+        message: 'Message submitted and auto-reply sent successfully.',
+        data: { insertedId: result.insertedId }
+      });
+    } catch (error) {
+      console.error('Error submitting message:', error.message);
+      res.status(500).json({ error: 'An error occurred while submitting the message.' });
+    }
+  });
 
 router.post('/conversation', async (req, res) => {
     try {
@@ -217,7 +247,7 @@ router.post('/reply', async (req, res) => {
         const decryptedData = decrypt(req.body.data);
         console.log("decryptedData", decryptedData);
 
-        const { site, messageId, replyContent, authen } = decryptedData;
+        const { site, messageId, replyContent, userID, authen } = decryptedData;
 
         let user = null;
 
@@ -247,26 +277,69 @@ router.post('/reply', async (req, res) => {
             return res.status(404).json({ error: 'Message not found.' });
         }
 
-        const updateOperations = {
-            $push: { replies: { userID: user, content: replyContent, createdAt: new Date() } },
-            $set: { updatedAt: new Date() },
-        };
-
-        if (message.replies.length === 0) {
-            updateOperations.$set.status = 'answered';
-        }
-
+        // Add user's reply first
         await messageCollection.updateOne(
             { _id: safeObjectId(messageId) },
-            updateOperations
+            {
+                $push: {
+                    replies: {
+                        userID: userID || user,
+                        content: replyContent,
+                        createdAt: new Date()
+                    }
+                },
+                $set: { updatedAt: new Date() }
+            }
         );
 
-        res.status(200).json({ success: true, message: 'Reply added successfully.' });
+        // Fetch updated conversation history
+        const updatedMessage = await messageCollection.findOne({ _id: safeObjectId(messageId) });
+        const conversationHistory = updatedMessage.replies.map(reply => {
+            const sender = reply.userID === user ? "คุณ" : "ระบบ";
+            return `${sender}: ${reply.content}`;
+        }).join('\n');
+
+        // Enhanced AI prompt for helpful response
+        // Context-aware AI prompt
+        const aiPrompt = `นี่คือข้อมูลติดต่อของผู้ดูแลระบบ คือ เบอร์ 02123456789 email xxx@xxx.com พยายามไม่แจ้งข้อมูลนี้แก่ผู้ใช้งาน จนกว่าผู้ใช้งานจะขอ นี่คือประวัติการสนทนาระหว่างผู้ใช้งานและระบบ:\n${conversationHistory}\n\nโปรดตอบกลับอย่างสุภาพ กระชับ และเป็นมิตร โดยตอบสนองให้สอดคล้องกับบริบทของการสนทนา หากเป็นการทักทายหรือสอบถามทั่วไป ให้แนะนำการติดต่อหรือบริการที่เกี่ยวข้อง หากเป็นการแจ้งปัญหาให้สอบถามข้อมูลเพิ่มเติมหรือแนะนำวิธีแก้ไขเบื้องต้น ตอบกลับเป็นข้อความธรรมดา (Plain Text) หากบริบทของข้อความมีการกล่าวขอบคุณหรือมีท่าทีต้องการจบการสนทนา กรุณาสอบถามผู้ใช้งานว่า 'ต้องการจบการสนทนานี้หรือไม่? กรุณาตอบ ใช่ หรือ ตกลง เพื่อดำเนินการปิดการสนทนา'`;
+
+        // Generate AI response
+        const aiReply = await generateCustomMessage(aiPrompt);
+
+        // Add AI's reply
+        await messageCollection.updateOne(
+            { _id: safeObjectId(messageId) },
+            {
+                $push: {
+                    replies: {
+                        userID: 'system',
+                        content: aiReply,
+                        createdAt: new Date()
+                    }
+                },
+                $set: { updatedAt: new Date() }
+            }
+        );
+
+        // Update status if it's the first reply
+        if (message.replies.length === 0) {
+            await messageCollection.updateOne(
+                { _id: safeObjectId(messageId) },
+                { $set: { status: 'answered', updatedAt: new Date() } }
+            );
+        }
+
+        res.status(200).json({ 
+            success: true, 
+            message: 'Reply and AI response added successfully.', 
+            aiReply 
+        });
     } catch (error) {
         console.error('Error replying to message:', error.message, error.stack);
         res.status(500).json({ error: 'An error occurred while replying to the message.' });
     }
 });
+
 
 router.post('/close', async (req, res) => {
     try {
