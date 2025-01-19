@@ -902,6 +902,14 @@ router.post('/course/:id/:playerID?', async (req, res) => {
             surveyData.isSubmit = false;
         }
 
+        let formData = null;
+
+        // Fetch form data if course type is 'onsite' and formID exists
+        if (course.type === 'onsite' && course.formID) {
+            const postCollection = targetDb.collection('post');
+            formData = await postCollection.findOne({ _id: safeObjectId(course.formID) });
+        }
+
         // Format response
         const formattedResponse = {
             success: true,
@@ -940,6 +948,7 @@ router.post('/course/:id/:playerID?', async (req, res) => {
                 isEnroll: !! enrollment,
                 isSurvey: !! surveyData,
                 isComplete,
+                isPaid: (course.regular_price > 0 || course.sale_price > 0)
             },
             playlist: syncedPlayersWithProgress,
             analytics: {
@@ -975,6 +984,7 @@ router.post('/course/:id/:playerID?', async (req, res) => {
             ...(enrollment && { enrollment }), // Add enrollment if present
             ...(player && { player }), // Add specific player data if present
             ...(Object.keys(contest).length > 0 && { contest }),
+            ...(formData && { form: formData }), // Add form data if available
         };
 
         res.status(200).json(formattedResponse);

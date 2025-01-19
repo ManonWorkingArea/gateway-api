@@ -37,19 +37,6 @@ function verifyToken(token) {
     });
 }
 
-// Function to generate JWT with adjustable expiration time
-function generateJWT(userResponse, key, rememberMe) {
-    const expiration = rememberMe ? '30d' : '24h'; // 30 days or 1 day
-    const data = {
-        user: userResponse._id,
-        role: userResponse.role,
-        site: key,
-    };
-
-    const token = jwt.sign(data, JWT_SECRET, { expiresIn: expiration });
-    return { token, data };
-}
-
 // Function to get site-specific database and collection
 async function getSiteSpecificDb(client, site) {
     const apiDb = client.db('API');
@@ -64,23 +51,6 @@ async function getSiteSpecificDb(client, site) {
     const userCollection = targetDb.collection('user');
     return { targetDb, userCollection, siteData };
 }
-
-// Function to retrieve hostname data
-const getHostname = async (hostname) => {
-    const client = new MongoClient(process.env.MONGODB_URI, {
-        useNewUrlParser: true,
-        useUnifiedTopology: true,
-    });
-
-    try {
-        await client.connect();
-        const db = client.db('API');
-        const clientsCollection = db.collection('hostname');
-        return await clientsCollection.findOne({ hostname });
-    } finally {
-        await client.close();
-    }
-};
 
 async function generateCustomMessage(prompt) {
     const GEMINI_API_KEY = "AIzaSyB_DNNNAbBpaQ41rKHgDeL-zzGpQmjcRH4"; // Replace with your actual API key
@@ -111,7 +81,6 @@ async function generateCustomMessage(prompt) {
       return "ขออภัย ไม่สามารถสร้างข้อความตอบกลับได้ในขณะนี้.";
     }
   }
-
 
   router.post('/new', async (req, res) => {
     try {
@@ -339,7 +308,6 @@ router.post('/reply', async (req, res) => {
         res.status(500).json({ error: 'An error occurred while replying to the message.' });
     }
 });
-
 
 router.post('/close', async (req, res) => {
     try {

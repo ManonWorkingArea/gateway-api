@@ -23,6 +23,8 @@ const authenRouter    = require('./authen');  // Import the auth router
 const lessonRouter    = require('./lesson');  // Import the auth router
 const messageRouter    = require('./message');  // Import the auth router
 
+const addressRouter    = require('./address');  // Import the auth router
+
 dotenv.config();
 const app = express();
 const rateLimit = require('express-rate-limit');
@@ -79,6 +81,7 @@ async function initializeApp() {
     app.use('/authen', authenRouter); // Add the /ai route
     app.use('/lesson', lessonRouter); // Add the /ai route
     app.use('/message', messageRouter); // Add the /ai route
+    app.use('/address', addressRouter); // Add the /ai route
 
     server.listen(process.env.PORT, () => {
       console.log(`PRT :: ${process.env.PORT}`);
