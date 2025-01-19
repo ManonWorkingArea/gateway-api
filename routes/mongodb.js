@@ -618,21 +618,20 @@ router.get('/appointment/:id', async (req, res) => {
   });
 
   // Update a document by ID in a collection
-  router.put(`/:collection/:id`, async (req, res) => {
+  router.put('/:collection/:id', async (req, res, next) => {
     try {
-      const { client, db } = req;
+      const { db } = req;
       const collectionName = req.params.collection;
       const collection = db.collection(collectionName);
       const { data, options } = req.body;
 
       const id = safeObjectId(req.params.id);
 
+      // Check for unique constraint
       if (options && options.unique) {
         const existingItem = await collection.findOne({ [options.unique]: data[options.unique], _id: { $ne: id } });
-
         if (existingItem) {
-          res.status(400).json({ message: `Duplicate entry for the unique field: ${options.unique}` });
-          return;
+          return res.status(400).json({ message: `Duplicate entry for the unique field: ${options.unique}` });
         }
       }
 
@@ -643,37 +642,46 @@ router.get('/appointment/:id', async (req, res) => {
 
       if (result.matchedCount > 0) {
         const updatedItem = await collection.findOne({ _id: id });
+
+        // Invalidate Redis cache for this document
+        const cacheKey = `doc:${collectionName}:${id}:none:none`;
+        await redisClient.del(cacheKey);
+
         res.status(200).json(updatedItem);
       } else {
         res.status(404).json({ message: `Item not found` });
       }
     } catch (err) {
+      console.error('Error updating document:', err);
       next(err);
     }
   });
 
-
   // Delete a document by ID from a collection
-  router.delete(`/:collection/:id`, async (req, res) => {
+  router.delete('/:collection/:id', async (req, res, next) => {
     try {
-      const { client, db } = req; // Access client and db from req object
+      const { db } = req;
       const collectionName = req.params.collection;
       const collection = db.collection(collectionName);
 
-      const id = safeObjectId(req.params.id); // Safely parse the ObjectId
+      const id = safeObjectId(req.params.id);
 
       const result = await collection.deleteOne({ _id: id });
 
       if (result.deletedCount > 0) {
+        // Invalidate Redis cache for this document
+        const cacheKey = `doc:${collectionName}:${id}:none:none`;
+        await redisClient.del(cacheKey);
+
         res.status(200).json({ message: `Item deleted` });
       } else {
         res.status(404).json({ message: `Item not found` });
       }
     } catch (err) {
+      console.error('Error deleting document:', err);
       next(err);
     }
   });
-
 
   router.post(`/:collection/query`, async (req, res) => {
     try {
