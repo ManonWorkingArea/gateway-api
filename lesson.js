@@ -5,6 +5,7 @@ const axios = require('axios'); // For making HTTP requests
 const { crossOriginResourcePolicy } = require('helmet');
 const CryptoJS = require('crypto-js');
 const router = express.Router();
+const fetch = require('node-fetch'); // Ensure this package is installed
 
 const { redisClient } = require('./routes/middleware/redis');  // Import Redis helpers
 
@@ -442,16 +443,33 @@ router.post('/course/:id/:playerID?', async (req, res) => {
         }
 
         const siteIdString = siteData._id.toString();
+        console.log("siteData",siteData.theme.checkout);
         const courseCollection = targetDb.collection('course');
         const playerCollection = targetDb.collection('player');
         const progressCollection = targetDb.collection('progress');
         const enrollCollection = targetDb.collection('enroll');
+        const orderCollection = targetDb.collection('order');
         const surveySubmissionCollection = targetDb.collection('survey_submission');
 
         // Fetch course details
         const course = await courseCollection.findOne({ _id: courseId, unit: siteIdString });
         if (!course) {
             return res.status(404).json({ error: 'Course not found.' });
+        }
+
+        // Check for existing order if course is paid
+        let isOrder = false;
+        let isPaid  = false; // Initialize isPaid flag
+        let order   = null;
+
+        if (course.sale_price > 0) {
+            order = await orderCollection.findOne({ courseID: course._id.toString(), userID: user });
+            isOrder = !!order;
+
+            // Check if the order exists and its status is 'processing'
+            if (order && order.status === 'complete') {
+                isPaid = true; // Set isPaid to true
+            }
         }
 
         const courseCategoryCodes = Array.isArray(course.category)
@@ -880,7 +898,6 @@ router.post('/course/:id/:playerID?', async (req, res) => {
             }
         }
 
-
         const surveyCollection = targetDb.collection('survey');
         let surveyData = null;
 
@@ -905,10 +922,45 @@ router.post('/course/:id/:playerID?', async (req, res) => {
         let formData = null;
 
         // Fetch form data if course type is 'onsite' and formID exists
-        if (course.type === 'onsite' && course.formID) {
+        if (course.formID) {
             const postCollection = targetDb.collection('post');
             formData = await postCollection.findOne({ _id: safeObjectId(course.formID) });
         }
+
+        // OR if you need only a boolean flag for `isForm`:
+        const isForm = enrollment?.submitID ? false : !!formData; // isForm is false if enrollment has submitID
+
+        let submitFormData = null; // To store form data fetched by submitID
+
+        if (enrollment) {
+            enrollID = enrollment._id;
+        
+            // If enrollment has submitID, fetch corresponding form data
+            if (enrollment.submitID) {
+                const formCollection = targetDb.collection('form');
+                submitFormData = await formCollection.findOne({ _id: safeObjectId(enrollment.submitID) });
+            }
+        } else {
+            enrollID = null;
+        }
+
+        // Fetch data if isPay = true
+        let checkoutData = null;
+
+        if (!isForm && course.sale_price > 0) {
+            // Fetch data from the 'post' collection using the siteData.theme.checkout key
+            const postCollection = targetDb.collection('post');
+            const checkoutKey = siteData?.theme?.checkout; // Get the 'checkout' key from siteData
+            if (checkoutKey) {
+                checkoutData = await postCollection.findOne({ _id: safeObjectId(checkoutKey) });
+            }
+        }
+
+        console.log("checkoutData",checkoutData);
+
+        const courseProperties = await calculateCoursePropertiesById(courseId, user, targetDb);
+
+        console.log("courseProperties",courseProperties);
 
         // Format response
         const formattedResponse = {
@@ -944,11 +996,16 @@ router.post('/course/:id/:playerID?', async (req, res) => {
                     status: course.status,
                     updatedAt: course.updatedAt,
                     playlistUpdatedAt: latestUpdatedAt,
+                    enrollID,
+                    submitID: enrollment?.submitID || null, // Include submitID if available
                 },
                 isEnroll: !! enrollment,
                 isSurvey: !! surveyData,
                 isComplete,
-                isPaid: (course.regular_price > 0 || course.sale_price > 0)
+                isForm,
+                isPay: !isForm && course.sale_price > 0 && !isPaid, // New logic for isPay
+                isOrder,
+                isPaid
             },
             playlist: syncedPlayersWithProgress,
             analytics: {
@@ -981,11 +1038,18 @@ router.post('/course/:id/:playerID?', async (req, res) => {
                 has: course.survey,
                 id: course.surveyId,
             },
-            ...(enrollment && { enrollment }), // Add enrollment if present
+            ...(enrollment && { 
+                enrollment: { 
+                    ...enrollment, 
+                    submit: submitFormData || null // Add submitFormData into enrollment
+                }
+            }),
             ...(player && { player }), // Add specific player data if present
             ...(Object.keys(contest).length > 0 && { contest }),
             ...(formData && { form: formData }), // Add form data if available
-        };
+            ...(checkoutData && { checkout: checkoutData }), // Include checkout data if fetched
+            ...(isOrder && { order }),
+        };        
 
         res.status(200).json(formattedResponse);
     } catch (error) {
@@ -993,6 +1057,47 @@ router.post('/course/:id/:playerID?', async (req, res) => {
         res.status(500).json({ error: 'An error occurred while fetching data.' });
     }
 });
+
+const calculateCoursePropertiesById = async (courseId, userId, targetDb) => {
+    const enrollCollection = targetDb.collection('enroll');
+    const surveyCollection = targetDb.collection('survey');
+    const postCollection = targetDb.collection('post');
+
+    // Fetch course details
+    const course = await targetDb.collection('course').findOne({ _id: safeObjectId(courseId) });
+    if (!course) throw new Error('Course not found.');
+
+    // Fetch enrollment details
+    const enrollment = userId
+        ? await enrollCollection.findOne({ courseID: courseId.toString(), userID: userId })
+        : null;
+
+    // Fetch survey details
+    const surveyData = course.survey === 'yes' && course.surveyId
+        ? await surveyCollection.findOne({ _id: safeObjectId(course.surveyId) })
+        : null;
+
+    // Fetch form data if necessary
+    let formData = null;
+    if (course.formID) {
+        formData = await postCollection.findOne({ _id: safeObjectId(course.formID) });
+    }
+
+    // Calculate properties
+    const isEnroll = !!enrollment;
+    const isSurvey = !!surveyData;
+    const isForm = enrollment?.submitID ? false : !!formData; // isForm is false if enrollment has submitID
+    const isPay = !isForm && course.sale_price > 0; // Logic for paid courses
+    const isComplete = enrollment?.analytics?.percent === 100 || false; // Example completion logic
+
+    return {
+        isEnroll,
+        isSurvey,
+        isForm,
+        isPay,
+        isComplete,
+    };
+};
 
 // Endpoint to fetch course details with score, exam, and answer data including questions
 router.post('/assessment/:id/:exam?', async (req, res) => {
@@ -1703,6 +1808,7 @@ router.post('/enroll', async (req, res) => {
                 days: 1,
                 regular_price: 1,
                 sale_price: 1,
+                type: 1,
                 createdAt: 1,
             })
             .sort({ createdAt: -1 }) // Sort courses by updatedAt in descending order
@@ -2103,5 +2209,250 @@ router.post('/survey/submit', async (req, res) => {
         res.status(500).json({ error: 'An error occurred while submitting the survey.' });
     }
 });
+
+router.post('/form/submit', async (req, res) => {
+    try {
+        // Decrypt the incoming data
+        const decryptedData = decrypt(req.body.data);
+        const { site, formData, formID, status, courseID, process, enrollID, authen } = decryptedData;
+
+        // Authen User Middleware
+        const authResult = await authenticateUserToken(authen, res);
+        if (!authResult.status) return authResult.response;
+        const user = authResult.user;
+
+        // Validate required fields
+        if (!site || !formData || !formID || !courseID || !enrollID) {
+            return res.status(400).json({ error: 'Site, formData, formID, courseID, and enrollID are required.' });
+        }
+
+        const { client } = req;
+        const { targetDb, siteData } = await getSiteSpecificDb(client, site);
+
+        if (!siteData || !siteData._id) {
+            return res.status(404).json({ error: 'Site data not found or invalid.' });
+        }
+
+        const siteIdString = siteData._id.toString();
+        const formCollection = targetDb.collection('form');
+        const enrollCollection = targetDb.collection('enroll');
+
+        // Prepare the form document
+        const formDocument = {
+            parent: siteIdString,
+            formData,
+            formID,
+            status,
+            courseID,
+            process: process || {},
+            userID: user,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+        };
+
+        // Insert the form document into the collection
+        const result = await formCollection.insertOne(formDocument);
+        const insertedId = result.insertedId;
+
+        if (!insertedId) {
+            return res.status(500).json({ error: 'Failed to insert form data.' });
+        }
+
+        // Update the enroll collection with the provided enrollID
+        const updateResult = await enrollCollection.updateOne(
+            { _id: safeObjectId(enrollID) },
+            { $set: { submitID: insertedId.toString() } }
+        );
+
+        if (updateResult.matchedCount === 0) {
+            return res.status(404).json({ error: 'Enrollment not found for the specified enrollID.' });
+        }
+
+        res.status(201).json({
+            success: true,
+            message: 'Form submitted successfully.',
+            data: { insertedId },
+        });
+    } catch (error) {
+        console.error('Error submitting form:', error.message, error.stack);
+        res.status(500).json({ error: 'An error occurred while submitting the form.' });
+    }
+});
+
+router.post('/order/submit', async (req, res) => {
+    try {
+        // Decrypt the incoming data
+        const decryptedData = decrypt(req.body.data);
+        const { site, authen, orderData, courseID } = decryptedData;
+        const {
+            products,
+            customer,
+            amounts,
+            address,
+            formID,
+            process,
+            ref1,
+            ref2,
+            payment,
+            notes
+        } = orderData;
+
+        // Validate required fields
+        if (!products || !customer || !amounts || !address) {
+            return res.status(400).json({ error: 'Products, customer, amounts, and address are required.' });
+        }
+
+        if (!site) {
+            return res.status(400).json({ error: 'Site parameter is required.' });
+        }
+
+        // Authenticate user
+        const authResult = await authenticateUserToken(authen, res);
+        if (!authResult.status) return authResult.response;
+        const user = authResult.user;
+
+        const { client } = req;
+        const { targetDb, siteData } = await getSiteSpecificDb(client, site);
+
+        if (!siteData || !siteData._id) {
+            return res.status(404).json({ error: 'Site data not found or invalid.' });
+        }
+
+        const siteIdString = siteData._id.toString();
+        const orderCollection = targetDb.collection('order');
+
+        // Check if an order already exists for the given courseID and userID
+        const existingOrder = await orderCollection.findOne({ courseID, userID: user });
+        if (existingOrder) {
+            return res.status(409).json({
+                error: 'An order already exists for this course and user.',
+                data: { orderId: existingOrder._id },
+            });
+        }
+
+        // Prepare the order document
+        const orderDocument = {
+            products,
+            customer,
+            amounts,
+            address,
+            formID,
+            courseID,
+            process,
+            ref1,
+            ref2,
+            payment,
+            notes,
+            userID: user,
+            unit: siteIdString,
+            status: 'pending', // Default status for new orders
+            createdAt: new Date(),
+            updatedAt: new Date(),
+        };
+
+        // Insert the order document into the collection
+        const result = await orderCollection.insertOne(orderDocument);
+
+        // Check if insertion was successful
+        if (!result.insertedId) {
+            return res.status(500).json({ error: 'Failed to insert order data.' });
+        }
+
+        res.status(201).json({
+            success: true,
+            message: 'Order submitted successfully.',
+            data: { insertedId: result.insertedId },
+        });
+    } catch (error) {
+        console.error('Error submitting order:', error.message, error.stack);
+        res.status(500).json({ error: 'An error occurred while submitting the order.' });
+    }
+});
+
+router.post('/qrcode', async (req, res) => {
+    const { data, config, size, download, file } = req.body;
+
+    try {
+        // Validate required fields
+        if (!data || !config || !size || !file) {
+            return res.status(400).json({
+                error: 'Missing required fields: data, config, size, and file are required.'
+            });
+        }
+
+        // Create a unique cache key based on the input data
+        const cacheKey = `qrcode:${CryptoJS.MD5(JSON.stringify({ data, config, size, file })).toString()}`;
+
+        // Check if the QR code is already cached in Redis
+        const cachedQrCode = await redisClient.get(cacheKey);
+
+        if (cachedQrCode) {
+            console.log('QR Code retrieved from cache');
+            return res.status(200).json({ success: true, base64Image: cachedQrCode, cache: true });
+        }
+
+        // API URL for QR Code Monkey
+        const apiUrl = 'https://api.qrcode-monkey.com/qr/custom';
+
+        // Payload for the QR Code Monkey API
+        const payload = {
+            data,
+            config,
+            size,
+            download,
+            file
+        };
+
+        // Make the POST request to QR Code Monkey
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        // Check if the request was successful
+        if (!response.ok) {
+            const error = await response.json();
+            return res.status(response.status).json({
+                success: false,
+                error: error.message || 'Failed to generate QR code.'
+            });
+        }
+
+        // Parse the response
+        const qrCodeData = await response.json();
+
+        // Construct the full image URL if it is relative
+        const imageUrl = qrCodeData.imageUrl.startsWith('//')
+            ? `https:${qrCodeData.imageUrl}`
+            : qrCodeData.imageUrl;
+
+        // Fetch the QR code image as a buffer
+        const imageResponse = await fetch(imageUrl);
+        if (!imageResponse.ok) {
+            return res.status(500).json({
+                success: false,
+                error: 'Failed to fetch QR code image for Base64 conversion.'
+            });
+        }
+        const imageBuffer = await imageResponse.buffer();
+
+        // Convert the image buffer to a Base64 string
+        const base64Image = `data:image/png;base64,${imageBuffer.toString('base64')}`;
+
+        // Store the Base64-encoded QR code in Redis with a 1-hour expiration
+        await redisClient.setEx(cacheKey, 3600, base64Image);
+
+        console.log('QR Code stored in cache');
+
+        // Return the Base64-encoded QR code
+        res.status(200).json({ success: true, base64Image, cache: false });
+    } catch (error) {
+        console.error('Error generating QR code:', error.message, error.stack);
+        res.status(500).json({ error: 'An error occurred while generating the QR code.' });
+    }
+});
+
+
 
 module.exports = router;
