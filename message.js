@@ -6,6 +6,8 @@ const { crossOriginResourcePolicy } = require('helmet');
 const CryptoJS = require('crypto-js');
 const router = express.Router();
 
+
+const { conversation } = require('./middleware/ai');
 // Secret key for signing JWT (Use environment variables for security)
 const JWT_SECRET = 'ZCOKU1v3TO2flcOqCdrJ3vWbWhmnZNQn';
 
@@ -52,36 +54,6 @@ async function getSiteSpecificDb(client, site) {
     return { targetDb, userCollection, siteData };
 }
 
-async function generateCustomMessage(prompt) {
-    const GEMINI_API_KEY = "AIzaSyB_DNNNAbBpaQ41rKHgDeL-zzGpQmjcRH4"; // Replace with your actual API key
-    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
-    const headers = {
-      "Content-Type": "application/json"
-    };
-    const body = JSON.stringify({
-      contents: [
-        {
-          role: "user",
-          parts: [{ text: prompt }]
-        }
-      ]
-    });
-  
-    try {
-      const response = await axios.post(url, body, { headers });
-      if (response.status === 200) {
-        const generatedText = response.data.candidates[0]?.content.parts[0]?.text.trim();
-        return generatedText || "ขออภัย ไม่สามารถสร้างข้อความตอบกลับได้ในขณะนี้.";
-      } else {
-        console.error("Error generating message:", response.data);
-        return "ขออภัย ไม่สามารถสร้างข้อความตอบกลับได้ในขณะนี้.";
-      }
-    } catch (error) {
-      console.error("Network error generating message:", error);
-      return "ขออภัย ไม่สามารถสร้างข้อความตอบกลับได้ในขณะนี้.";
-    }
-  }
-
   router.post('/new', async (req, res) => {
     try {
       const decryptedData = decrypt(req.body.data);
@@ -118,9 +90,9 @@ async function generateCustomMessage(prompt) {
   
       const result = await messageCollection.insertOne(newMessage);
   
-      const customPrompt = `โปรดตอบกลับอย่างสุภาพ กระชับ และเป็นมิตร โดยรับทราบปัญหาที่ผู้ใช้งานแจ้ง หากต้องการข้อมูลเพิ่มเติมให้สอบถามอย่างสุภาพ และหากไม่สามารถตอบได้ ให้แจ้งว่าทีมงานจะตรวจสอบและติดตามผลโดยเร็ว โดยไม่ต้องให้คำมั่นสัญญาหรือกำหนดเวลาในการแก้ไข ตอบกลับเป็นข้อความธรรมดา (Plain Text) โดยไม่ต้องมีรูปแบบหรือฟอร์แมตพิเศษ\n\nคำถามจากผู้ใช้งาน:\n"${content}"`;
+      const customPrompt = `คำถามจากผู้ใช้งาน:\n"${content}"`;
       
-      const autoReply = await generateCustomMessage(customPrompt);
+      const autoReply = await conversation(customPrompt);
   
       await messageCollection.updateOne(
         { _id: result.insertedId },
@@ -270,10 +242,10 @@ router.post('/reply', async (req, res) => {
 
         // Enhanced AI prompt for helpful response
         // Context-aware AI prompt
-        const aiPrompt = `นี่คือข้อมูลติดต่อของผู้ดูแลระบบ คือ เบอร์ 02123456789 email xxx@xxx.com พยายามไม่แจ้งข้อมูลนี้แก่ผู้ใช้งาน จนกว่าผู้ใช้งานจะขอ นี่คือประวัติการสนทนาระหว่างผู้ใช้งานและระบบ:\n${conversationHistory}\n\nโปรดตอบกลับอย่างสุภาพ กระชับ และเป็นมิตร โดยตอบสนองให้สอดคล้องกับบริบทของการสนทนา หากเป็นการทักทายหรือสอบถามทั่วไป ให้แนะนำการติดต่อหรือบริการที่เกี่ยวข้อง หากเป็นการแจ้งปัญหาให้สอบถามข้อมูลเพิ่มเติมหรือแนะนำวิธีแก้ไขเบื้องต้น ตอบกลับเป็นข้อความธรรมดา (Plain Text) หากบริบทของข้อความมีการกล่าวขอบคุณหรือมีท่าทีต้องการจบการสนทนา กรุณาสอบถามผู้ใช้งานว่า 'ต้องการจบการสนทนานี้หรือไม่? กรุณาตอบ ใช่ หรือ ตกลง เพื่อดำเนินการปิดการสนทนา'`;
+        const aiPrompt = `นี่คือประวัติการสนทนาระหว่างผู้ใช้งานและระบบ:\n${conversationHistory}'`;
 
         // Generate AI response
-        const aiReply = await generateCustomMessage(aiPrompt);
+        const aiReply = await conversation(aiPrompt);
 
         // Add AI's reply
         await messageCollection.updateOne(

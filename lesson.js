@@ -962,6 +962,20 @@ router.post('/course/:id/:playerID?', async (req, res) => {
 
         console.log("courseProperties",courseProperties);
 
+         // Fetch schedule data for onsite courses
+         let scheduleData = null;
+         if (course.type === 'onsite') {
+             const scheduleCollection = targetDb.collection('schedule');
+             scheduleData = await scheduleCollection
+                 .find({ courseId: courseId.toString(), parent: siteIdString })
+                 .sort({ date: 1 }) // Assuming schedules have a 'date' field for sorting
+                 .toArray();
+         }
+         console.log("courseId",courseId.toString());
+         console.log("parent",siteIdString);
+
+         console.log("scheduleData",scheduleData);
+
         // Format response
         const formattedResponse = {
             success: true,
@@ -1007,6 +1021,7 @@ router.post('/course/:id/:playerID?', async (req, res) => {
                 isOrder,
                 isPaid
             },
+            ...(course.type === 'onsite' && scheduleData && { schedule: scheduleData }), // Include schedule data for onsite courses
             playlist: syncedPlayersWithProgress,
             analytics: {
                 total: counts.total,
@@ -1098,6 +1113,93 @@ const calculateCoursePropertiesById = async (courseId, userId, targetDb) => {
         isComplete,
     };
 };
+
+router.post('/reset/:id', async (req, res) => {
+    const { id } = req.params;
+    const { site, authen } = req.body;
+    console.log("id",id);
+    const courseId = id;
+    try {
+        if (!courseId) {
+            return res.status(400).json({ error: 'Course ID is required.' });
+        }
+
+        if (!site) {
+            return res.status(400).json({ error: 'Site parameter is required.' });
+        }
+
+        // Authenticate user
+        const authResult = await authenticateUserToken(authen, res);
+        if (!authResult.status) return authResult.response;
+        const user = authResult.user;
+
+        if (!user) {
+            return res.status(401).json({ error: 'User authentication failed. Token is required.' });
+        }
+
+        const { client } = req;
+        const { targetDb, siteData } = await getSiteSpecificDb(client, site);
+
+        if (!siteData || !siteData._id) {
+            return res.status(404).json({ error: 'Site data not found or invalid.' });
+        }
+
+        const progressCollection = targetDb.collection('progress');
+        const scoreCollection = targetDb.collection('score');
+        const formCollection = targetDb.collection('form');
+        const enrollCollection = targetDb.collection('enroll');
+        const orderCollection = targetDb.collection('order');
+
+        // Convert courseId to ObjectId
+        //const courseObjectId = safeObjectId(courseId);
+
+        console.log("courseId",courseId);
+        // Remove progress
+        const progressResult = await progressCollection.deleteMany({
+            courseID: courseId,
+            userID: user,
+        });
+
+        // Remove scores
+        const scoreResult = await scoreCollection.deleteMany({
+            courseID: courseId,
+            userID: user,
+        });
+
+        // Remove form submissions
+        const formResult = await formCollection.deleteMany({
+            courseID: courseId,
+            userID: user,
+        });
+
+        // Remove order submissions
+        const orderResult = await orderCollection.deleteMany({
+            courseID: courseId,
+            userID: user,
+        });
+
+        // Remove enrollment
+        const enrollResult = await enrollCollection.deleteMany({
+            courseID: courseId,
+            userID: user,
+        });
+
+        res.status(200).json({
+            success: true,
+            message: 'User data for the course has been reset successfully.',
+            details: {
+                progressDeleted: progressResult.deletedCount,
+                scoresDeleted: scoreResult.deletedCount,
+                formsDeleted: formResult.deletedCount,
+                enrollmentsDeleted: enrollResult.deletedCount,
+                orderDeleted: orderResult.deletedCount,
+            },
+        });
+    } catch (error) {
+        console.error('Error resetting user data for the course:', error.message, error.stack);
+        res.status(500).json({ error: 'An error occurred while resetting user data for the course.' });
+    }
+});
 
 // Endpoint to fetch course details with score, exam, and answer data including questions
 router.post('/assessment/:id/:exam?', async (req, res) => {
