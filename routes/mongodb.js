@@ -13,7 +13,7 @@ const {
 } = require('./middleware/mongoMiddleware');
 
 
-const USE_REDIS_CACHE = true; // Set to false to disable Redis caching
+const USE_REDIS_CACHE = false; // Set to false to disable Redis caching
 
 module.exports = function () {
   const router = Router();
