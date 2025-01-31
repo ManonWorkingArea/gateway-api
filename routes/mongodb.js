@@ -272,7 +272,7 @@ router.get('/getHost', async (req, res) => {
     const cachedData = await getCachedData(cacheKey);
 
     if (cachedData) {
-      return res.status(200).json({ status: true, ...cachedData });
+      //return res.status(200).json({ status: true, ...cachedData });
     }
 
     const hostnameCollection = db.collection('hostname');
@@ -319,7 +319,7 @@ router.post('/getTheme', async (req, res) => {
     const cachedData = await getCachedData(cacheKey);
 
     if (cachedData) {
-      return res.status(200).json({ status: true, data: cachedData });
+      //return res.status(200).json({ status: true, data: cachedData });
     }
 
     const objectIds = Object.values(data).filter(id => id).map(id => safeObjectId(id));
