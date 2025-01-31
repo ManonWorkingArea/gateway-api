@@ -12,6 +12,9 @@ const {
   errorHandler
 } = require('./middleware/mongoMiddleware');
 
+
+const USE_REDIS_CACHE = true; // Set to false to disable Redis caching
+
 module.exports = function () {
   const router = Router();
   router.use(authenticateClient);
@@ -269,10 +272,11 @@ router.get('/getHost', async (req, res) => {
     }
 
     const cacheKey = `getHost:${hostname}`;
-    const cachedData = await getCachedData(cacheKey);
-
-    if (cachedData) {
-      return res.status(200).json({ status: true, ...cachedData });
+    if (USE_REDIS_CACHE) {
+      const cachedData = await getCachedData(cacheKey);
+      if (cachedData) {
+        return res.status(200).json({ status: true, ...cachedData });
+      }
     }
 
     const hostnameCollection = db.collection('hostname');
@@ -296,7 +300,9 @@ router.get('/getHost', async (req, res) => {
     const hosts = allHostData.map((host) => ({ hostname: host.hostname, siteName: host.siteName })).sort((a, b) => a.hostname.localeCompare(b.hostname));
 
     const responseData = { status: true, hostData: hostResult, spaceData: spaceResult, translateData: translateResult, hosts };
-    await setCachedData(cacheKey, responseData);
+    if (USE_REDIS_CACHE) {
+      await setCachedData(cacheKey, responseData);
+    }
 
     res.status(200).json(responseData);
   } catch (err) {
@@ -316,7 +322,12 @@ router.post('/getTheme', async (req, res) => {
     }
 
     const cacheKey = `getTheme:${JSON.stringify(data)}`;
-    const cachedData = await getCachedData(cacheKey);
+    if (USE_REDIS_CACHE) {
+      const cachedData = await getCachedData(cacheKey);
+      if (cachedData) {
+        return res.status(200).json({ status: true, data: cachedData });
+      }
+    }
 
     if (cachedData) {
       return res.status(200).json({ status: true, data: cachedData });
@@ -332,7 +343,9 @@ router.post('/getTheme', async (req, res) => {
       return acc;
     }, {});
 
-    await setCachedData(cacheKey, result);
+    if (USE_REDIS_CACHE) {
+      await setCachedData(cacheKey, result);
+    }
 
     res.status(200).json({ status: true, data: result });
   } catch (err) {
@@ -501,10 +514,11 @@ router.get('/appointment/:id', async (req, res) => {
 
       const cacheKey = `doc:${collectionName}:${documentId}:${joinCollection || 'none'}:${arrayField || 'none'}`;
       
-      // Check if data exists in Redis cache
-      const cachedData = await getCachedData(cacheKey);
-      if (cachedData) {
-        return res.status(200).json(cachedData);
+      if (USE_REDIS_CACHE) {
+        const cachedData = await getCachedData(cacheKey);
+        if (cachedData) {
+          return res.status(200).json(cachedData);
+        }
       }
 
       const collection = db.collection(collectionName);
@@ -527,8 +541,9 @@ router.get('/appointment/:id', async (req, res) => {
         }
       }
 
-      // Store the result in Redis for 5 minutes (300 seconds)
-      await setCachedData(cacheKey, document, 300);
+      if (USE_REDIS_CACHE) {
+        await setCachedData(cacheKey, document, 300);
+      }
 
       res.status(200).json(document);
     } catch (err) {
@@ -643,9 +658,10 @@ router.get('/appointment/:id', async (req, res) => {
       if (result.matchedCount > 0) {
         const updatedItem = await collection.findOne({ _id: id });
 
-        // Invalidate Redis cache for this document
-        const cacheKey = `doc:${collectionName}:${id}:none:none`;
-        await redisClient.del(cacheKey);
+        if (USE_REDIS_CACHE) {
+          const cacheKey = `doc:${collectionName}:${id}:none:none`;
+          await redisClient.del(cacheKey);
+        }
 
         res.status(200).json(updatedItem);
       } else {
@@ -669,9 +685,10 @@ router.get('/appointment/:id', async (req, res) => {
       const result = await collection.deleteOne({ _id: id });
 
       if (result.deletedCount > 0) {
-        // Invalidate Redis cache for this document
-        const cacheKey = `doc:${collectionName}:${id}:none:none`;
-        await redisClient.del(cacheKey);
+        if (USE_REDIS_CACHE) {
+          const cacheKey = `doc:${collectionName}:${id}:none:none`;
+          await redisClient.del(cacheKey);
+        }
 
         res.status(200).json({ message: `Item deleted` });
       } else {
