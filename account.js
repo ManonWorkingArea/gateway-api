@@ -700,7 +700,7 @@ router.post('/login', async (req, res) => {
     const userResponse = await userCollection.findOne(userQuery);
 
     if (!userResponse) {
-      return res.status(404).json({ status: false, message: 'User not found' });
+      return res.status(404).json({ status: false, message: 'ไม่พบชื่อผู้ใช้งานนี้' });
     }
 
     // Validate password
@@ -709,7 +709,7 @@ router.post('/login', async (req, res) => {
     const storedHash = userResponse.password;
 
     if (inputHash !== storedHash) {
-      return res.status(401).json({ status: false, message: 'Invalid username or password' });
+      return res.status(401).json({ status: false, message: 'ผู้ใช้งานหรือรหัสผ่านไม่ถูกต้อง' });
     }
 
     // Fetch user enrollments from the site-specific database
