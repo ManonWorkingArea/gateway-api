@@ -114,10 +114,10 @@ router.get('/render-builder', async (req, res) => {
 router.post('/register', async (req, res) => {
   try {
     const { client } = req; // MongoDB client from middleware
-    const { site, firstname, lastname, password, email, phone } = req.body;
+    const { site, firstname, lastname, password, email, phone, citizen } = req.body;
 
     // Validate required fields
-    if (!site || !firstname || !lastname || !password || !email || !phone) {
+    if (!site || !firstname || !lastname || !password || !email || !phone || !citizen) {
       return res.status(400).json({ 
         status: false, 
         message: 'Site, firstname, lastname, password, email, and phone are required.' 
@@ -131,7 +131,7 @@ router.post('/register', async (req, res) => {
     const userCollection = client.db(siteData.key).collection('user');
     const existingUser = await userCollection.findOne({
       parent: site, // Match the parent field with the value of site
-      $or: [{ phone }, { email }], // Match either phone or email
+      $or: [{ phone }, { email }, { citizen }], // Match either phone or email
     });
 
     if (existingUser) {
@@ -154,6 +154,7 @@ router.post('/register', async (req, res) => {
       firstname,
       lastname,
       email,
+      citizen,
       username: email,
       phone,
       password: hashedPassword,
@@ -925,6 +926,7 @@ router.get('/profile', async (req, res) => {
         uid: userData._id,
         firstname: userData.firstname,
         lastname: userData.lastname,
+        citizen: userData.citizen,
         phone: userData.phone,
         email: userData.email,
         avatar_img: userData.avatar_img,

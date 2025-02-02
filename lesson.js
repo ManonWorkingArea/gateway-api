@@ -1859,7 +1859,6 @@ router.post('/enroll', async (req, res) => {
     try {
         // Decrypt the data from the request body
         const decryptedData = decrypt(req.body.data);
-        //console.log("decryptedData", decryptedData);
 
         // Extract properties from the decrypted data
         const { site, authen } = decryptedData;
@@ -1897,7 +1896,7 @@ router.post('/enroll', async (req, res) => {
         // Extract course IDs from enrollments
         const courseIds = enrollments.map((enrollment) => safeObjectId(enrollment.courseID));
 
-        // Fetch course details for the enrolled courses and sort by updatedAt
+        // Fetch course details for the enrolled courses and sort by createdAt
         const courses = await courseCollection
             .find({ _id: { $in: courseIds } })
             .project({
@@ -1912,8 +1911,21 @@ router.post('/enroll', async (req, res) => {
                 sale_price: 1,
                 type: 1,
                 createdAt: 1,
+                accessDate: 1,
+                certDate: 1,
+                endDate: 1,
+                posttestDate: 1,
+                posttestEndDate: 1,
+                pretestDate: 1,
+                retestDateEndDateRound1: 1,
+                retestDateEndDateRound2: 1,
+                retestDateRound1: 1,
+                retestDateRound2: 1,
+                scoreDate: 1,
+                endRegistDate: 1,
+                startRegistDate: 1,
             })
-            .sort({ createdAt: -1 }) // Sort courses by updatedAt in descending order
+            .sort({ createdAt: -1 }) // Sort courses by createdAt in descending order
             .toArray();
 
         // Create a map of course details by course ID
@@ -1922,12 +1934,30 @@ router.post('/enroll', async (req, res) => {
             return map;
         }, {});
 
-        // Merge enrollment data with course details
+        // Merge enrollment data with course details and include condition key
         const enrichedEnrollments = enrollments.map((enrollment) => {
             const courseDetails = courseMap[enrollment.courseID];
+
             return {
                 enrollment,
                 course: courseDetails || null, // Include course details or null if not found
+                condition: courseDetails
+                    ? {
+                          accessDate: courseDetails.accessDate || null,
+                          certDate: courseDetails.certDate || null,
+                          endDate: courseDetails.endDate || null,
+                          posttestDate: courseDetails.posttestDate || null,
+                          posttestEndDate: courseDetails.posttestEndDate || null,
+                          pretestDate: courseDetails.pretestDate || null,
+                          retestDateEndDateRound1: courseDetails.retestDateEndDateRound1 || null,
+                          retestDateEndDateRound2: courseDetails.retestDateEndDateRound2 || null,
+                          retestDateRound1: courseDetails.retestDateRound1 || null,
+                          retestDateRound2: courseDetails.retestDateRound2 || null,
+                          scoreDate: courseDetails.scoreDate || null,
+                          endRegistDate: courseDetails.endRegistDate || null,
+                          startRegistDate: courseDetails.startRegistDate || null,
+                      }
+                    : null,
             };
         });
 
@@ -1940,11 +1970,11 @@ router.post('/enroll', async (req, res) => {
         res.status(500).json({ error: 'An error occurred while fetching enrollments.' });
     }
 });
+
 router.post('/transaction', async (req, res) => {
     try {
         // Decrypt the data from the request body
         const decryptedData = decrypt(req.body.data);
-        //console.log("decryptedData", decryptedData);
 
         // Extract properties from the decrypted data
         const { site, authen } = decryptedData;
@@ -1973,7 +2003,7 @@ router.post('/transaction', async (req, res) => {
         const courseCollection = targetDb.collection('course');
         const playerCollection = targetDb.collection('player');
 
-        // Fetch the last 10 unique transactions by playerID for the user
+        // Fetch the last 5 unique transactions by playerID for the user
         const transactions = await progressCollection
             .aggregate([
                 { $match: { userID: user } },
@@ -1983,14 +2013,32 @@ router.post('/transaction', async (req, res) => {
                     transaction: { $first: "$$ROOT" } // Keep the latest document for each playerID
                 }},
                 { $replaceRoot: { newRoot: "$transaction" } }, // Replace group result with the transaction
-                { $limit: 5 }, // Limit to the last 10 unique playerIDs
+                { $limit: 5 }, // Limit to the last 5 unique playerIDs
                 {
                     $lookup: {
                         from: "course",
                         let: { courseID: { $toObjectId: "$courseID" } },
                         pipeline: [
                             { $match: { $expr: { $eq: ["$_id", "$$courseID"] } } },
-                            { $project: { _id: 1, name: 1 }}  // **Project only _id and name**
+                            { 
+                                $project: { 
+                                    _id: 1, 
+                                    name: 1,
+                                    accessDate: 1,
+                                    certDate: 1,
+                                    endDate: 1,
+                                    posttestDate: 1,
+                                    posttestEndDate: 1,
+                                    pretestDate: 1,
+                                    retestDateEndDateRound1: 1,
+                                    retestDateEndDateRound2: 1,
+                                    retestDateRound1: 1,
+                                    retestDateRound2: 1,
+                                    scoreDate: 1,
+                                    endRegistDate: 1,
+                                    startRegistDate: 1
+                                } 
+                            }
                         ],
                         as: "courseData"
                     }
@@ -2001,7 +2049,7 @@ router.post('/transaction', async (req, res) => {
                         let: { playerID: { $toObjectId: "$playerID" } },
                         pipeline: [
                             { $match: { $expr: { $eq: ["$_id", "$$playerID"] } } },
-                            { $project: { _id: 1, name: 1 }}  // **Project only _id and name**
+                            { $project: { _id: 1, name: 1 } } // Project only _id and name
                         ],
                         as: "playerData"
                     }
@@ -2017,7 +2065,22 @@ router.post('/transaction', async (req, res) => {
                         createdAt: 1,
                         updatedAt: 1,
                         courseData: { $arrayElemAt: ["$courseData", 0] },
-                        playerData: { $arrayElemAt: ["$playerData", 0] }
+                        playerData: { $arrayElemAt: ["$playerData", 0] },
+                        condition: {
+                            accessDate: { $arrayElemAt: ["$courseData.accessDate", 0] },
+                            certDate: { $arrayElemAt: ["$courseData.certDate", 0] },
+                            endDate: { $arrayElemAt: ["$courseData.endDate", 0] },
+                            posttestDate: { $arrayElemAt: ["$courseData.posttestDate", 0] },
+                            posttestEndDate: { $arrayElemAt: ["$courseData.posttestEndDate", 0] },
+                            pretestDate: { $arrayElemAt: ["$courseData.pretestDate", 0] },
+                            retestDateEndDateRound1: { $arrayElemAt: ["$courseData.retestDateEndDateRound1", 0] },
+                            retestDateEndDateRound2: { $arrayElemAt: ["$courseData.retestDateEndDateRound2", 0] },
+                            retestDateRound1: { $arrayElemAt: ["$courseData.retestDateRound1", 0] },
+                            retestDateRound2: { $arrayElemAt: ["$courseData.retestDateRound2", 0] },
+                            scoreDate: { $arrayElemAt: ["$courseData.scoreDate", 0] },
+                            endRegistDate: { $arrayElemAt: ["$courseData.endRegistDate", 0] },
+                            startRegistDate: { $arrayElemAt: ["$courseData.startRegistDate", 0] }
+                        }
                     }
                 }
             ])
@@ -2032,6 +2095,7 @@ router.post('/transaction', async (req, res) => {
         res.status(500).json({ error: 'An error occurred while fetching transactions.' });
     }
 });
+
 
 // New endpoint to fetch or create certification details
 router.post('/certification/:id', async (req, res) => {
