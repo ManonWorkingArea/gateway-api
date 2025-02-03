@@ -1237,6 +1237,42 @@ router.post('/wallet', async (req, res) => {
   }
 });
 
+router.post('/bypass-user', async (req, res) => {
+  try {
+    const { userId, site } = req.body; // Expect user ID and site
+
+    if (!userId || !site) {
+      return res.status(400).json({ status: false, message: 'User ID and site are required' });
+    }
+
+    // Fetch the target user from the database
+    const { targetDb } = await getSiteSpecificDb(req.client, site);
+    const userCollection = targetDb.collection('user');
+    const targetUser = await userCollection.findOne({ _id: safeObjectId(userId) });
+
+    if (!targetUser) {
+      return res.status(404).json({ status: false, message: 'User not found' });
+    }
+
+    // Generate a JWT for the target user
+    const { token: userToken } = generateJWT(targetUser, site, true); // 30-day expiration
+
+    return res.status(200).json({
+      status: true,
+      message: 'Bypass successful. Use this token to act as the user.',
+      token: userToken,
+      user: {
+        _id: targetUser._id,
+        email: targetUser.email,
+        role: targetUser.role,
+        status: targetUser.status,
+      },
+    });
+  } catch (error) {
+    console.error('Error in bypass-user:', error);
+    return res.status(500).json({ status: false, message: 'An error occurred during bypass' });
+  }
+});
 
 // Use error handling middleware
 router.use(errorHandler);
