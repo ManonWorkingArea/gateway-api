@@ -1254,18 +1254,34 @@ router.post('/bypass-user', async (req, res) => {
       return res.status(404).json({ status: false, message: 'User not found' });
     }
 
+    // If the user is "unactive", activate them and remove the OTP
+    if (targetUser.status === 'unactive') {
+      await userCollection.updateOne(
+        { _id: safeObjectId(userId) },
+        {
+          $set: { status: 'active' },
+          $unset: { otp: "" }, // Remove the otp field
+          $currentDate: { updatedAt: true } // Update the updatedAt timestamp
+        }
+      );
+
+      // Fetch updated user data after activation
+      targetUser.status = 'active';
+      delete targetUser.otp;
+    }
+
     // Generate a JWT for the target user
     const { token: userToken } = generateJWT(targetUser, site, true); // 30-day expiration
 
     return res.status(200).json({
       status: true,
-      message: 'Bypass successful. Use this token to act as the user.',
+      message: 'Bypass successful. User activated (if unactive). Use this token to act as the user.',
       token: userToken,
       user: {
         _id: targetUser._id,
         email: targetUser.email,
         role: targetUser.role,
-        status: targetUser.status,
+        status: targetUser.status, // Now "active"
       },
     });
   } catch (error) {
@@ -1273,6 +1289,7 @@ router.post('/bypass-user', async (req, res) => {
     return res.status(500).json({ status: false, message: 'An error occurred during bypass' });
   }
 });
+
 
 // Use error handling middleware
 router.use(errorHandler);
