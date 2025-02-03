@@ -195,7 +195,7 @@ router.post('/register', async (req, res) => {
 
     // Prepare email content
     const emailData = {
-      from: siteData.siteName + " <noreply@cloud-service.email>",
+      from: siteData.siteName + " <fti.academy@website-backend.email>",
       to: [firstname + ' ' + lastname + ' <' + email + '>'], // Replace with the user's email for production
       subject: "Your OTP Code",
       plain: `Your OTP code is ${otp}`,
@@ -204,7 +204,7 @@ router.post('/register', async (req, res) => {
 
     // Send email via API
     try {
-      await axios.post('https://request.cloudrestfulapi.com/email/send', emailData, {
+      await axios.post('https://gateway.cloudrestfulapi.com/email/send', emailData, {
         headers: {
           'Content-Type': 'application/json',
         },
@@ -301,7 +301,7 @@ router.post('/verify-otp', async (req, res) => {
 
       // Send welcome email
       const welcomeEmail = {
-        from: siteData.siteName + " <noreply@cloud-service.email>",
+        from: siteData.siteName + " <fti.academy@website-backend.email>",
         to: [user.firstname + ' ' + user.lastname + ' <' + email + '>'],
         subject: "Welcome to Our Service",
         plain: `Hello ${user.firstname},\n\nWelcome to Our Service! We're glad to have you on board.\n\nBest regards,\nYour Service Team`,
@@ -309,7 +309,7 @@ router.post('/verify-otp', async (req, res) => {
       };
 
       try {
-        await axios.post('https://request.cloudrestfulapi.com/email/send', welcomeEmail, {
+        await axios.post('https://gateway.cloudrestfulapi.com/email/send', welcomeEmail, {
           headers: { 'Content-Type': 'application/json' },
         });
       } catch (emailError) {
@@ -452,7 +452,7 @@ router.post('/resend-otp', async (req, res) => {
 
     // Prepare email content
     const emailData = {
-      from: siteData.siteName + " <noreply@cloud-service.email>",
+      from: siteData.siteName + " <fti.academy@website-backend.email>",
       to: [user.firstname + ' ' + user.lastname + ' <' + email + '>'], // Replace with the user's email for production
       subject: "Your New OTP Code",
       plain: `Your new OTP code is ${newOtp}.`,
@@ -461,7 +461,7 @@ router.post('/resend-otp', async (req, res) => {
 
     // Send the new OTP to the user's email
     try {
-      await axios.post('https://request.cloudrestfulapi.com/email/send', emailData, {
+      await axios.post('https://gateway.cloudrestfulapi.com/email/send', emailData, {
         headers: { 'Content-Type': 'application/json' },
       });
     } catch (emailError) {
@@ -555,7 +555,7 @@ router.post('/recover-password', async (req, res) => {
 
     // Prepare the email content
     const emailData = {
-      from: `${siteData.siteName} <noreply@cloud-service.email>`,
+      from: `${siteData.siteName} <fti.academy@website-backend.email>`,
       to: [user.firstname + ' ' + user.lastname + ' <' + email + '>'], // Send to the user's actual email
       subject: "Password Recovery OTP",
       plain: `Your OTP for password recovery is ${recoveryOtp}.`,
@@ -564,7 +564,7 @@ router.post('/recover-password', async (req, res) => {
 
     // Send the OTP email
     try {
-      await axios.post('https://request.cloudrestfulapi.com/email/send', emailData, {
+      await axios.post('https://gateway.cloudrestfulapi.com/email/send', emailData, {
         headers: { 'Content-Type': 'application/json' },
       });
     } catch (emailError) {
@@ -647,7 +647,7 @@ router.post('/reset-password', async (req, res) => {
 
     // Prepare a password change confirmation email
     const emailData = {
-      from: siteData.siteName + " <noreply@cloud-service.email>",
+      from: siteData.siteName + " <fti.academy@website-backend.email>",
       to: [user.firstname + ' ' + user.lastname + ' <' + email + '>'], // Replace with the user's email for production
       subject: "Password Changed Successfully",
       plain: `Hello ${user.firstname},\n\nYour password has been successfully changed. If you did not request this change, please contact our support team immediately.\n\nBest regards,\nYour Service Team`,
@@ -656,7 +656,7 @@ router.post('/reset-password', async (req, res) => {
 
     // Send confirmation email
     try {
-      await axios.post('https://request.cloudrestfulapi.com/email/send', emailData, {
+      await axios.post('https://gateway.cloudrestfulapi.com/email/send', emailData, {
         headers: { 'Content-Type': 'application/json' },
       });
     } catch (emailError) {
