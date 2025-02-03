@@ -1,55 +1,49 @@
 const express = require('express');
-const fetch = require('node-fetch'); // To make HTTP requests
-const NodeCache = require('node-cache'); // For caching
+const nodemailer = require('nodemailer'); // Import nodemailer for SMTP
 
 const router = express.Router();
 
-// CloudMailin API configuration
-const EMAIL_ENDPOINT_URL = "https://api.cloudmailin.com/api/v0.1/4c9506dea731b2f9/messages";
-const EMAIL_TOKEN_KEY = "JBu4oxNQ3b5AZ55gSN3mvtRt";
-const TEST_MODE = false; // Toggle test mode as needed
+// SMTP configuration
+const SMTP_HOST = "smtp.dreamhost.com";
+const SMTP_PORT = 465; // SSL/TLS
+const SMTP_USER = "fti.academy@website-backend.email";
+const SMTP_PASS = "@5C4jQp@v5fPCDe!";
 
-// Cache setup with a 10-minute TTL (adjust as needed)
-const emailCache = new NodeCache({ stdTTL: 600 });
+// Create a reusable transporter using SMTP configuration
+const transporter = nodemailer.createTransport({
+  host: SMTP_HOST,
+  port: SMTP_PORT,
+  secure: true, // Use SSL/TLS
+  auth: {
+    user: SMTP_USER,
+    pass: SMTP_PASS,
+  },
+});
 
-// Define an async function for sending emails using CloudMailin API
+// Define an async function for sending emails via SMTP
 async function sendEmail({ from, to, subject, plain, html, attachments }) {
   const emailData = {
     from,
     to,
-    test_mode: TEST_MODE,
     subject,
-    plain,
-    html,
-    attachments, // Include attachments if provided
+    text: plain,   // plain text version
+    html,          // HTML version
+    attachments,   // Attachments if provided
   };
 
   try {
-    const response = await fetch(EMAIL_ENDPOINT_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${EMAIL_TOKEN_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(emailData),
-    });
+    // Send email using the transporter
+    const info = await transporter.sendMail(emailData);
 
-    if (response.ok) {
-      const data = await response.json();
-      console.log('Email sent:', data.id);
-      return { status: true, message: 'Email sent successfully', messageId: data.id };
-    } else {
-      const errorText = await response.text();
-      console.error('Error sending email:', errorText);
-      return { status: false, message: 'Error sending email', error: errorText };
-    }
+    console.log('Email sent:', info.messageId);
+    return { status: true, message: 'Email sent successfully', messageId: info.messageId };
   } catch (error) {
     console.error('Error sending email:', error);
     return { status: false, message: 'Error sending email', error: error.message };
   }
 }
 
-// Define a route for sending emails with caching to prevent duplicates
+// Define a route for sending emails
 router.post('/send', async (req, res) => {
   const { from, to, subject, plain, html, attachments } = req.body;
 
@@ -58,29 +52,19 @@ router.post('/send', async (req, res) => {
     return res.status(400).json({ error: 'Missing required fields: from, to, subject, plain, html' });
   }
 
-  // Construct cache key from request parameters to prevent duplicate emails being sent
-  const cacheKey = `${to}:${subject}:${plain}:${html}:${JSON.stringify(attachments)}`;
-  const cachedResult = emailCache.get(cacheKey);
+  try {
+    const result = await sendEmail({
+      from,
+      to,
+      subject,
+      plain,
+      html,
+      attachments, // Pass attachments to the sendEmail function
+    });
 
-  if (cachedResult) {
-    return res.status(200).json(cachedResult);
-  } else {
-    try {
-      const result = await sendEmail({
-        from,
-        to,
-        subject,
-        plain,
-        html,
-        attachments, // Pass attachments to the sendEmail function
-      });
-
-      // Cache the successful result to prevent resending
-      emailCache.set(cacheKey, result);
-      res.status(200).json(result);
-    } catch (error) {
-      res.status(500).json({ error: 'Error sending email' });
-    }
+    res.status(200).json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'Error sending email' });
   }
 });
 
