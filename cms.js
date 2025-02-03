@@ -52,7 +52,6 @@ async function getSiteSpecificDb(client, site) {
   return { db: targetDb, postCollection, siteData };
 }
 
-
 router.post('/iframe', async (req, res) => {
     try {
         const { page, post, site } = req.body; // Read page, post, and site from the request body

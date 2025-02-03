@@ -1885,6 +1885,7 @@ router.post('/enroll', async (req, res) => {
 
         const enrollCollection = targetDb.collection('enroll');
         const courseCollection = targetDb.collection('course');
+        const orderCollection = targetDb.collection('order');
 
         // Fetch enrollment data for the user
         const enrollments = await enrollCollection.find({ userID: user }).toArray();
@@ -1934,13 +1935,23 @@ router.post('/enroll', async (req, res) => {
             return map;
         }, {});
 
-        // Merge enrollment data with course details and include condition key
+        // Fetch related order data for each enrollment
+        const orderIds = enrollments.map((enrollment) => safeObjectId(enrollment.orderID)).filter(Boolean);
+        const orders = orderIds.length > 0 ? await orderCollection.find({ _id: { $in: orderIds } }).toArray() : [];
+        const orderMap = orders.reduce((map, order) => {
+            map[order._id.toString()] = order;
+            return map;
+        }, {});
+
+        // Merge enrollment data with course and order details
         const enrichedEnrollments = enrollments.map((enrollment) => {
             const courseDetails = courseMap[enrollment.courseID];
+            const orderDetails = enrollment.orderID ? orderMap[enrollment.orderID] || null : null;
 
             return {
                 enrollment,
                 course: courseDetails || null, // Include course details or null if not found
+                order: orderDetails, // Include order details if found
                 condition: courseDetails
                     ? {
                           accessDate: courseDetails.accessDate || null,
@@ -2534,6 +2545,310 @@ router.post('/order/submit', async (req, res) => {
         res.status(500).json({ error: 'An error occurred while submitting the order.' });
     }
 });
+
+function mapOrderData(formData, orderCode) {
+    const customerType = formData?.["radiobox-17-0-11"]?.value?.value === "offline-corporate" ? "corporate" : "individual";
+    const corporateAddress = formData?.["address-21-3-11"]?.value || {};
+    const individualAddress = formData?.["address-12-1-7"]?.value || {};
+    
+    const isValidValue = (value) => value && value !== 'n/a' && value.trim() !== '';
+    
+    const formatAddress = (address) => {
+        return [
+            isValidValue(address.NO) ? `เลขที่ ${address.NO}` : '',
+            isValidValue(address.MOO) ? `หมู่ ${address.MOO}` : '',
+            isValidValue(address.SOI_TH) ? `ซอย ${address.SOI_TH}` : '',
+            isValidValue(address.BUILDING_TH) ? `อาคาร ${address.BUILDING_TH}` : '',
+            isValidValue(address.ROAD_TH) ? `ถนน ${address.ROAD_TH}` : ''
+        ].filter(Boolean).join(' ');
+    };
+
+    const formatProvince = (address) => {
+        return isValidValue(address.province) && address.province !== "กรุงเทพมหานคร" ? `จังหวัด${address.province}` : address.province;
+    };
+
+    const formatSubdistrict = (address) => {
+        if (!isValidValue(address.subdistrict)) return '';
+        if (isValidValue(address.province) && address.province === "กรุงเทพมหานคร" && !address.subdistrict.startsWith("แขวง")) {
+            return `แขวง${address.subdistrict}`;
+        }
+        return address.province !== "กรุงเทพมหานคร" ? `ตำบล${address.subdistrict}` : address.subdistrict;
+    };
+
+    const formatDistrict = (address) => {
+        return isValidValue(address.province) && address.province !== "กรุงเทพมหานคร" && isValidValue(address.district) ? `อำเภอ${address.district}` : address.district || '';
+    };
+    
+    const selectedAddress = customerType === "corporate" ? corporateAddress : individualAddress;
+
+    return {
+        ref1: orderCode,
+        ref2: formData?.["ref2"] ?? '',
+        detailData: {
+            div_code: '115-99',
+            sub_section_items: [
+                {
+                    sub_section_code: '103-97-035',
+                    sub_section_qty: 1,
+                    sub_section_amount: 800,
+                },
+            ],
+            bank_account: 'KBANK',
+            transfered_date: null,
+            transfered_amount: 800,
+            bankAccount: null,
+            tranNo: null,
+            transfered_ref1: orderCode,
+            transfered_ref2: formData?.["ref2"] ?? '',
+            tax_id: customerType === "corporate" ? formData?.["input-18-1-11"]?.value ?? '' : formData?.["input-6-0-5"]?.value ?? '',
+            branch_id: customerType === "corporate" ? parseInt(formData?.["input-19-1-11"]?.value ?? '0', 10) : -1,
+            customer_name: customerType === "corporate" ? formData?.["input-20-2-11"]?.value ?? '' : `${formData?.["input-1-1-3"]?.value ?? ''} ${formData?.["input-2-2-3"]?.value ?? ''}`,
+            address_1: formatAddress(selectedAddress),
+            address_2: formatSubdistrict(selectedAddress),
+            city_name: formatDistrict(selectedAddress),
+            province_name: formatProvince(selectedAddress),
+            post_code: selectedAddress.zipcode ?? '',
+        }
+    };
+}
+
+async function generateOrderCode(collection) {
+    const now = new Date();
+    const thaiYear = (now.getFullYear() + 543).toString().slice(-2);
+    const month = (now.getMonth() + 1).toString().padStart(2, '0');
+    
+    const lastOrder = await collection.find({ rawCode: { $regex: `^${thaiYear}${month}` } })
+        .sort({ rawCode: -1 })
+        .limit(1)
+        .toArray();
+    
+    let runningNumber = 1;
+    if (lastOrder.length > 0) {
+        const lastNumber = parseInt(lastOrder[0].rawCode.slice(-4), 10);
+        runningNumber = lastNumber + 1;
+    }
+    
+    return `${thaiYear}${month}${runningNumber.toString().padStart(4, '0')}`;
+}
+
+router.post('/data/submit', async (req, res) => {
+    try {
+        // Decrypt the incoming data
+        const decryptedData = decrypt(req.body.data);
+        const { site, authen, courseID, formID, process, mode, mappedData, formData } = decryptedData;
+
+        if (!site || !authen || !courseID || !formID || !process || !mode || !mappedData || !formData) {
+            return res.status(400).json({ error: 'Missing required fields.' });
+        }
+
+        // Authenticate user
+        const authResult = await authenticateUserToken(authen, res);
+        if (!authResult.status) return authResult.response;
+        const user = authResult.user;
+
+        const { client } = req;
+        const { targetDb, siteData } = await getSiteSpecificDb(client, site);
+
+        if (!siteData || !siteData._id) {
+            return res.status(404).json({ error: 'Site data not found or invalid.' });
+        }
+
+        const siteIdString = siteData._id.toString();
+        const collection = targetDb.collection(mode);
+
+        // Generate order code
+        const rawCode = await generateOrderCode(collection);
+        const customerTypeCode = formData["radiobox-17-0-11"]?.value?.value === "online" ? "02" : "01";
+        const orderCode = `${customerTypeCode}${rawCode}`;
+
+        // Check if an order already exists for the given courseID and userID
+        const existingOrder = await collection.findOne({ courseID, userID: user });
+        if (existingOrder) {
+            return res.status(409).json({
+                error: 'An order already exists for this course and user.',
+                data: { orderId: existingOrder._id },
+            });
+        }
+
+        const orderDocument = {
+            orderCode,
+            rawCode,
+            courseID,
+            formID,
+            process,
+            mode,
+            mappedData,
+            formData,
+            userID: user,
+            unit: siteIdString,
+            status: 'pending', // Default status
+            payment: 'bill_payment', // Default status
+            type: 'lesson', // Default status
+            approve: 'manual', // Default status
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            ...mapOrderData(formData, orderCode)
+        };
+
+        // Insert the order document into the collection
+        const result = await collection.insertOne(orderDocument);
+
+        if (!result.insertedId) {
+            return res.status(500).json({ error: 'Failed to insert order data.' });
+        }
+
+        // Check if enrollment exists before adding
+        const enrollCollection = targetDb.collection('enroll');
+        const existingEnrollment = await enrollCollection.findOne({ userID: user, courseID });
+
+        let enrollID = null;
+        if (!existingEnrollment) {
+            // Default analytics structure
+            const analytics = {
+                total: 0,
+                pending: 0,
+                processing: 0,
+                complete: 0,
+                status: 'pending',
+                message: 'Not started',
+                post: { req: false, has: false, measure: null, score: null, result: false, message: null },
+                pre: { req: false, has: false, measure: null, result: false, message: null },
+                retest: { req: false, has: false, measure: null, result: false, message: null },
+                option: { cert_area: null, exam_round: null },
+                percent: 0,
+            };
+
+            // New Enrollment Data
+            const newEnrollment = {
+                courseID,
+                userID: user,
+                orderID: result.insertedId.toString(),
+                status: false,  // Set status to false
+                analytics,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            };
+
+            const enrollmentResult = await enrollCollection.insertOne(newEnrollment);
+            enrollID = enrollmentResult.insertedId.toString();
+        } else {
+            enrollID = existingEnrollment._id.toString();
+        }
+
+        // Insert data into `form` collection
+        if (enrollID) {
+            const formCollection = targetDb.collection('form');
+
+            const now = new Date();
+            const formattedDate = `${now.getDate().toString().padStart(2, '0')}/${(now.getMonth() + 1).toString().padStart(2, '0')}/${now.getFullYear()}`;
+            const formattedTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+
+            const formDocument = {
+                parent: siteIdString,
+                formID,
+                userID: user,
+                status: false,
+                process: "pending",
+                createdAt: now,
+                updatedAt: now,
+                date: formattedDate,
+                time: formattedTime,
+                formData,
+                courseID,
+                orderID: result.insertedId.toString(),
+                enrollID
+            };
+
+            await formCollection.insertOne(formDocument);
+        }
+        
+        res.status(201).json({
+            success: true,
+            message: 'Order submitted successfully.',
+            data: { insertedId: result.insertedId, orderCode, rawCode },
+        });
+    } catch (error) {
+        console.error('Error submitting order:', error.message, error.stack);
+        res.status(500).json({ error: 'An error occurred while submitting the order.' });
+   
+    }
+});
+
+
+
+router.post('/getOrder/:id', async (req, res) => {
+    try {
+        const { id } = req.params; // Extract Order ID from URL
+        const { site, authen } = req.body; // Extract site and authentication from request body
+
+        if (!id) {
+            return res.status(400).json({ error: 'Order ID is required.' });
+        }
+
+        if (!site) {
+            return res.status(400).json({ error: 'Site parameter is required.' });
+        }
+
+        console.log("Fetching order details...");
+
+        // Authenticate user
+        const authResult = await authenticateUserToken(authen, res);
+        if (!authResult.status) return authResult.response;
+        const user = authResult.user;
+
+        console.log("Authenticated user:", user);
+
+        const { client } = req;
+        const { targetDb, siteData } = await getSiteSpecificDb(client, site);
+
+        if (!siteData || !siteData._id) {
+            return res.status(404).json({ error: 'Site data not found or invalid.' });
+        }
+
+        console.log("Site found:", siteData._id);
+
+        const orderCollection = targetDb.collection('order');
+        const courseCollection = targetDb.collection('course'); // Course Collection
+        const userCollection = targetDb.collection('user');   // User Collection
+
+        // Fetch order details
+        const order = await orderCollection.findOne({ _id: safeObjectId(id) });
+
+        if (!order) {
+            return res.status(404).json({ error: 'Order not found or you do not have access.' });
+        }
+
+        console.log("Order found:", order);
+
+        // Fetch course details using courseID from the order
+        const course = await courseCollection.findOne({ _id: safeObjectId(order.courseID) });
+
+        if (!course) {
+            console.warn("Course not found for order:", order.courseID);
+        }
+
+        // Fetch user data using userID from the order
+        const userData = await userCollection.findOne({ _id: safeObjectId(order.userID) }, { projection: { password: 0 } });
+
+        if (!userData) {
+            console.warn("User data not found for:", order.userID);
+        }
+
+        res.status(200).json({
+            success: true,
+            data: {
+                order,
+                course: course || null,   // Include course details (null if not found)
+                user: userData || null    // Include user details (null if not found)
+            },
+        });
+    } catch (error) {
+        console.error('Error fetching order:', error.message, error.stack);
+        res.status(500).json({ error: 'An error occurred while fetching the order.' });
+    }
+});
+
+
 
 router.post('/qrcode', async (req, res) => {
     const { data, config, size, download, file } = req.body;
