@@ -185,19 +185,20 @@ router.post('/register', async (req, res) => {
     // Render the email content using the builderRender plugin
     const builderRender = require('./builderRender'); // Import the builderRender plugin
     const dynamicData = `
-      <strong>Activate Your Account</strong><br/>
+      <strong>เปิดใช้งานบัญชีของคุณ</strong><br/>
       <br/>
-      Thank you for registering with us! Your OTP for account activation is <strong>${otp}</strong>. Please use this code within the next 15 minutes to activate your account.<br/>
-      If you didn’t request this, please ignore this email or contact support.<br/><br/>
-      Alternatively, you can activate your account using the following link:<br/>
-    `;
+      ขอบคุณที่ลงทะเบียนกับเรา! รหัส OTP สำหรับเปิดใช้งานบัญชีของคุณคือ <strong>${otp}</strong><br/>
+      กรุณาใช้รหัสนี้ภายใน 15 นาทีเพื่อเปิดใช้งานบัญชีของคุณ<br/>
+      หากคุณไม่ได้ร้องขอการเปิดใช้งานบัญชี กรุณาเพิกเฉยต่ออีเมลฉบับนี้ หรือ ติดต่อฝ่ายสนับสนุน<br/><br/>
+      หรือคุณสามารถเปิดใช้งานบัญชีของคุณโดยใช้ลิงก์ต่อไปนี้:<br/>
+    `;  
     const htmlContent = builderRender(emailTemplate.builder, dynamicData);
 
     // Prepare email content
     const emailData = {
       from: siteData.siteName + " <fti.academy@website-backend.email>",
       to: [firstname + ' ' + lastname + ' <' + email + '>'], // Replace with the user's email for production
-      subject: "Your OTP Code",
+      subject: "รหัส OTP สำหรับเปิดใช้งานบัญชี",
       plain: `Your OTP code is ${otp}`,
       html: htmlContent,
     };
@@ -296,7 +297,11 @@ router.post('/verify-otp', async (req, res) => {
 
       // Render the email content using the builderRender plugin
       const builderRender = require('./builderRender'); // Import the builderRender plugin
-      const dynamicData = `<h1>Welcome, ${user.firstname}!</h1><p>We're excited to have you join us. If you have any questions, feel free to reach out to our support team.</p><p>Best regards,<br>Your Service Team</p>`;
+      const dynamicData = `
+        <h1>ยินดีต้อนรับ, ${user.firstname}!</h1>
+        <p>เรารู้สึกยินดีที่คุณเข้าร่วมกับเรา หากมีคำถามหรือข้อสงสัยใด ๆ โปรดติดต่อทีมสนับสนุนของเรา</p>
+        <p>ขอแสดงความนับถือ,<br/>ทีมบริการของคุณ</p>
+      `;
       const htmlContent = builderRender(emailTemplate.builder, dynamicData);
 
       // Send welcome email
@@ -438,15 +443,17 @@ router.post('/resend-otp', async (req, res) => {
     // Render the email content using the builderRender plugin
     const builderRender = require('./builderRender'); // Import the builderRender plugin
     const dynamicData = `
-      <strong>Your New OTP Code</strong><br/>
+      <strong>รหัส OTP ใหม่ของคุณ</strong><br/>
       <br/>
-      Your new OTP code is <strong>${newOtp}</strong>. Please use this code within the next 15 minutes to activate your account.<br/>
-      If you didn’t request this, please ignore this email or contact support.<br/><br/>
-      Alternatively, you can activate your account using the following link:<br/>
+      รหัส OTP ใหม่ของคุณคือ <strong>${newOtp}</strong><br/>
+      กรุณาใช้รหัสนี้ภายใน 15 นาทีเพื่อเปิดใช้งานบัญชีของคุณ<br/>
+      หากคุณไม่ได้ร้องขอรหัสนี้ กรุณาเพิกเฉยต่ออีเมลฉบับนี้ หรือ ติดต่อฝ่ายสนับสนุน<br/><br/>
+      หรือคุณสามารถเปิดใช้งานบัญชีของคุณโดยใช้ลิงก์ต่อไปนี้:<br/>
       <a href="https://${siteData.hostname}/user/activate?email=${encodeURIComponent(email)}&otp=${newOtp}">
-        Activate Account
+        เปิดใช้งานบัญชี
       </a>
     `;
+  
     
     const htmlContent = builderRender(emailTemplate.builder, dynamicData);
 
@@ -454,7 +461,7 @@ router.post('/resend-otp', async (req, res) => {
     const emailData = {
       from: siteData.siteName + " <fti.academy@website-backend.email>",
       to: [user.firstname + ' ' + user.lastname + ' <' + email + '>'], // Replace with the user's email for production
-      subject: "Your New OTP Code",
+      subject: "รหัส OTP สำหรับเปิดใช้งานบัญชี",
       plain: `Your new OTP code is ${newOtp}.`,
       html: htmlContent,
     };
@@ -542,22 +549,24 @@ router.post('/recover-password', async (req, res) => {
     const builderRender = require('./builderRender'); // Import the builderRender plugin
     // Render the email content using the builderRender plugin
     const dynamicData = `
-      <strong>Password Recovery OTP</strong><br/>
+      <strong>รหัส OTP สำหรับการกู้คืนรหัสผ่าน</strong><br/>
       <br/>
-      Your OTP for password recovery is <strong>${recoveryOtp}</strong>. Please use this code within the next 15 minutes.<br/>
-      If you didn’t request this, please ignore this email or contact support.<br/><br/>
-      Alternatively, you can verify your OTP using the following link:<br/>
+      รหัส OTP ของคุณสำหรับการกู้คืนรหัสผ่านคือ <strong>${recoveryOtp}</strong><br/>
+      กรุณาใช้รหัสนี้ภายใน 15 นาที<br/>
+      หากคุณไม่ได้ร้องขอการกู้คืนรหัสผ่าน กรุณาเพิกเฉยต่ออีเมลฉบับนี้ หรือ ติดต่อฝ่ายสนับสนุน<br/><br/>
+      หรือคุณสามารถยืนยันรหัส OTP โดยใช้ลิงก์ต่อไปนี้:<br/>
       <a href="https://${siteData.hostname}/user/recovery?email=${encodeURIComponent(email)}&otp=${recoveryOtp}">
-        Verify OTP
+        ยืนยัน OTP
       </a>
     `;
+  
     const htmlContent = builderRender(emailTemplate.builder, dynamicData);
 
     // Prepare the email content
     const emailData = {
       from: `${siteData.siteName} <fti.academy@website-backend.email>`,
       to: [user.firstname + ' ' + user.lastname + ' <' + email + '>'], // Send to the user's actual email
-      subject: "Password Recovery OTP",
+      subject: "รหัส OTP สำหรับการกู้คืนรหัสผ่าน",
       plain: `Your OTP for password recovery is ${recoveryOtp}.`,
       html: htmlContent, // Use rendered HTML content
     };
@@ -639,17 +648,19 @@ router.post('/reset-password', async (req, res) => {
     
     // Render the email content using the builderRender plugin
     const builderRender = require('./builderRender'); // Import the builderRender plugin
-    const dynamicData = `<h1>Password Changed Successfully</h1>
-    <p>Hello ${user.firstname},</p>
-    <p>Your password has been successfully changed. If you did not request this change, please contact our support team immediately.</p>
-    <p>Best regards,<br>Your Service Team</p>`;
+    const dynamicData = `
+      <h1>เปลี่ยนรหัสผ่านสำเร็จแล้ว</h1>
+      <p>สวัสดี ${user.firstname},</p>
+      <p>รหัสผ่านของคุณถูกเปลี่ยนแปลงเรียบร้อยแล้ว หากคุณไม่ได้ร้องขอให้เปลี่ยนรหัสผ่าน กรุณาติดต่อทีมสนับสนุนของเราทันที</p>
+      <p>ขอแสดงความนับถือ,<br/>ทีมบริการของคุณ</p>
+    `;
     const htmlContent = builderRender(emailTemplate.builder, dynamicData);
 
     // Prepare a password change confirmation email
     const emailData = {
       from: siteData.siteName + " <fti.academy@website-backend.email>",
       to: [user.firstname + ' ' + user.lastname + ' <' + email + '>'], // Replace with the user's email for production
-      subject: "Password Changed Successfully",
+      subject: "เปลี่ยนรหัสผ่านสำเร็จแล้ว",
       plain: `Hello ${user.firstname},\n\nYour password has been successfully changed. If you did not request this change, please contact our support team immediately.\n\nBest regards,\nYour Service Team`,
       html: htmlContent,
     };
