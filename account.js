@@ -161,7 +161,7 @@ router.post('/register', async (req, res) => {
       salt,
       role: 'user', // Default role
       avatar_img: null, // Default avatar
-      status: 'unactive', // User is inactive until OTP is verified
+      status: 'active', // User is inactive until OTP is verified
       otp, // Store OTP for verification
       parent:site,
       createdAt: new Date(),
