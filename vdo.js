@@ -57,7 +57,19 @@ router.get("/stream/:id?", async (req, res) => {
             }
         });
 
-        res.status(response.status).json(response.data);
+        const { result } = response.data;
+
+        res.status(response.status).json({
+            uid: result.uid,
+            thumbnail: result.thumbnail,
+            status: result.status.state,
+            created: result.created,
+            modified: result.modified,
+            uploaded: result.uploaded,
+            size: result.size,
+            playback:  result.playback.hls,
+            success: true
+        });
     } catch (error) {
         res.status(error.response?.status || 500).json({ error: error.message });
     }
