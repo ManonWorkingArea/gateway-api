@@ -194,7 +194,7 @@ router.post('/orders', async (req, res) => {
             ref2: 1,
             detailData: 1
         })
-        .limit(20) // Limit to the first 10 results
+        .limit(50) // Limit to the first 10 results
         .toArray();
 
         if (orders.length === 0) {
