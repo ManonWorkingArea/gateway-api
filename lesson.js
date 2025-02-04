@@ -2551,7 +2551,7 @@ router.post('/order/submit', async (req, res) => {
     }
 });
 
-function mapOrderData(formData, orderCode) {
+function mapOrderData(formData, orderCode, customerTypeCode) {
     const customerType = formData?.["radiobox-17-0-11"]?.value?.value === "offline-corporate" ? "corporate" : "individual";
     const corporateAddress = formData?.["address-21-3-11"]?.value || {};
     const individualAddress = formData?.["address-12-1-7"]?.value || {};
@@ -2586,8 +2586,11 @@ function mapOrderData(formData, orderCode) {
     
     const selectedAddress = customerType === "corporate" ? corporateAddress : individualAddress;
 
+    const citizen = customerType === "corporate" ? formData?.["input-18-1-11"]?.value ?? '' : formData?.["input-6-0-5"]?.value ?? '';
+
     return {
-        ref1: orderCode,
+        //ref1: orderCode,
+        ref1: customerTypeCode + citizen, // for DOA
         ref2: formData?.["ref2"] ?? '',
         detailData: {
             div_code: '115-99',
@@ -2603,7 +2606,8 @@ function mapOrderData(formData, orderCode) {
             transfered_amount: 800,
             bankAccount: null,
             tranNo: null,
-            transfered_ref1: orderCode,
+            //transfered_ref1: orderCode,
+            transfered_ref1: customerTypeCode + citizen, // for DOA
             transfered_ref2: formData?.["ref2"] ?? '',
             tax_id: customerType === "corporate" ? formData?.["input-18-1-11"]?.value ?? '' : formData?.["input-6-0-5"]?.value ?? '',
             branch_id: customerType === "corporate" ? parseInt(formData?.["input-19-1-11"]?.value ?? '0', 10) : -1,
@@ -2692,7 +2696,7 @@ router.post('/data/submit', async (req, res) => {
             approve: 'manual', // Default status
             createdAt: new Date(),
             updatedAt: new Date(),
-            ...mapOrderData(formData, orderCode)
+            ...mapOrderData(formData, orderCode, customerTypeCode)
         };
 
         // Insert the order document into the collection
