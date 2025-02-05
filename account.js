@@ -137,7 +137,7 @@ router.post('/register', async (req, res) => {
     if (existingUser) {
       return res.status(409).json({
         status: false,
-        message: 'Username or email already exists',
+        message: "ข้อมูลชื่อผู้ใช้ (Username), อีเมล (E-mail) หรือเลขที่บัตรประชาชนที่ส่งมา มีอยู่ในระบบแล้ว",
       });
     }
 
