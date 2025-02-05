@@ -47,30 +47,27 @@ async function getSiteSpecificDb(client, site) {
     return { userCollection, enrollCollection, courseCollection };
 }
 
-
 // Certification search endpoint
 router.post('/search', async (req, res) => {
     try {
-        const { keyword, site } = req.body;
+        const { firstname, lastname, site } = req.body;
 
         if (!site) {
             return res.status(400).json({ status: false, message: 'Site ID is required' });
         }
 
-        if (!keyword || keyword.trim() === '') {
-            return res.status(400).json({ status: false, message: 'Keyword is required for search' });
+        if (!firstname || firstname.trim() === '' || !lastname || lastname.trim() === '') {
+            return res.status(400).json({ status: false, message: 'Both firstname and lastname are required for search' });
         }
 
         const client = req.client;
         const { userCollection, enrollCollection, courseCollection } = await getSiteSpecificDb(client, site);
 
-        // Search for a single user matching the keyword
+        // Search for a single user matching both firstname and lastname
         const userQuery = {
-            $or: [
-                { citizen: { $regex: keyword, $options: 'i' } },
-                { phone: { $regex: keyword, $options: 'i' } },
-                { email: { $regex: keyword, $options: 'i' } },
-                { username: { $regex: keyword, $options: 'i' } },
+            $and: [
+                { firstname: { $regex: firstname, $options: 'i' } },
+                { lastname: { $regex: lastname, $options: 'i' } },
             ],
         };
 
@@ -111,8 +108,6 @@ router.post('/search', async (req, res) => {
         });
     }
 });
-
-
 // Error handling middleware
 router.use(errorHandler);
 
