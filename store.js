@@ -83,7 +83,7 @@ async function postReceiptApi({
 
     try {
         // Delay before making the API call (1 second)
-        await delay(1000);  // 1000 ms = 1 second
+        await delay(10000);  // 1000 ms = 1 second
 
         const response = await axios.post(url, requestBody, {
             headers: {
