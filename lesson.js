@@ -2586,7 +2586,8 @@ function mapOrderData(formData, orderCode, customerTypeCode) {
     
     const selectedAddress = customerType === "corporate" ? corporateAddress : individualAddress;
 
-    const citizen = customerType === "corporate" ? formData?.["input-18-1-11"]?.value ?? '' : formData?.["input-6-0-5"]?.value ?? '';
+    const citizen = formData?.["input-6-0-5"]?.value || {};
+    //const citizen = customerType === "corporate" ? formData?.["input-18-1-11"]?.value ?? '' : formData?.["input-6-0-5"]?.value ?? ''
 
     return {
         //ref1: orderCode,
