@@ -29,6 +29,7 @@ const storeRouter    = require('./store');  // Import the auth router
 
 
 const vdoRouter    = require('./vdo.js');  // Import the auth router
+const fileRouter    = require('./file.js');  // Import the auth router'
 
 dotenv.config();
 const app = express();
@@ -89,6 +90,7 @@ async function initializeApp() {
     app.use('/address', addressRouter); // Add the /ai route
     app.use('/store', storeRouter); // Add the /ai route
     app.use('/vdo', vdoRouter); // Add the /ai route
+    app.use('/file', fileRouter); // Add the /ai route
 
     server.listen(process.env.PORT, () => {
       console.log(`PRT :: ${process.env.PORT}`);
