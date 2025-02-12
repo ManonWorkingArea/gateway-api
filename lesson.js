@@ -2114,17 +2114,20 @@ router.post('/certification/:id/:cid?', async (req, res) => {
 
     let user;
 
-    if (!cid) {
+    if (!id) {
         // Authen User Middleware (only if cid is not provided)
         const authResult = await authenticateUserToken(authen, res);
         if (!authResult.status) return authResult.response;
         user = authResult.user;
     } else {
-        user = cid; // Use cid as user ID
+        user = id; // Use cid as user ID
     }
+
+    //console.log("user",user);
+    //console.log("course",user);
     
     try {
-        const courseId = safeObjectId(id);
+        const courseId = safeObjectId(cid);
         if (!courseId) {
             return res.status(400).json({ error: 'Invalid course ID format.' });
         }
@@ -2144,7 +2147,7 @@ router.post('/certification/:id/:cid?', async (req, res) => {
         const courseCollection = targetDb.collection('course');
         const userCollection = targetDb.collection('user');
         const certificationCollection = targetDb.collection('certification');
-        console.log(user, id, siteIdString)
+        console.log(user, courseId, siteIdString)
         // Fetch course details
         const course = await courseCollection.findOne({ _id: courseId, unit: siteIdString });
         if (!course) {
