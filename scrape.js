@@ -451,8 +451,16 @@ router.get('/get-products', async (req, res) => {
 
 router.get('/get-products-by-vc', async (req, res) => {
     try {
+        const { vcId } = req.query; // รับค่า OM ID จาก query parameter
+        if (!vcId) {
+            return res.status(400).json({ error: 'Missing vcId parameter' });
+        }
+
         const sessionCookie = await getSessionCookie();
-        const response = await makeRequest(VIEW_PRODUCT_BY_VC_URL, VIEW_PRODUCT_BY_VC_URL, sessionCookie, 'get');
+
+        const targetUrl = `http://clustersme.ppaos.com/?option=cluster&menu=viewchain&sub=product&id=${vcId}`;
+        
+        const response = await makeRequest(targetUrl, targetUrl, sessionCookie, 'get');
 
         const $ = cheerio.load(response.data);
         const tableData = [];
