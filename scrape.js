@@ -489,38 +489,56 @@ router.get('/get-products-by-vc', async (req, res) => {
 
 router.get('/get-full-chain-data', async (req, res) => {
     try {
-        // Step 1: Get all OM data from external API
+        console.log("Fetching OM data...");
         const omResponse = await axios.get('https://gateway.cloudrestfulapi.com/scrape/get-om-data');
-        if (!omResponse.data.success) {
-            throw new Error('Failed to fetch OM data');
+
+        if (!omResponse.data.success || !Array.isArray(omResponse.data.data)) {
+            throw new Error('Invalid OM response format');
         }
+
         const omData = omResponse.data.data;
         const vcData = [];
         const productData = [];
-        
-        // Step 2: Get VC data for each OM
+
         for (const om of omData) {
-            const vcResponse = await axios.get(`https://gateway.cloudrestfulapi.com/scrape/get-vc-data-from-om?omId=${om.ID}`);
-            if (vcResponse.data.success) {
-                const vcs = vcResponse.data.data;
-                vcs.forEach(vc => vcData.push({ ...vc, OM_ID: om.ID }));
+            try {
+                console.log(`Fetching VC data for OM ID: ${om.ID}...`);
+                const vcResponse = await axios.get(`https://gateway.cloudrestfulapi.com/scrape/get-vc-data-from-om?omId=${om.ID}`);
+
+                if (vcResponse.data.success && Array.isArray(vcResponse.data.data)) {
+                    vcResponse.data.data.forEach(vc => vcData.push({ ...vc, OM_ID: om.ID }));
+                } else {
+                    console.warn(`Invalid VC response for OM ID: ${om.ID}`);
+                }
+            } catch (vcError) {
+                console.error(`Failed to fetch VC data for OM ID: ${om.ID}`, vcError.message);
             }
         }
-        
-        // Step 3: Get Product data for each VC
+
         for (const vc of vcData) {
-            const productResponse = await axios.get(`https://gateway.cloudrestfulapi.com/scrape/get-products-by-vc?vcId=${vc.ID}`);
-            if (productResponse.data.success) {
-                const products = productResponse.data.data;
-                products.forEach(product => productData.push({ ...product, VC_ID: vc.ID }));
+            try {
+                console.log(`Fetching Product data for VC ID: ${vc.ID}...`);
+                const productResponse = await axios.get(`https://gateway.cloudrestfulapi.com/scrape/get-products-by-vc?vcId=${vc.ID}`);
+
+                if (productResponse.data.success && Array.isArray(productResponse.data.data)) {
+                    productResponse.data.data.forEach(product => productData.push({ ...product, VC_ID: vc.ID }));
+                } else {
+                    console.warn(`Invalid Product response for VC ID: ${vc.ID}`);
+                }
+            } catch (productError) {
+                console.error(`Failed to fetch Product data for VC ID: ${vc.ID}`, productError.message);
             }
         }
-        
+
+        console.log("Returning full chain data...");
         res.json({ success: true, data: { omData, vcData, productData } });
+
     } catch (error) {
+        console.error("Error in /get-full-chain-data:", error.message);
         res.status(500).json({ error: error.message });
     }
 });
+
 
 
 module.exports = router;
