@@ -36,6 +36,9 @@ const projectRouter    = require('./projectmanager.js');  // Import the auth rou
 
 const scrapeRouter    = require('./scrape.js');  // Import the auth router'
 
+global.ReadableStream = require('stream/web').ReadableStream;
+
+
 dotenv.config();
 const app = express();
 const rateLimit = require('express-rate-limit');
