@@ -33,6 +33,9 @@ const fileRouter    = require('./file.js');  // Import the auth router'
 
 const projectRouter    = require('./projectmanager.js');  // Import the auth router'
 
+
+const scrapeRouter    = require('./scrape.js');  // Import the auth router'
+
 dotenv.config();
 const app = express();
 const rateLimit = require('express-rate-limit');
@@ -94,7 +97,7 @@ async function initializeApp() {
     app.use('/vdo', vdoRouter); // Add the /ai route
     app.use('/file', fileRouter); // Add the /ai route
     app.use('/projectmanager', projectRouter); // Add the /ai route
-
+    app.use('/scrape', scrapeRouter); // Add the /ai route
     server.listen(process.env.PORT, () => {
       console.log(`PRT :: ${process.env.PORT}`);
     });
