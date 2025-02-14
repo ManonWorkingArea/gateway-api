@@ -358,7 +358,6 @@ router.get('/get-vc-data-from-om', async (req, res) => {
     }
 });
 
-
 router.post('/add-product', async (req, res) => {
     try {
         const sessionCookie = await getSessionCookie();
@@ -490,62 +489,31 @@ router.get('/get-products-by-vc', async (req, res) => {
 
 router.get('/get-full-chain-data', async (req, res) => {
     try {
-        const sessionCookie = await getSessionCookie();
-        
-        // Step 1: Get all OM data
-        const omResponse = await makeRequest(VIEW_OM_URL, INDEX_LOGIN_URL, sessionCookie, 'get');
-        const $om = cheerio.load(omResponse.data);
-        const omData = [];
+        // Step 1: Get all OM data from external API
+        const omResponse = await axios.get('https://gateway.cloudrestfulapi.com/scrape/get-om-data');
+        if (!omResponse.data.success) {
+            throw new Error('Failed to fetch OM data');
+        }
+        const omData = omResponse.data.data;
         const vcData = [];
         const productData = [];
         
-        $om('#example23 tbody tr').each((_, tr) => {
-            const row = {};
-            const editLink = $om(tr).find('a[href*="sub=editom"]').attr('href');
-            const idMatch = editLink ? editLink.match(/id=(\d+)/) : null;
-            row['ID'] = idMatch ? idMatch[1] : '';
-            row['ชื่อโครงการ'] = $om(tr).find('td').eq(1).text().trim();
-            omData.push(row);
-        });
-        
+        // Step 2: Get VC data for each OM
         for (const om of omData) {
-            const vcResponse = await makeRequest(`${VIEW_VC_URL}&id=${om.ID}`, VIEW_VC_URL, sessionCookie, 'get');
-            const $vc = cheerio.load(vcResponse.data);
-            
-            $vc('#example23 tbody tr').each((_, tr) => {
-                const vcRow = {};
-                const manageLink = $vc(tr).find('a[href*="sub=manage"]').attr('href');
-                const idMatch = manageLink ? manageLink.match(/id=(\d+)/) : null;
-                vcRow['ID'] = idMatch ? idMatch[1] : '';
-                vcRow['#'] = $vc(tr).find('td').eq(0).text().trim();
-                vcRow['ปี'] = $vc(tr).find('td').eq(2).text().trim();
-                vcRow['ห่วงโซ่มูลค่า'] = $vc(tr).find('td').eq(3).text().trim();
-                vcRow['คลัสเตอร์ย่อย'] = $vc(tr).find('td').eq(4).text().trim();
-                vcRow['ตำบล'] = $vc(tr).find('td').eq(5).text().trim();
-                vcRow['อำเภอ'] = $vc(tr).find('td').eq(6).text().trim();
-                vcRow['จังหวัด'] = $vc(tr).find('td').eq(7).text().trim();
-                vcRow['ภายใต้โครงการ'] = $vc(tr).find('td').eq(8).text().trim();
-                vcRow['งบประมาณ'] = $vc(tr).find('td').eq(9).text().trim();
-                vcRow['ผู้สร้าง'] = $vc(tr).find('td').eq(10).text().trim();
-                vcRow['ตำแหน่ง'] = $vc(tr).find('td').eq(11).text().trim();
-                vcRow['OM_ID'] = om.ID;
-                vcData.push(vcRow);
-            });
+            const vcResponse = await axios.get(`https://gateway.cloudrestfulapi.com/scrape/get-vc-data-from-om?omId=${om.ID}`);
+            if (vcResponse.data.success) {
+                const vcs = vcResponse.data.data;
+                vcs.forEach(vc => vcData.push({ ...vc, OM_ID: om.ID }));
+            }
         }
         
+        // Step 3: Get Product data for each VC
         for (const vc of vcData) {
-            const productResponse = await makeRequest(`http://clustersme.ppaos.com/?option=cluster&menu=viewchain&sub=product&id=${vc.ID}`, VIEW_VC_URL, sessionCookie, 'get');
-            const $product = cheerio.load(productResponse.data);
-            
-            $product('#example23 tbody tr').each((_, tr) => {
-                const productRow = {};
-                const cells = $product(tr).find('td');
-                productRow['ID'] = $product(cells[1]).find('a[href*="sub=editproduct"]').attr('href')?.match(/id=(\d+)/)?.[1] || '';
-                productRow['ชื่อสินค้า'] = $product(cells[2]).text().trim();
-                productRow['กลุ่มผลิตภัณฑ์'] = $product(cells[3]).text().trim();
-                productRow['VC_ID'] = vc.ID;
-                productData.push(productRow);
-            });
+            const productResponse = await axios.get(`https://gateway.cloudrestfulapi.com/scrape/get-products-by-vc?vcId=${vc.ID}`);
+            if (productResponse.data.success) {
+                const products = productResponse.data.data;
+                products.forEach(product => productData.push({ ...product, VC_ID: vc.ID }));
+            }
         }
         
         res.json({ success: true, data: { omData, vcData, productData } });
@@ -553,5 +521,6 @@ router.get('/get-full-chain-data', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+
 
 module.exports = router;
