@@ -2510,8 +2510,8 @@ router.post('/certification/:id/:cid?', async (req, res) => {
         user = id; // Use cid as user ID
     }
 
-    //console.log("user",user);
-    //console.log("course",user);
+    console.log("id",id);
+    console.log("cid",cid);
     
     try {
         const courseId = safeObjectId(cid);
@@ -2560,6 +2560,8 @@ router.post('/certification/:id/:cid?', async (req, res) => {
             const result = await certificationCollection.insertOne(newCertification);
             certification = { _id: result.insertedId, ...newCertification };
         }
+
+        const certificationTemplateCollection = targetDb.collection('certification_template'); // เพิ่มบรรทัดนี้
 
         // Assign default certification template if needed
         if (course.certification === 'yes' && !course.certificationId) {
