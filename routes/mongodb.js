@@ -493,7 +493,7 @@ router.get('/appointment/:id', async (req, res) => {
   // GET Single Document with Redis Caching (5 min)
   router.get('/:collection/:id', async (req, res, next) => {
     try {
-      const { db } = req;
+      const { db, client } = req;
       const collectionName = req.params.collection;
       const documentId = req.params.id;
       const joinCollection = req.query.join;
@@ -507,7 +507,10 @@ router.get('/appointment/:id', async (req, res) => {
         return res.status(200).json(cachedData);
       }
 
-      const collection = db.collection(collectionName);
+      // Change database connection if collection is 'hostname'
+      const targetDb = collectionName === 'hostname' ? client.db('API') : db;
+      const collection = targetDb.collection(collectionName);
+
       const document = await collection.findOne({ _id: safeObjectId(documentId) });
 
       if (!document) {
@@ -516,7 +519,7 @@ router.get('/appointment/:id', async (req, res) => {
 
       // If join and sub are specified, perform join operation
       if (joinCollection && arrayField) {
-        const joinColl = db.collection(joinCollection);
+        const joinColl = targetDb.collection(joinCollection);
         const idsToLookup = document[arrayField];
 
         if (Array.isArray(idsToLookup) && idsToLookup.length > 0) {
@@ -537,12 +540,17 @@ router.get('/appointment/:id', async (req, res) => {
     }
   });
   // POST Method for Inserting a Document
-  router.post('/:collection', async (req, res) => {
+  router.post('/:collection', async (req, res, next) => {
     try {
       const { client, db } = req;
       const collectionName = req.params.collection;
-      const collection = db.collection(collectionName);
+      const targetDb = collectionName === 'hostname' ? client.db('API') : db;
+      const collection = targetDb.collection(collectionName);
       const { data, options } = req.body;
+
+      if (!data) {
+        return res.status(400).json({ message: 'Data is required' });
+      }
 
       // Process the fieldType option
       if (options && options.fieldType) {
@@ -620,10 +628,15 @@ router.get('/appointment/:id', async (req, res) => {
   // Update a document by ID in a collection
   router.put('/:collection/:id', async (req, res, next) => {
     try {
-      const { db } = req;
+      const { client, db } = req;
       const collectionName = req.params.collection;
-      const collection = db.collection(collectionName);
+      const targetDb = collectionName === 'hostname' ? client.db('API') : db;
+      const collection = targetDb.collection(collectionName);
       const { data, options } = req.body;
+
+      if (!data) {
+        return res.status(400).json({ message: 'Data is required' });
+      }
 
       const id = safeObjectId(req.params.id);
 
@@ -660,9 +673,10 @@ router.get('/appointment/:id', async (req, res) => {
   // Delete a document by ID from a collection
   router.delete('/:collection/:id', async (req, res, next) => {
     try {
-      const { db } = req;
+      const { client, db } = req;
       const collectionName = req.params.collection;
-      const collection = db.collection(collectionName);
+      const targetDb = collectionName === 'hostname' ? client.db('API') : db;
+      const collection = targetDb.collection(collectionName);
 
       const id = safeObjectId(req.params.id);
 

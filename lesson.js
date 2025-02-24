@@ -443,7 +443,7 @@ router.post('/course/:id/:playerID?', async (req, res) => {
         }
 
         const siteIdString = siteData._id.toString();
-        console.log("siteData",siteData.theme.checkout);
+        //console.log("siteData",siteData.theme.checkout);
         const courseCollection = targetDb.collection('course');
         const playerCollection = targetDb.collection('player');
         const progressCollection = targetDb.collection('progress');
@@ -466,8 +466,8 @@ router.post('/course/:id/:playerID?', async (req, res) => {
             order = await orderCollection.findOne({ courseID: course._id.toString(), userID: user });
             isOrder = !!order;
 
-            // Check if the order exists and its status is 'processing'
-            if (order && order.status === 'complete') {
+            // Check if the order exists and its status is 'complete' or 'confirm'
+            if (order && (order.status === 'complete' || order.status === 'confirm')) {
                 isPaid = true; // Set isPaid to true
             }
         }
@@ -927,22 +927,34 @@ router.post('/course/:id/:playerID?', async (req, res) => {
             formData = await postCollection.findOne({ _id: safeObjectId(course.formID) });
         }
 
-        // OR if you need only a boolean flag for `isForm`:
-        const isForm = enrollment?.submitID ? false : !!formData; // isForm is false if enrollment has submitID
 
         let submitFormData = null; // To store form data fetched by submitID
 
         if (enrollment) {
             enrollID = enrollment._id;
-        
-            // If enrollment has submitID, fetch corresponding form data
-            if (enrollment.submitID) {
-                const formCollection = targetDb.collection('form');
-                submitFormData = await formCollection.findOne({ _id: safeObjectId(enrollment.submitID) });
+
+            // Try to fetch form data using userID and enrollID
+            const formCollection = targetDb.collection('form');
+            submitFormData = await formCollection.findOne({ 
+                userID: user,
+                enrollID: enrollment._id.toString()
+            });
+
+            // console.log("submitFormData",submitFormData);
+
+            // If no form found by userID and enrollID, and submitID exists, try finding by submitID
+            if (!submitFormData && enrollment.submitID) {
+                submitFormData = await formCollection.findOne({ 
+                    _id: safeObjectId(enrollment.submitID)
+                });
             }
         } else {
             enrollID = null;
         }
+
+        // Set isForm based on whether submitFormData exists
+        const isForm = !submitFormData; // false if submitFormData exists, true if it doesn't
+
 
         // Fetch data if isPay = true
         let checkoutData = null;
@@ -971,10 +983,153 @@ router.post('/course/:id/:playerID?', async (req, res) => {
                  .sort({ date: 1 }) // Assuming schedules have a 'date' field for sorting
                  .toArray();
          }
-         console.log("courseId",courseId.toString());
-         console.log("parent",siteIdString);
+         //console.log("courseId",courseId.toString());
+         //console.log("parent",siteIdString);
 
-         console.log("scheduleData",scheduleData);
+         //console.log("scheduleData",scheduleData);
+         //console.log("scheduleConfig",course.scheduleConfig);
+
+         // Extract first item in playlist
+        const firstItem = syncedPlayersWithProgress.length > 0 ? syncedPlayersWithProgress[0] : null;
+
+        // Extract last playable item in playlist
+        const lastPlayedItem = syncedPlayersWithProgress.length > 0
+            ? [...syncedPlayersWithProgress].reverse().find(item => item.isPlay)
+            : null;
+
+
+        // Function to find value by name
+        const findValueByName = (formData, targetName) => {
+            for (const key in formData) {
+                if (formData[key]?.name === targetName) {
+                    return formData[key]?.value || null;
+                }
+            }
+            return null;
+        };
+
+
+
+        
+
+        // Ensure enrollment and submitFormData exist before extracting selectedExamDate
+        const selectedExamDate = enrollment && enrollment.selectedExamDate 
+            ? enrollment.selectedExamDate 
+            : (submitFormData ? findValueByName(submitFormData.formData, "เลือกวันที่ทำข้อสอบ") : null);
+
+        // Function to reformat scheduleConfig
+        const formatScheduleConfig = (scheduleConfig) => {
+            return scheduleConfig.flatMap((entry) => {
+                if (entry.round) {
+                    return entry.rounds
+                        .filter(round => round.StartDateUsed || round.EndDateUsed)
+                        .map(round => ({
+                            item: entry.item,
+                            startDate: round.StartDateUsed ? round.StartDate : null,
+                            endDate: round.EndDateUsed ? round.EndDate : null,
+                            roundName: round.name
+                        }));
+                } else {
+                    return [{
+                        item: entry.item,
+                        startDate: entry.startDate,
+                        endDate: entry.endDate,
+                        roundName: null
+                    }];
+                }
+            });
+        };
+        // Function to get the current time in UTC+7 as a timestamp
+        const getNowInTimezoneTimestamp = () => {
+            const now = new Date();
+            now.setHours(now.getHours() + 7); // Convert to UTC+7
+            return {
+                nowISO: now.toISOString().replace("Z", "+07:00"), // ISO format
+                nowTimestamp: now.getTime() // Timestamp in milliseconds
+            };
+        };
+
+        // Function to calculate human-readable time difference
+        const getTimePrefix = (targetTimestamp, nowTimestamp) => {
+            const diffMs = targetTimestamp - nowTimestamp; // Difference in milliseconds
+            const diffSec = Math.round(diffMs / 1000); // Convert to seconds
+            const diffMin = Math.round(diffSec / 60); // Convert to minutes
+            const diffHr = Math.round(diffMin / 60); // Convert to hours
+            const diffDay = Math.round(diffHr / 24); // Convert to days
+
+            if (Math.abs(diffSec) < 10) return "ตอนนี้"; // If it's happening now (within 10 sec)
+
+            if (Math.abs(diffSec) < 60) return diffSec > 0 ? `ในอีก ${diffSec} วินาที` : `${Math.abs(diffSec)} วินาที ที่ผ่านมา`;
+            if (Math.abs(diffMin) < 60) return diffMin > 0 ? `ในอีก ${diffMin} ยาที` : `${Math.abs(diffMin)} นาที ที่ผ่านมา`;
+            if (Math.abs(diffHr) < 24) return diffHr > 0 ? `ในอีก ${diffHr} ชั่วโมง` : `${Math.abs(diffHr)} ชั่วโมง ที่ผ่านมา`;
+
+            return diffDay > 0 ? `ในอีก ${diffDay} วัน` : `${Math.abs(diffDay)} วัน ที่ผ่านมา`;
+        };
+
+        // Function to determine the status of a schedule item
+        const determineStatus = (startDate, endDate) => {
+            const { nowISO, nowTimestamp } = getNowInTimezoneTimestamp(); // Get current timestamp in UTC+7
+            const startTimestamp = startDate ? new Date(startDate).getTime() : null;
+            const endTimestamp = endDate ? new Date(endDate).getTime() : null;
+
+            if (!startTimestamp) return { status: "unknown", prefix: "unknown", now: nowISO };
+
+            if (!endTimestamp) { 
+                return { 
+                    status: nowTimestamp >= startTimestamp ? "ongoing" : "upcoming",
+                    prefix: getTimePrefix(startTimestamp, nowTimestamp),
+                    now: nowISO
+                };
+            }
+
+            if (startTimestamp === endTimestamp) {
+                return {
+                    status: nowTimestamp >= startTimestamp && nowTimestamp <= endTimestamp ? "ongoing" : "upcoming",
+                    prefix: getTimePrefix(startTimestamp, nowTimestamp),
+                    now: nowISO
+                };
+            }
+
+            if (nowTimestamp < startTimestamp) return { 
+                status: "upcoming", 
+                prefix: getTimePrefix(startTimestamp, nowTimestamp),
+                now: nowISO
+            };
+
+            if (nowTimestamp > endTimestamp) return { 
+                status: "expired", 
+                prefix: getTimePrefix(endTimestamp, nowTimestamp),
+                now: nowISO
+            };
+
+            return { 
+                status: "ongoing", 
+                prefix: "ตอนนี้",
+                now: nowISO
+            };
+        };
+
+    
+        // Function to filter and add status + now to scheduleConfig
+        const filterScheduleByExamDate = (scheduleConfig, selectedExamDate) => {
+            if (!selectedExamDate || !selectedExamDate.value) {
+                return scheduleConfig.map(entry => {
+                    const statusResult = determineStatus(entry.startDate, entry.endDate);
+                    return { ...entry, status: statusResult.status, now: statusResult.now }; // Add status & now
+                });
+            }
+        
+            return scheduleConfig
+                .filter(entry => !entry.roundName || entry.roundName === selectedExamDate.value)
+                .map(entry => {
+                    const statusResult = determineStatus(entry.startDate, entry.endDate);
+                    return { ...entry, now: statusResult.now, status: statusResult.status, prefix: statusResult.prefix, round: selectedExamDate.label }; // Add status & now
+                });
+        };
+        
+        // Format and filter scheduleConfig
+        const formattedScheduleConfig = course.scheduleConfig ? formatScheduleConfig(course.scheduleConfig) : [];
+        const filteredScheduleConfig = filterScheduleByExamDate(formattedScheduleConfig, selectedExamDate);
 
         // Format response
         const formattedResponse = {
@@ -989,6 +1144,7 @@ router.post('/course/:id/:playerID?', async (req, res) => {
                 cover: course.cover,
                 hours: course.hours,
                 days: course.days,
+                scheduleConfig: filteredScheduleConfig, // ✅ Reformatted scheduleConfig
                 prices: {
                     regular: course.regular_price || 0,
                     sale: course.sale_price || 0,
@@ -1003,7 +1159,10 @@ router.post('/course/:id/:playerID?', async (req, res) => {
                     has: course.survey,
                     id: course.surveyId,
                 },
+                lecturer: course.lecturer,
                 meta: {
+                    seek: course.skip,
+                    standalone: course.standalone,
                     display: course.display,
                     type: course.type,
                     mode: course.mode,
@@ -1029,6 +1188,8 @@ router.post('/course/:id/:playerID?', async (req, res) => {
                 processing: counts.processing,
                 percent: counts.completePercent,
             },
+            firstItem, // ✅ Add first item of playlist
+            lastPlayedItem, // ✅ Add last played item of playlist
             survey: course.survey === 'yes' && surveyData
             ? {
                 id: surveyData._id,
@@ -1056,7 +1217,8 @@ router.post('/course/:id/:playerID?', async (req, res) => {
             ...(enrollment && { 
                 enrollment: { 
                     ...enrollment, 
-                    submit: submitFormData || null // Add submitFormData into enrollment
+                    submit: submitFormData || null, // Add submitFormData into enrollment
+                    selectedExamDate: selectedExamDate // Add selectedExamDate into enrollment
                 }
             }),
             ...(player && { player }), // Add specific player data if present
@@ -1067,6 +1229,7 @@ router.post('/course/:id/:playerID?', async (req, res) => {
         };        
 
         res.status(200).json(formattedResponse);
+        // console.log("formattedResponse",formattedResponse);
     } catch (error) {
         console.error('Error fetching course and player data:', error.message, error.stack);
         res.status(500).json({ error: 'An error occurred while fetching data.' });
@@ -1311,6 +1474,7 @@ router.post('/assessment/:id/:exam?', async (req, res) => {
                     adminmode: examData.adminmode,
                     is_repeat: examData.is_repeat,
                     is_score: examData.is_score,
+                    is_result: examData.is_result,
                     is_answer_shuffle: examData.is_answer_shuffle,
                     is_question_shuffle: examData.is_question_shuffle,
                 },
@@ -1395,12 +1559,13 @@ router.post('/assessment/:id/:exam?', async (req, res) => {
     }
 });
 
+
 router.post('/score/submit', async (req, res) => {
     try {
         const decryptedData = decrypt(req.body.data);
         const { site, examID, courseID, score, remark, startTime, submitTime, answer, authen, status } = decryptedData;
 
-        // Authen User Middleware
+        // Authenticate User Middleware
         const authResult = await authenticateUserToken(authen, res);
         if (!authResult.status) return authResult.response;
         const user = authResult.user;
@@ -1413,8 +1578,6 @@ router.post('/score/submit', async (req, res) => {
             return res.status(400).json({ error: 'Site, examID, courseID, score, and answer parameters are required.' });
         }
 
-        //console.log("user",user)
-
         const { client } = req;
         const { targetDb, siteData } = await getSiteSpecificDb(client, site);
 
@@ -1423,12 +1586,19 @@ router.post('/score/submit', async (req, res) => {
         }
 
         const scoreCollection = targetDb.collection('score');
+        const enrollCollection = targetDb.collection('enroll');
+        const examCollection = targetDb.collection('exam');
 
         // Check if a score record already exists
-        const existingScore = await scoreCollection.findOne({ examID, userID: user, status:true });
-
+        const existingScore = await scoreCollection.findOne({ examID, userID: user, status: true });
         if (existingScore) {
             return res.status(409).json({ error: 'Score already recorded for this exam and user.' });
+        }
+
+        // Fetch Exam Data
+        const exam = await examCollection.findOne({ _id: safeObjectId(examID) });
+        if (!exam) {
+            return res.status(404).json({ error: 'Exam not found.' });
         }
 
         // Insert new score record with answer data
@@ -1447,16 +1617,67 @@ router.post('/score/submit', async (req, res) => {
 
         const result = await scoreCollection.insertOne(newScore);
 
+        // Fetch Enrollment
+        const enrollment = await enrollCollection.findOne({ courseID, userID: user });
+
+        if (!enrollment) {
+            return res.status(404).json({ error: 'Enrollment not found.' });
+        }
+
+        // Initialize default analytics if missing
+        const defaultAnalytics = {
+            total: 0,
+            pending: 0,
+            processing: 0,
+            complete: 0,
+            status: "pending",
+            message: "Not started",
+            post: { req: false, has: false, measure: null, score: null, result: false, message: null },
+            pre: { req: false, has: false, measure: null, result: false, message: null },
+            retest: { req: false, has: false, measure: null, result: false, message: null },
+            option: { cert_area: null, exam_round: null },
+            percent: 0
+        };
+
+        let analytics = enrollment.analytics || defaultAnalytics;
+
+        // Determine if the exam score passes the measure threshold
+        const passedExam = score >= parseInt(exam.measure);
+
+        // Update the analytics based on exam type
+        if (['pre', 'post', 'retest'].includes(exam.type)) {
+            analytics[exam.type] = {
+                req: true,  // Assuming this exam type is required
+                has: true,
+                measure: exam.measure,
+                score: score,
+                result: passedExam,
+                message: passedExam ? 'Passed' : 'Failed'
+            };
+        }
+
+        // Determine the overall status
+        const allComplete = analytics.total === analytics.complete;
+        analytics.status = allComplete ? "complete" : analytics.processing > 0 ? "processing" : analytics.pending > 0 ? "pending" : "in-progress";
+        analytics.message = allComplete ? "All tasks completed" : "Pending tasks remain";
+
+        // Update the enrollment analytics
+        const updateResult = await enrollCollection.updateOne(
+            { _id: enrollment._id },
+            { $set: { analytics, updatedAt: new Date() } }
+        );
+
         res.status(201).json({
             success: true,
-            message: 'Score and answer recorded successfully.',
-            data: { insertedId: result.insertedId },
+            message: 'Score and analytics updated successfully.',
+            data: { insertedId: result.insertedId, updatedAnalytics: updateResult.modifiedCount > 0 },
         });
     } catch (error) {
-        console.error('Error recording score and answer:', error.message, error.stack);
-        res.status(500).json({ error: 'An error occurred while recording the score and answer.' });
+        console.error('Error recording score and updating analytics:', error.message, error.stack);
+        res.status(500).json({ error: 'An error occurred while recording the score and updating analytics.' });
     }
 });
+
 
 // Endpoint to update the score status
 router.post('/score/status', async (req, res) => {
@@ -1896,7 +2117,8 @@ router.post('/enroll', async (req, res) => {
 
         // Extract course IDs from enrollments
         const courseIds = enrollments.map((enrollment) => safeObjectId(enrollment.courseID));
-
+        const siteIdString = siteData._id.toString();``
+        // console.log("siteData",siteIdString)
         // Fetch course details for the enrolled courses and sort by createdAt
         const courses = await courseCollection
             .find({ _id: { $in: courseIds } })
@@ -1904,6 +2126,7 @@ router.post('/enroll', async (req, res) => {
                 _id: 1,
                 name: 1,
                 slug: 1,
+                unit: 1,
                 description: 1,
                 cover: 1,
                 hours: 1,
@@ -1925,6 +2148,7 @@ router.post('/enroll', async (req, res) => {
                 scoreDate: 1,
                 endRegistDate: 1,
                 startRegistDate: 1,
+                scheduleConfig: 1,
             })
             .sort({ createdAt: -1 }) // Sort courses by createdAt in descending order
             .toArray();
@@ -1941,17 +2165,171 @@ router.post('/enroll', async (req, res) => {
         const orderMap = orders.reduce((map, order) => {
             map[order._id.toString()] = order;
             return map;
-        }, {});
-
+        }, {})
+        
         // Merge enrollment data with course and order details
-        const enrichedEnrollments = enrollments.map((enrollment) => {
+        const enrichedEnrollments = await Promise.all(enrollments.map(async (enrollment) => { // เพิ่ม async ที่นี่
             const courseDetails = courseMap[enrollment.courseID];
-            const orderDetails = enrollment.orderID ? orderMap[enrollment.orderID] || null : null;
+            const orderDetails = enrollment.orderID ? orderMap[enrollment.orderID] || null : null
 
+            let submitFormData = null; // To store form data fetched by submitID
+
+            if (enrollment) {
+                enrollID = enrollment._id;
+    
+                // Try to fetch form data using userID and enrollID
+                const formCollection = targetDb.collection('form');
+                submitFormData = await formCollection.findOne({ 
+                    userID: user,
+                    enrollID: enrollment._id.toString()
+                });
+    
+                // console.log("submitFormData",submitFormData);
+    
+                // If no form found by userID and enrollID, and submitID exists, try finding by submitID
+                if (!submitFormData && enrollment.submitID) {
+                    submitFormData = await formCollection.findOne({ 
+                        _id: safeObjectId(enrollment.submitID)
+                    });
+                }
+            } else {
+                enrollID = null;
+            }
+            
+            // Function to find value by name
+            const findValueByName = (formData, targetName) => {
+                for (const key in formData) {
+                    if (formData[key]?.name === targetName) {
+                        return formData[key]?.value || null;
+                    }
+                }
+                return null;
+            };
+
+
+            // Ensure enrollment and submitFormData exist before extracting selectedExamDate
+            const selectedExamDate = orderDetails && orderDetails.selectedExamDate 
+            ? orderDetails.selectedExamDate 
+            : (submitFormData ? findValueByName(submitFormData.formData, "เลือกวันที่ทำข้อสอบ") : null);
+
+            // Function to reformat scheduleConfig
+            const formatScheduleConfig = (scheduleConfig) => {
+            return scheduleConfig.flatMap((entry) => {
+                if (entry.round) {
+                    return entry.rounds
+                        .filter(round => round.StartDateUsed || round.EndDateUsed)
+                        .map(round => ({
+                            item: entry.item,
+                            startDate: round.StartDateUsed ? round.StartDate : null,
+                            endDate: round.EndDateUsed ? round.EndDate : null,
+                            roundName: round.name
+                        }));
+                } else {
+                    return [{
+                        item: entry.item,
+                        startDate: entry.startDate,
+                        endDate: entry.endDate,
+                        roundName: null
+                    }];
+                }
+            });
+            };
+            // Function to get the current time in UTC+7 as a timestamp
+            const getNowInTimezoneTimestamp = () => {
+            const now = new Date();
+            now.setHours(now.getHours() + 7); // Convert to UTC+7
+            return {
+                nowISO: now.toISOString().replace("Z", "+07:00"), // ISO format
+                nowTimestamp: now.getTime() // Timestamp in milliseconds
+            };
+            };
+
+            // Function to calculate human-readable time difference
+            const getTimePrefix = (targetTimestamp, nowTimestamp) => {
+            const diffMs = targetTimestamp - nowTimestamp; // Difference in milliseconds
+            const diffSec = Math.round(diffMs / 1000); // Convert to seconds
+            const diffMin = Math.round(diffSec / 60); // Convert to minutes
+            const diffHr = Math.round(diffMin / 60); // Convert to hours
+            const diffDay = Math.round(diffHr / 24); // Convert to days
+
+            if (Math.abs(diffSec) < 10) return "ตอนนี้"; // If it's happening now (within 10 sec)
+
+            if (Math.abs(diffSec) < 60) return diffSec > 0 ? `ในอีก ${diffSec} วินาที` : `${Math.abs(diffSec)} วินาที ที่ผ่านมา`;
+            if (Math.abs(diffMin) < 60) return diffMin > 0 ? `ในอีก ${diffMin} ยาที` : `${Math.abs(diffMin)} นาที ที่ผ่านมา`;
+            if (Math.abs(diffHr) < 24) return diffHr > 0 ? `ในอีก ${diffHr} ชั่วโมง` : `${Math.abs(diffHr)} ชั่วโมง ที่ผ่านมา`;
+
+            return diffDay > 0 ? `ในอีก ${diffDay} วัน` : `${Math.abs(diffDay)} วัน ที่ผ่านมา`;
+            };
+
+            // Function to determine the status of a schedule item
+            const determineStatus = (startDate, endDate) => {
+            const { nowISO, nowTimestamp } = getNowInTimezoneTimestamp(); // Get current timestamp in UTC+7
+            const startTimestamp = startDate ? new Date(startDate).getTime() : null;
+            const endTimestamp = endDate ? new Date(endDate).getTime() : null;
+
+            if (!startTimestamp) return { status: "unknown", prefix: "unknown", now: nowISO };
+
+            if (!endTimestamp) { 
+                return { 
+                    status: nowTimestamp >= startTimestamp ? "ongoing" : "upcoming",
+                    prefix: getTimePrefix(startTimestamp, nowTimestamp),
+                    now: nowISO
+                };
+            }
+
+            if (startTimestamp === endTimestamp) {
+                return {
+                    status: nowTimestamp >= startTimestamp && nowTimestamp <= endTimestamp ? "ongoing" : "upcoming",
+                    prefix: getTimePrefix(startTimestamp, nowTimestamp),
+                    now: nowISO
+                };
+            }
+
+            if (nowTimestamp < startTimestamp) return { 
+                status: "upcoming", 
+                prefix: getTimePrefix(startTimestamp, nowTimestamp),
+                now: nowISO
+            };
+
+            if (nowTimestamp > endTimestamp) return { 
+                status: "expired", 
+                prefix: getTimePrefix(endTimestamp, nowTimestamp),
+                now: nowISO
+            };
+
+            return { 
+                status: "ongoing", 
+                prefix: "ตอนนี้",
+                now: nowISO
+            };
+            };
+
+            // Function to filter and add status + now to scheduleConfig
+            const filterScheduleByExamDate = (scheduleConfig, selectedExamDate) => {
+            if (!selectedExamDate || !selectedExamDate.value) {
+                return scheduleConfig.map(entry => {
+                    const statusResult = determineStatus(entry.startDate, entry.endDate);
+                    return { ...entry, status: statusResult.status, now: statusResult.now }; // Add status & now
+                });
+            }
+
+            return scheduleConfig
+                .filter(entry => !entry.roundName || entry.roundName === selectedExamDate.value)
+                .map(entry => {
+                    const statusResult = determineStatus(entry.startDate, entry.endDate);
+                    return { ...entry, now: statusResult.now, status: statusResult.status, prefix: statusResult.prefix }; // Add status & now
+                });
+            };
+
+            // Format and filter scheduleConfig
+            const formattedScheduleConfig = courseDetails.scheduleConfig ? formatScheduleConfig(courseDetails.scheduleConfig) : [];
+            const filteredScheduleConfig = filterScheduleByExamDate(formattedScheduleConfig, selectedExamDate);
+            
             return {
                 enrollment,
                 course: courseDetails || null, // Include course details or null if not found
                 order: orderDetails, // Include order details if found
+                scheduleConfig: filteredScheduleConfig, // ✅ Reformatted scheduleConfig
                 condition: courseDetails
                     ? {
                           accessDate: courseDetails.accessDate || null,
@@ -1970,11 +2348,20 @@ router.post('/enroll', async (req, res) => {
                       }
                     : null,
             };
-        });
+        }));
+        // Debug: Log the enrichedEnrollments before filtering
+        // console.log("Enriched Enrollments:", JSON.stringify(enrichedEnrollments, null, 2));
+
+        // Filter enrichedEnrollments to only include those with course.unit = siteIdString
+        const filteredEnrollments = enrichedEnrollments.filter(enrollment => 
+            enrollment.course && enrollment.course.unit === siteIdString
+        );
+
+        // console.log("filteredEnrollments",filteredEnrollments);
 
         res.status(200).json({
             success: true,
-            data: enrichedEnrollments,
+            data: filteredEnrollments,
         });
     } catch (error) {
         console.error('Error fetching enrollments:', error.message, error.stack);
@@ -2947,6 +3334,177 @@ router.post('/qrcode', async (req, res) => {
     }
 });
 
+router.post('/exam/verify', async (req, res) => {
+    try {
+        // ถอดรหัสข้อมูลที่ส่งมา
+        const decryptedData = decrypt(req.body.data);
+        const { site, enrollID, fileUrl, type, authen } = decryptedData;
 
+        // ตรวจสอบประเภทการสอบ
+        if (!['pre', 'post'].includes(type)) {
+            return res.status(400).json({ 
+                error: 'ประเภทการสอบต้องเป็น "pre" หรือ "post" เท่านั้น' + type 
+            });
+        }
+
+        // ตรวจสอบการยืนยันตัวตนผู้ใช้
+        const authResult = await authenticateUserToken(authen, res);
+        if (!authResult.status) return authResult.response;
+        const user = authResult.user;
+
+        // ตรวจสอบข้อมูลที่จำเป็น
+        if (!site || !enrollID || !fileUrl) {
+            return res.status(400).json({ 
+                error: 'ต้องระบุ site, enrollID และ fileUrl' 
+            });
+        }
+
+        const { client } = req;
+        const { targetDb, siteData } = await getSiteSpecificDb(client, site);
+
+        if (!siteData || !siteData._id) {
+            return res.status(404).json({ error: 'ไม่พบข้อมูลเว็บไซต์หรือข้อมูลไม่ถูกต้อง' });
+        }
+
+        // ดึงข้อมูลการลงทะเบียน
+        const enrollCollection = targetDb.collection('enroll');
+        const enrollment = await enrollCollection.findOne({ 
+            _id: safeObjectId(enrollID),
+            userID: user 
+        });
+
+        if (!enrollment) {
+            return res.status(404).json({ error: 'ไม่พบข้อมูลการลงทะเบียน' });
+        }
+
+        // สร้างโครงสร้างข้อมูล verified ถ้ายังไม่มี
+        const updateData = {
+            $set: {
+                [`verified.${type}`]: {
+                    status: true,
+                    url: fileUrl
+                },
+                updatedAt: new Date()
+            }
+        };
+
+        // อัพเดทข้อมูล
+        const result = await enrollCollection.updateOne(
+            { _id: safeObjectId(enrollID) },
+            updateData
+        );
+
+        if (result.modifiedCount === 0) {
+            return res.status(400).json({ 
+                error: 'ไม่สามารถอัพเดทข้อมูลการตรวจสอบได้' 
+            });
+        }
+
+        // ดึงข้อมูลที่อัพเดทแล้ว
+        const updatedEnrollment = await enrollCollection.findOne({ 
+            _id: safeObjectId(enrollID) 
+        });
+
+        res.status(200).json({
+            success: true,
+            message: 'อัพเดทข้อมูลการตรวจสอบเรียบร้อยแล้ว',
+            data: {
+                enrollID: enrollID,
+                verified: updatedEnrollment.verified || {}
+            }
+        });
+
+    } catch (error) {
+        console.error('เกิดข้อผิดพลาดในการตรวจสอบการสอบ:', error.message, error.stack);
+        res.status(500).json({ 
+            error: 'เกิดข้อผิดพลาดในการตรวจสอบการสอบ' 
+        });
+    }
+});
+
+router.post('/exam/capture', async (req, res) => {
+    try {
+        // ถอดรหัสข้อมูลที่ส่งมา
+        const decryptedData = decrypt(req.body.data);
+        const { site, enrollID, fileUrl, type, authen } = decryptedData;
+
+        // ตรวจสอบประเภทการจับภาพ
+        if (!['pre', 'post'].includes(type)) {
+            return res.status(400).json({ 
+                error: 'ประเภทการจับภาพต้องเป็น "pre" หรือ "post" เท่านั้น' 
+            });
+        }
+
+        // ตรวจสอบการยืนยันตัวตนผู้ใช้
+        const authResult = await authenticateUserToken(authen, res);
+        if (!authResult.status) return authResult.response;
+        const user = authResult.user;
+
+        // ตรวจสอบข้อมูลที่จำเป็น
+        if (!site || !enrollID || !fileUrl) {
+            return res.status(400).json({ 
+                error: 'ต้องระบุ site, enrollID และ fileUrl' 
+            });
+        }
+
+        const { client } = req;
+        const { targetDb, siteData } = await getSiteSpecificDb(client, site);
+
+        if (!siteData || !siteData._id) {
+            return res.status(404).json({ error: 'ไม่พบข้อมูลเว็บไซต์หรือข้อมูลไม่ถูกต้อง' });
+        }
+
+        // ดึงข้อมูลการลงทะเบียน
+        const enrollCollection = targetDb.collection('enroll');
+        const enrollment = await enrollCollection.findOne({ 
+            _id: safeObjectId(enrollID),
+            userID: user 
+        });
+
+        if (!enrollment) {
+            return res.status(404).json({ error: 'ไม่พบข้อมูลการลงทะเบียน' });
+        }
+
+        // อัพเดทข้อมูล capture โดยเพิ่ม URL ลงในอาร์เรย์
+        const updateData = {
+            $addToSet: {
+                [`capture.${type}.urls`]: fileUrl // ใช้ $addToSet เพื่อเพิ่ม URL ลงในอาร์เรย์
+            },
+            $set: { updatedAt: new Date() }
+        };
+
+        // อัพเดทข้อมูล
+        const result = await enrollCollection.updateOne(
+            { _id: safeObjectId(enrollID) },
+            updateData // เอา `$set` ออกไปจาก `$addToSet`
+        );
+
+        if (result.modifiedCount === 0) {
+            return res.status(400).json({ 
+                error: 'ไม่สามารถอัพเดทข้อมูลการจับภาพได้' 
+            });
+        }
+
+        // ดึงข้อมูลที่อัพเดทแล้ว
+        const updatedEnrollment = await enrollCollection.findOne({ 
+            _id: safeObjectId(enrollID) 
+        });
+
+        res.status(200).json({
+            success: true,
+            message: 'อัพเดทข้อมูลการจับภาพเรียบร้อยแล้ว',
+            data: {
+                enrollID: enrollID,
+                capture: updatedEnrollment.capture || {}
+            }
+        });
+
+    } catch (error) {
+        console.error('เกิดข้อผิดพลาดในการจับภาพ:', error.message, error.stack);
+        res.status(500).json({ 
+            error: 'เกิดข้อผิดพลาดในการจับภาพ' 
+        });
+    }
+});
 
 module.exports = router;
