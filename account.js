@@ -706,7 +706,7 @@ router.post('/login', async (req, res) => {
 
     // Find the user in the database
     const userQuery = {
-      parent: site, // Ensure the user belongs to the correct site
+      //parent: site, // Ensure the user belongs to the correct site
       username,     // Match the username
     };
     const userResponse = await userCollection.findOne(userQuery);
