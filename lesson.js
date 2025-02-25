@@ -3509,4 +3509,60 @@ router.post('/exam/capture', async (req, res) => {
     }
 });
 
+router.post('/set-enroll', async (req, res) => {
+    try {
+        const { site } = req.body;
+
+        if (!site) {
+            return res.status(400).json({ error: 'Site parameter is required.' });
+        }
+
+        const { client } = req;
+        const { targetDb, siteData } = await getSiteSpecificDb(client, site);
+
+        if (!siteData || !siteData._id) {
+            return res.status(404).json({ error: 'Site data not found or invalid.' });
+        }
+
+        const enrollCollection = targetDb.collection('enroll');
+        const formCollection = targetDb.collection('form'); // เพิ่มการเข้าถึง collection 'form'
+
+        // Find enrollments by courseID with a limit of 10 items
+        const courseID = '679fa9d731f00fed9ffaffcc';
+        const enrollments = await enrollCollection.find({ courseID }).limit(3000).toArray();
+
+        // สร้างอาร์เรย์เพื่อเก็บข้อมูล form ที่ค้นพบ
+        const forms = [];
+
+        // Loop ผ่าน enrollments เพื่อค้นหาข้อมูล form สำหรับแต่ละ enrollID
+        for (const enrollment of enrollments) {
+            const enrollID = enrollment._id.toString();
+            const form = await formCollection.findOne({ enrollID });
+            forms.push(form); // เพิ่ม form ที่ค้นพบลงในอาร์เรย์
+
+            // อัปเดต enrollment.formID ด้วย form._id.toString() ถ้ามี form
+            if (form) {
+                enrollment.formID = form._id.toString(); // ย้าย formID ไปยังระดับรากของ enrollment
+
+                // อัปเดตเอกสารใน collection 'enroll'
+                await enrollCollection.updateOne(
+                    { _id: enrollment._id }, // ค้นหาด้วย _id ของ enrollment
+                    { $set: { formID: enrollment.formID } } // อัปเดต formID ในระดับราก
+                );
+            }
+        }
+
+        res.status(200).json({
+            success: true,
+            data: {
+                enrollments,
+                forms, // ส่งคืนข้อมูล forms ที่ค้นพบ
+            },
+        });
+    } catch (error) {
+        console.error('Error fetching enrollments and forms:', error.message, error.stack);
+        res.status(500).json({ error: 'An error occurred while fetching enrollments and forms.' });
+    }
+});
+
 module.exports = router;
