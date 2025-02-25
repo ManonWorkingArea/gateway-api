@@ -1768,7 +1768,7 @@ router.post('/progress/:option', async (req, res) => {
         }
 
         const progressCollection = targetDb.collection('progress');
-
+        const enrollCollection = targetDb.collection('enroll');
         if (option === 'new') {
             // Validation for "new" option
             if (!courseID || !playerID) {
@@ -1856,12 +1856,22 @@ router.post('/progress/:option', async (req, res) => {
                 $set: {
                     ...updateField,
                     lastplay,
-                    updatedAt: new Date(),
-                    ...(clientData ? { clientData } : {}), // เพิ่มข้อมูล client ถ้ามี
+                    updatedAt: new Date()
                 },
             };
         
             await progressCollection.updateOne(query, update);
+
+            // Update the enrollment document with clientData
+            const enrollQuery = { userID: existingProgress.userID, courseID: existingProgress.courseID }; // ตัวอย่างการสร้าง query สำหรับ enrollment
+            const enrollUpdate = {
+                $set: {
+                    ...(clientData ? { clientData } : {}), // เพิ่มข้อมูล clientData ถ้ามี
+                    updatedAt: new Date(),
+                },
+            };
+
+            await enrollCollection.updateOne(enrollQuery, enrollUpdate);
         
             // Fetch analytics using the helper function
             const { analytics } = await getAnalytics(targetDb, existingProgress.courseID, user);
