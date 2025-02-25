@@ -2322,7 +2322,9 @@ router.post('/enroll', async (req, res) => {
             };
 
             // Format and filter scheduleConfig
-            const formattedScheduleConfig = courseDetails.scheduleConfig ? formatScheduleConfig(courseDetails.scheduleConfig) : [];
+            const formattedScheduleConfig = (courseDetails && courseDetails.scheduleConfig) 
+            ? formatScheduleConfig(courseDetails.scheduleConfig) 
+            : []; // ใช้การตรวจสอบที่เข้มงวดมากขึ้น
             const filteredScheduleConfig = filterScheduleByExamDate(formattedScheduleConfig, selectedExamDate);
             
             return {
@@ -2365,7 +2367,7 @@ router.post('/enroll', async (req, res) => {
         });
     } catch (error) {
         console.error('Error fetching enrollments:', error.message, error.stack);
-        res.status(500).json({ error: 'An error occurred while fetching enrollments.' });
+        res.status(500).json({ error: 'An error occurred while fetching enrollments.' + " : " + error.message + " : " + error.stack });
     }
 });
 
