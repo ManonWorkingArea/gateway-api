@@ -688,7 +688,7 @@ router.post('/reset-password', async (req, res) => {
 router.post('/login', async (req, res) => {
   try {
     const { client } = req; // MongoDB client from middleware
-    const { site, username, password, rememberMe } = req.body; // Extract fields from request body
+    const { site, username, password, rememberMe, clientData } = req.body; // Extract fields from request body
     const { key } = req.query; // Extract 'key' from query parameters
 
     if (!username || !password || !site) {
@@ -750,6 +750,12 @@ router.post('/login', async (req, res) => {
     // Save the new session in the database
     await sessionCollection.insertOne(newSession);
 
+    // Update clientData in the user collection
+    await userCollection.updateOne(
+      { _id: userResponse._id }, // Match the user ID
+      { $set: { clientData } } // Update clientData
+    );
+    
     // Respond with session data, token, user data, and site data
     res.status(200).json({
       status: true,
