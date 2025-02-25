@@ -1740,7 +1740,7 @@ router.post('/progress/:option', async (req, res) => {
     //console.log("decryptedData",decryptedData);
     
     // Extract properties from the decrypted data
-    const { site, courseID, playerID, progressID, progress, lastplay, status, authen } = decryptedData;
+    const { site, courseID, playerID, progressID, progress, lastplay, status, authen, clientData } = decryptedData;
 
     // Authen User Middleware
     const authResult = await authenticateUserToken(authen, res);
@@ -1857,6 +1857,7 @@ router.post('/progress/:option', async (req, res) => {
                     ...updateField,
                     lastplay,
                     updatedAt: new Date(),
+                    ...(clientData ? { clientData } : {}), // เพิ่มข้อมูล client ถ้ามี
                 },
             };
         
