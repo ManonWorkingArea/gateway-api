@@ -755,7 +755,7 @@ router.post('/login', async (req, res) => {
       { _id: userResponse._id }, // Match the user ID
       { $set: { clientData } } // Update clientData
     );
-    
+
     // Respond with session data, token, user data, and site data
     res.status(200).json({
       status: true,
@@ -1256,7 +1256,7 @@ router.post('/wallet', async (req, res) => {
 
 router.post('/bypass-user', async (req, res) => {
   try {
-    const { userId, site } = req.body; // Expect user ID and site
+    const { userId, site, clientData } = req.body; // Expect user ID and site
 
     if (!userId || !site) {
       return res.status(400).json({ status: false, message: 'User ID and site are required' });
@@ -1289,6 +1289,12 @@ router.post('/bypass-user', async (req, res) => {
 
     // Generate a JWT for the target user
     const { token: userToken } = generateJWT(targetUser, site, true); // 30-day expiration
+
+    // Update clientData in the user collection
+    await userCollection.updateOne(
+      { _id: targetUser._id }, // Match the user ID
+      { $set: { clientData } } // Update clientData
+    );
 
     return res.status(200).json({
       status: true,
