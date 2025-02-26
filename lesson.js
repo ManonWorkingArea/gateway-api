@@ -1232,7 +1232,10 @@ router.post('/course/:id/:playerID?', async (req, res) => {
         // console.log("formattedResponse",formattedResponse);
     } catch (error) {
         console.error('Error fetching course and player data:', error.message, error.stack);
-        res.status(500).json({ error: 'An error occurred while fetching data.' });
+        // ตรวจสอบว่าการตอบสนองยังไม่ได้ถูกส่งไปแล้ว
+        if (!res.headersSent) {
+            res.status(500).json({ error: 'An error occurred while fetching data.' });
+        }
     }
 });
 
