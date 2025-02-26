@@ -94,7 +94,7 @@ router.get('/render-builder', async (req, res) => {
       <strong>Password Recovery OTP</strong><br/><br/>
       <br/>
       Your OTP for password recovery is <strong>1234</strong>.<br/><br/>Please use this code within the next 15 minutes.<br/>
-      If you didn’t request this, please ignore this email or contact support.
+      If you didn't request this, please ignore this email or contact support.
     `;
 
     // Render the HTML content using the builderRender function
@@ -513,12 +513,25 @@ router.post('/recover-password', async (req, res) => {
     }
 
     // Find the user by email
-    const user = await userCollection.findOne({
+    const userResponses = await userCollection.find({
       parent: site, // Ensure the user belongs to the correct site
       email,        // Match the email
-    });
+    }).toArray();
+
+    let userResponse;
+    if (userResponses.length === 1) {
+        userResponse = userResponses[0]; // ถ้ามีเพียงรายการเดียว
+    } else {
+        // ฟังก์ชันเพื่อตรวจสอบข้อมูลที่มี parent เท่ากับ siteIdString
+        const checkData = (users, siteId) => {
+            return users.filter(user => user.parent === siteId);
+        };
+
+        const filteredUsers = checkData(userResponses, siteData._id.toString()); // ตรวจสอบข้อมูลที่มี parent เท่ากับ siteIdString
+        userResponse = filteredUsers.length > 0 ? filteredUsers[0] : null; // ใช้ผู้ใช้แรกที่ตรงตามเงื่อนไข หรือ null ถ้าไม่มี
+    }
     
-    if (!user) {
+    if (!userResponse) {
       return res.status(404).json({ status: false, message: 'User not found' });
     }
 
@@ -565,7 +578,7 @@ router.post('/recover-password', async (req, res) => {
     // Prepare the email content
     const emailData = {
       from: `${siteData.siteName} <fti.academy@website-backend.email>`,
-      to: [user.firstname + ' ' + user.lastname + ' <' + email + '>'], // Send to the user's actual email
+      to: [userResponse.firstname + ' ' + userResponse.lastname + ' <' + email + '>'], // Send to the user's actual email
       subject: "รหัส OTP สำหรับการกู้คืนรหัสผ่าน",
       plain: `Your OTP for password recovery is ${recoveryOtp}.`,
       html: htmlContent, // Use rendered HTML content
@@ -701,15 +714,34 @@ router.post('/login', async (req, res) => {
     // Get site-specific database, user collection, and site data
     const { targetDb, siteData } = await getSiteSpecificDb(client, site);
     const userCollection = client.db(siteData.key).collection('user');
+
+    const siteIdString = siteData._id.toString();
     // Use siteData as needed, for example:
-    console.log('Site Data:', siteData);
+    //console.log('Site Data:', siteData);
 
     // Find the user in the database
     const userQuery = {
       //parent: site, // Ensure the user belongs to the correct site
       username,     // Match the username
     };
-    const userResponse = await userCollection.findOne(userQuery);
+    const userResponses = await userCollection.find(userQuery).toArray();
+
+    let userResponse;
+
+    //console.log('userResponses', userResponses);
+    if (userResponses.length === 1) {
+        userResponse = userResponses[0]; // ถ้ามีเพียงรายการเดียว
+    } else {
+        // ฟังก์ชันเพื่อตรวจสอบข้อมูลที่มี parent เท่ากับ siteIdString
+        const checkData = (users, siteId) => {
+            return users.filter(user => user.parent === siteId);
+        };
+
+        const filteredUsers = checkData(userResponses, siteIdString); // ตรวจสอบข้อมูลที่มี parent เท่ากับ siteIdString
+        userResponse = filteredUsers.length > 0 ? filteredUsers[0] : null; // ใช้ผู้ใช้แรกที่ตรงตามเงื่อนไข หรือ null ถ้าไม่มี
+    }
+
+    //console.log('userResponse', userResponse);
 
     if (!userResponse) {
       return res.status(404).json({ status: false, message: 'ไม่พบชื่อผู้ใช้งานนี้' });
