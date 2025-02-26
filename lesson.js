@@ -707,7 +707,7 @@ router.post('/course/:id/:playerID?', async (req, res) => {
                         if (
                             nextItem &&
                             nextItem.isProgress &&
-                            nextItem.progress?.status === 'complete' &&
+                            (nextItem.progress?.status === 'complete' || nextItem.progress?.status === 'revising') &&
                             nextItem.isPlay
                         ) {
                             currentItem.isPlay = true;
