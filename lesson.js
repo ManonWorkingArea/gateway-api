@@ -315,34 +315,52 @@ router.post('/categories', async (req, res) => {
 });
 
 router.post('/course', async (req, res) => {
-    const { site, page = 1, limit = 10, searchQuery = '', selectedCodes = [] } = req.body;
+    const { site, page = 1, limit = 10, searchQuery = '', selectedCodes = [], disableCache = true } = req.body;
 
     try {
         if (!site) {
             return res.status(400).json({ error: 'Site parameter is required' });
         }
 
-        const cacheKey = `courses:${site}`;
-        const cachedCourses = await redisClient.get(cacheKey);
-
-        if (cachedCourses) {
-            console.log('DAT :: Redis');
-            const parsedCourses = JSON.parse(cachedCourses);
-            const totalItems = parsedCourses.length;
-            const totalPages = Math.ceil(totalItems / limit);
-            const paginatedCourses = parsedCourses.slice((page - 1) * limit, page * limit);
-
+        // Check if selectedCodes is empty and return an empty array
+        if (Array.isArray(selectedCodes) && selectedCodes.length === 0) {
             return res.status(200).json({
                 success: true,
-                data: paginatedCourses,
+                data: [],
                 meta: {
-                    totalItems,
-                    totalPages,
+                    totalItems: 0,
+                    totalPages: 0,
                     currentPage: page,
                     limit
                 },
-                cache: true
+                cache: false
             });
+        }
+
+        const cacheKey = `courses:${site}`;
+        // Check if caching is disabled
+        if (!disableCache) {
+            const cachedCourses = await redisClient.get(cacheKey);
+
+            if (cachedCourses) {
+                console.log('DAT :: Redis');
+                const parsedCourses = JSON.parse(cachedCourses);
+                const totalItems = parsedCourses.length;
+                const totalPages = Math.ceil(totalItems / limit);
+                const paginatedCourses = parsedCourses.slice((page - 1) * limit, page * limit);
+
+                return res.status(200).json({
+                    success: true,
+                    data: paginatedCourses,
+                    meta: {
+                        totalItems,
+                        totalPages,
+                        currentPage: page,
+                        limit
+                    },
+                    cache: true
+                });
+            }
         }
 
         const { client } = req;
@@ -397,7 +415,10 @@ router.post('/course', async (req, res) => {
             cache: false
         };
 
-        await redisClient.setEx(cacheKey, 3600, JSON.stringify(allCourses));
+        // Cache the results if caching is not disabled
+        if (!disableCache) {
+            await redisClient.setEx(cacheKey, 3600, JSON.stringify(allCourses));
+        }
 
         res.status(200).json(response);
     } catch (error) {
