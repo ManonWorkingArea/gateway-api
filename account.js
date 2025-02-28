@@ -504,7 +504,6 @@ router.post('/recover-password', async (req, res) => {
     // Get site-specific database, user collection, and site data
     const { siteData } = await getSiteSpecificDb(client, site);
     const userCollection = client.db(siteData.key).collection('user');
-    
     // Validate if theme and emailTemplates are configured
     if (!siteData.theme?.emailTemplates?.general) {
       return res.status(400).json({ 
@@ -513,14 +512,25 @@ router.post('/recover-password', async (req, res) => {
       });
     }
 
-    // Find the user by email without using parent
+    // Find the user by email
     const userResponses = await userCollection.find({
-      email, // Match the email
+      parent: site, // Ensure the user belongs to the correct site
+      email,        // Match the email
     }).toArray();
 
-    // Filter users based on site ID
-    const userResponse = userResponses.find(user => user.parent === siteData._id.toString());
+    let userResponse;
+    if (userResponses.length === 1) {
+        userResponse = userResponses[0]; // ถ้ามีเพียงรายการเดียว
+    } else {
+        // ฟังก์ชันเพื่อตรวจสอบข้อมูลที่มี parent เท่ากับ siteIdString
+        const checkData = (users, siteId) => {
+            return users.filter(user => user.parent === siteId);
+        };
 
+        const filteredUsers = checkData(userResponses, siteData._id.toString()); // ตรวจสอบข้อมูลที่มี parent เท่ากับ siteIdString
+        userResponse = filteredUsers.length > 0 ? filteredUsers[0] : null; // ใช้ผู้ใช้แรกที่ตรงตามเงื่อนไข หรือ null ถ้าไม่มี
+    }
+    
     if (!userResponse) {
       return res.status(404).json({ status: false, message: 'User not found' });
     }
@@ -531,7 +541,8 @@ router.post('/recover-password', async (req, res) => {
     // Update the user record with the recovery OTP
     await userCollection.updateOne(
       {
-        email, // Match the user's email
+        parent: site, // Ensure the user belongs to the correct site
+        email,        // Match the user's email
       },
       { $set: { otp: recoveryOtp, status: 'unactive' }, $currentDate: { updatedAt: true } }
     );
@@ -549,6 +560,7 @@ router.post('/recover-password', async (req, res) => {
 
     // Render the email content using the builderRender plugin
     const builderRender = require('./builderRender'); // Import the builderRender plugin
+    // Render the email content using the builderRender plugin
     const dynamicData = `
       <strong>รหัส OTP สำหรับการกู้คืนรหัสผ่าน</strong><br/>
       <br/>
