@@ -217,7 +217,15 @@ router.get('/m3u8/:site/:playerID/:quality/:m3u8File', async (req, res) => {
     }
 });
 
-router.get('/ts/:site/:playerID/:quality/:tsFile', async (req, res) => {
+const blockIDM = (req, res, next) => {
+    const userAgent = req.headers['user-agent'];
+    if (userAgent && /IDMan|Internet Download Manager/i.test(userAgent)) {
+        return res.status(403).send('Downloading is not allowed');
+    }
+    next();
+};
+
+router.get('/ts/:site/:playerID/:quality/:tsFile', blockIDM, async (req, res) => {
     const token = req.headers['authorization'];
     const { client } = req;
     const { site, playerID, quality, tsFile, authen } = req.params;
@@ -269,9 +277,17 @@ router.get('/ts/:site/:playerID/:quality/:tsFile', async (req, res) => {
         }
 
         // Set headers and pipe the response
+        // Set headers for HLS streaming
         res.setHeader('Content-Type', 'video/mp2t');
         res.setHeader('Accept-Ranges', 'bytes');
         res.setHeader('Cache-Control', 'no-store, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+
+        // Prevent IDM from detecting the file
+        res.setHeader('Content-Disposition', 'inline'); // Optional, but can help
+        res.setHeader('X-Content-Type-Options', 'nosniff'); // Prevent MIME-type sniffing
+
         response.data.pipe(res);
 
     } catch (error) {
