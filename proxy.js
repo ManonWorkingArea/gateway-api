@@ -270,7 +270,8 @@ router.get('/ts/:site/:playerID/:quality/:tsFile', async (req, res) => {
 
         // Set headers and pipe the response
         res.setHeader('Content-Type', 'video/mp2t');
-        res.setHeader('Content-Disposition', 'inline');
+        res.setHeader('Accept-Ranges', 'bytes');
+        res.setHeader('Cache-Control', 'no-store, must-revalidate');
         response.data.pipe(res);
 
     } catch (error) {
