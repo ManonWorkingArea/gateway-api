@@ -128,13 +128,14 @@ router.get('/player/:site/:playerID', async (req, res) => {
 
         let m3u8Content = response.data;
 
+        const token = generateSecureToken(playerID);
         // 🔥 Rewrite URLs to ensure they include playerID and key
         m3u8Content = m3u8Content.replace(/(.*?\.m3u8)/g, (match, m3u8File) => {
             return `https://gateway.cloudrestfulapi.com/proxy/m3u8/${site}/${playerID}/${m3u8File}?key=${key}`;
         });
 
         m3u8Content = m3u8Content.replace(/(.*?\.ts)/g, (match, tsFile) => {
-            return `https://gateway.cloudrestfulapi.com/proxy/ts/${site}/${playerID}/${tsFile}?key=${key}`;
+            return `https://gateway.cloudrestfulapi.com/proxy/ts/${site}/${playerID}/${tsFile}?key=${key}?token_key=${token}`;
         });
 
         // Set headers and return updated .m3u8 file
@@ -148,11 +149,33 @@ router.get('/player/:site/:playerID', async (req, res) => {
     }
 });
 
+const validTokens = new Map(); // Store valid tokens (consider using Redis)
+
+function generateSecureToken(playerID) {
+    const token = CryptoJS.SHA256(playerID + Date.now()).toString();
+    validTokens.set(token, Date.now() + 30000); // Expire in 30 seconds
+    return token;
+}
+
+function validateToken(token) {
+    if (validTokens.has(token)) {
+        const expiry = validTokens.get(token);
+        if (Date.now() < expiry) {
+            return true;
+        }
+    }
+    return false;
+}
+
 router.get('/m3u8/:site/:playerID/:quality/:m3u8File', async (req, res) => {
     const token = req.headers['authorization'];
     const { client } = req;
     const { site, playerID, quality, m3u8File, authen } = req.params;
-    const { key } = req.query;
+    const { key, token_key } = req.query;
+
+    if (!validateToken(token_key)) {
+        return res.status(403).json({ error: 'Invalid or expired access token' });
+    }
 
     console.log("token",token);
     // ตรวจสอบการยืนยันตัวตนผู้ใช้
