@@ -36,6 +36,8 @@ const projectRouter    = require('./projectmanager.js');  // Import the auth rou
 
 const scrapeRouter    = require('./scrape.js');  // Import the auth router'
 
+const proxyRouter    = require('./proxy.js');  // Import the auth router'
+
 global.ReadableStream = require('stream/web').ReadableStream;
 
 
@@ -101,6 +103,7 @@ async function initializeApp() {
     app.use('/file', fileRouter); // Add the /ai route
     app.use('/projectmanager', projectRouter); // Add the /ai route
     app.use('/scrape', scrapeRouter); // Add the /ai route
+    app.use('/proxy', proxyRouter); // Add the /ai route
     server.listen(process.env.PORT, () => {
       console.log(`PRT :: ${process.env.PORT}`);
     });
