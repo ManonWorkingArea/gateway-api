@@ -135,7 +135,7 @@ router.get('/player/:site/:playerID', async (req, res) => {
         });
 
         m3u8Content = m3u8Content.replace(/(.*?\.ts)/g, (match, tsFile) => {
-            return `https://gateway.cloudrestfulapi.com/proxy/ts/${site}/${playerID}/${tsFile}?key=${key}&token_key=${token_key}`;
+            return `https://gateway.cloudrestfulapi.com/proxy/ts/${site}/${playerID}/${tsFile}?key=${key}token_key=${token_key}`;
         });
 
         // Set headers and return updated .m3u8 file
@@ -149,19 +149,20 @@ router.get('/player/:site/:playerID', async (req, res) => {
     }
 });
 
-// Function to generate a secure token
+const validTokens = new Map(); // Store valid tokens (consider using Redis)
+
 function generateSecureToken(playerID) {
     const token = CryptoJS.SHA256(playerID + Date.now()).toString();
-    const expiry = Date.now() + 30000; // Expire in 30 seconds
-    redisClient.set(token, expiry, 'EX', 30); // Store token in Redis with 30 seconds expiry
+    validTokens.set(token, Date.now() + 30000); // Expire in 30 seconds
     return token;
 }
 
-// Function to validate a token
-async function validateToken(token) {
-    const expiry = await redisClient.get(token);
-    if (expiry && Date.now() < parseInt(expiry)) {
-        return true;
+function validateToken(token) {
+    if (validTokens.has(token)) {
+        const expiry = validTokens.get(token);
+        if (Date.now() < expiry) {
+            return true;
+        }
     }
     return false;
 }
@@ -172,8 +173,7 @@ router.get('/m3u8/:site/:playerID/:quality/:m3u8File', async (req, res) => {
     const { site, playerID, quality, m3u8File, authen } = req.params;
     const { key, token_key } = req.query;
 
-    // Validate the token
-    if (!await validateToken(token)) {
+    if (!validateToken(token_key)) {
         return res.status(403).json({ error: 'Invalid or expired access token' });
     }
 
@@ -223,7 +223,7 @@ router.get('/m3u8/:site/:playerID/:quality/:m3u8File', async (req, res) => {
         }
 
         let m3u8Content = response.data;
-        
+
         // 🔥 Rewrite URLs to ensure they include playerID, quality, and key
         m3u8Content = m3u8Content.replace(/(.*?\.ts)/g, (match, tsFile) => {
             return `https://gateway.cloudrestfulapi.com/proxy/ts/${site}/${playerID}/${quality}/${tsFile}?key=${key}&token_key=${token_key}`;
