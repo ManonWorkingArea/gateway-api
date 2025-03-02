@@ -223,10 +223,10 @@ router.get('/m3u8/:site/:playerID/:quality/:m3u8File', async (req, res) => {
         }
 
         let m3u8Content = response.data;
-
+        const new_token_key = generateSecureToken(playerID);
         // 🔥 Rewrite URLs to ensure they include playerID, quality, and key
         m3u8Content = m3u8Content.replace(/(.*?\.ts)/g, (match, tsFile) => {
-            return `https://gateway.cloudrestfulapi.com/proxy/ts/${site}/${playerID}/${quality}/${tsFile}?key=${key}&token_key=${token_key}`;
+            return `https://gateway.cloudrestfulapi.com/proxy/ts/${site}/${playerID}/${quality}/${tsFile}?key=${key}&token_key=${new_token_key}`;
         });
 
         // Set headers and return updated sub .m3u8 file
