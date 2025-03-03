@@ -1493,6 +1493,8 @@ router.post('/assessment/:id/:exam?', async (req, res) => {
                 },
                 meta: {
                     measure: examData.measure,
+                    watermark: examData.watermark,
+                    watermarkOptions: examData.watermarkOptions,
                     result: examData.result,
                     result_duedate: examData.result_duedate,
                     show: examData.show,
