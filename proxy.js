@@ -135,7 +135,7 @@ router.get('/player/:site/:playerID', async (req, res) => {
         });
 
         m3u8Content = m3u8Content.replace(/(.*?\.ts)/g, (match, tsFile) => {
-            return `https://gateway.cloudrestfulapi.com/proxy/ts/${site}/${playerID}/${tsFile}?key=${key}token_key=${token_key}`;
+            return `https://gateway.cloudrestfulapi.com/proxy/ts/${site}/${playerID}/${tsFile}?key=${key}&token_key=${token_key}`;
         });
 
         // Set headers and return updated .m3u8 file

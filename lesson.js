@@ -1765,7 +1765,7 @@ router.post('/progress/:option', async (req, res) => {
     //console.log("decryptedData",decryptedData);
     
     // Extract properties from the decrypted data
-    const { site, courseID, playerID, progressID, progress, lastplay, status, authen, clientData } = decryptedData;
+    const { site, courseID, playerID, progressID, progress, lastplay, status, authen, clientData, reason } = decryptedData;
 
     // Authen User Middleware
     const authResult = await authenticateUserToken(authen, res);
@@ -1920,6 +1920,7 @@ router.post('/progress/:option', async (req, res) => {
             const update = {
                 $set: {
                     status: 'complete', // Set status to 'complete'
+                    reason: reason || '',
                     updatedAt: new Date(),
                 },
             };
