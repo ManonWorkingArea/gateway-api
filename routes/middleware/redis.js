@@ -5,7 +5,7 @@ const natural = require('natural'); // เพิ่มไลบรารี natu
 
 // Redis Client Setup
 const redisClient = redis.createClient({
-  url: 'redis://default:e3PHPsEo92tMA5mNmWmgV8O6cn4tlblB@redis-19867.fcrce171.ap-south-1-1.ec2.redns.redis-cloud.com:19867',
+  url: process.env.REDIS_URI,
   socket: {
     tls: true,
     connectTimeout: 10000,
@@ -36,7 +36,7 @@ redisClient.on('reconnecting', () => console.warn('RED :: Reconnecting...'));
 
 // สร้าง OpenAI client ให้ถูกต้อง
 const openaiClient = new OpenAI({
-  apiKey: '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'
+  apiKey: process.env.OPENAI_API_KEY
 });
 
 // ตรวจสอบว่า Redis มี RediSearch หรือไม่
