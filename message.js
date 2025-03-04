@@ -6,7 +6,8 @@ const { crossOriginResourcePolicy } = require('helmet');
 const CryptoJS = require('crypto-js');
 const router = express.Router();
 
-
+// เพิ่มการนำเข้าฟังก์ชันจาก Redis
+const { searchChat, searchSimilarChat, saveChat } = require('./routes/middleware/redis');
 const { conversation } = require('./middleware/ai');
 // Secret key for signing JWT (Use environment variables for security)
 const JWT_SECRET = 'ZCOKU1v3TO2flcOqCdrJ3vWbWhmnZNQn';
@@ -54,70 +55,91 @@ async function getSiteSpecificDb(client, site) {
     return { targetDb, userCollection, siteData };
 }
 
-  router.post('/new', async (req, res) => {
-    try {
-      const decryptedData = decrypt(req.body.data);
-      const { site, content, course, player, authen } = decryptedData;
-  
-      let user = null;
-  
-      if (authen) {
-        const decodedToken = await verifyToken(authen.replace('Bearer ', ''));
-        if (!decodedToken.status) {
-          return res.status(401).json({ status: false, message: 'Invalid or expired token' });
-        }
-        user = decodedToken.decoded.user;
+router.post('/new', async (req, res) => {
+  try {
+    const decryptedData = decrypt(req.body.data);
+    const { site, content, course, player, authen } = decryptedData;
+
+    let user = null;
+
+    if (authen) {
+      const decodedToken = await verifyToken(authen.replace('Bearer ', ''));
+      if (!decodedToken.status) {
+        return res.status(401).json({ status: false, message: 'Invalid or expired token' });
       }
-  
-      if (!user || !site || !content) {
-        return res.status(400).json({ error: 'Missing required fields.' });
-      }
-  
-      const { client } = req;
-      const { targetDb, siteData } = await getSiteSpecificDb(client, site);
-      const messageCollection = targetDb.collection('message');
-  
-      const newMessage = {
-        userID: user,
-        courseID: course,
-        playerID: player,
-        content,
-        status: 'open',
-        replies: [],
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-  
-      const result = await messageCollection.insertOne(newMessage);
-  
-      const customPrompt = `คำถามจากผู้ใช้งาน:\n"${content}"`;
-      
-      const autoReply = await conversation(customPrompt);
-  
-      await messageCollection.updateOne(
-        { _id: result.insertedId },
-        {
-          $push: {
-            replies: {
-              userID: 'system',
-              content: autoReply,
-              createdAt: new Date(),
-            }
-          },
-          $set: { updatedAt: new Date() }
-        }
-      );
-  
-      res.status(201).json({
-        success: true,
-        message: 'Message submitted and auto-reply sent successfully.',
-        data: { insertedId: result.insertedId }
-      });
-    } catch (error) {
-      console.error('Error submitting message:', error.message);
-      res.status(500).json({ error: 'An error occurred while submitting the message.' });
+      user = decodedToken.decoded.user;
     }
-  });
+
+    if (!user || !site || !content) {
+      return res.status(400).json({ error: 'Missing required fields.' });
+    }
+
+    const { client } = req;
+    const { targetDb, siteData } = await getSiteSpecificDb(client, site);
+    const messageCollection = targetDb.collection('message');
+
+    const newMessage = {
+      userID: user,
+      courseID: course,
+      playerID: player,
+      content,
+      status: 'open',
+      replies: [],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const result = await messageCollection.insertOne(newMessage);
+
+    // ค้นหาคำตอบที่คล้ายกันจาก Redis ก่อน
+    let autoReply = null;
+    const similarResults = await searchSimilarChat(content);
+    
+    // ถ้าพบคำตอบที่คล้ายกัน ใช้คำตอบนั้น
+    if (similarResults && similarResults.length > 2) {
+      // ดึงคำตอบที่เจอจาก Redis (มีคะแนนความเหมือนสูง)
+      const bestMatch = similarResults[2] ? similarResults[2] : null;
+      if (bestMatch && bestMatch.score > 0.85) {
+        autoReply = bestMatch.message;
+        console.log('RED :: Using similar response from cache');
+        console.log(`คำตอบจากแคช (${bestMatch.score.toFixed(2)}): ${autoReply.substring(0, 50)}...`);
+      }
+    }
+    
+    // ถ้าไม่พบคำตอบที่คล้ายกัน ใช้ AI สร้างคำตอบ
+    if (!autoReply) {
+      const customPrompt = `คำถามจากผู้ใช้งาน:\n"${content}"`;
+      autoReply = await conversation(customPrompt);
+      console.log(`คำตอบจาก AI: ${autoReply.substring(0, 50)}...`);
+      
+      // บันทึกคำถามและคำตอบลงใน Redis สำหรับการค้นหาในอนาคต
+      await saveChat(user, `คำถาม: ${content}\nคำตอบ: ${autoReply}`);
+    }
+
+    await messageCollection.updateOne(
+      { _id: result.insertedId },
+      {
+        $push: {
+          replies: {
+            userID: 'system',
+            content: autoReply,
+            createdAt: new Date(),
+          }
+        },
+        $set: { updatedAt: new Date() }
+      }
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'Message submitted and auto-reply sent successfully.',
+      data: { insertedId: result.insertedId }
+    });
+  } catch (error) {
+    console.error('Error submitting message:', error.message);
+    res.status(500).json({ error: 'An error occurred while submitting the message.' });
+  }
+});
 
 router.post('/conversation', async (req, res) => {
     try {
@@ -188,7 +210,7 @@ router.post('/reply', async (req, res) => {
         const decryptedData = decrypt(req.body.data);
         console.log("decryptedData", decryptedData);
 
-        const { site, messageId, replyContent, userID, authen } = decryptedData;
+        const { site, messageId, replyContent, userID, authen, sendFullHistory = false } = decryptedData; // New Option
 
         let user = null;
 
@@ -210,7 +232,7 @@ router.post('/reply', async (req, res) => {
         }
 
         const { client } = req;
-        const { targetDb, siteData } = await getSiteSpecificDb(client, site);
+        const { targetDb } = await getSiteSpecificDb(client, site);
         const messageCollection = targetDb.collection('message');
 
         const message = await messageCollection.findOne({ _id: safeObjectId(messageId) });
@@ -233,19 +255,48 @@ router.post('/reply', async (req, res) => {
             }
         );
 
-        // Fetch updated conversation history
-        const updatedMessage = await messageCollection.findOne({ _id: safeObjectId(messageId) });
-        const conversationHistory = updatedMessage.replies.map(reply => {
-            const sender = reply.userID === user ? "คุณ" : "ระบบ";
-            return `${sender}: ${reply.content}`;
-        }).join('\n');
+        // ค้นหาคำตอบที่คล้ายกันจาก Redis ก่อน
+        let aiReply = null;
+        const similarResults = await searchSimilarChat(replyContent);
+        
+        // ถ้าพบคำตอบที่คล้ายกัน ใช้คำตอบนั้น
+        if (similarResults && similarResults.length > 2) {
+            // ดึงคำตอบที่เจอจาก Redis (มีคะแนนความเหมือนสูง)
+            const bestMatch = similarResults[2] ? similarResults[2] : null;
+            if (bestMatch && bestMatch.score > 0.85) {
+                aiReply = bestMatch.message;
+                console.log('RED :: Using similar response from cache');
+                console.log(`คำตอบจากแคช (${bestMatch.score.toFixed(2)}): ${aiReply.substring(0, 50)}...`);
+            }
+        }
+        
+        // ถ้าไม่พบคำตอบที่คล้ายกัน จึงใช้ AI
+        if (!aiReply) {
+            // Fetch updated conversation history
+            let aiPrompt;
+            if (sendFullHistory) {
+                // Send entire conversation history
+                const updatedMessage = await messageCollection.findOne({ _id: safeObjectId(messageId) });
+                const conversationHistory = updatedMessage.replies.map(reply => {
+                    const sender = reply.userID === user ? "คุณ" : "ระบบ";
+                    return `${sender}: ${reply.content}`;
+                }).join('\n');
 
-        // Enhanced AI prompt for helpful response
-        // Context-aware AI prompt
-        const aiPrompt = `นี่คือประวัติการสนทนาระหว่างผู้ใช้งานและระบบ:\n${conversationHistory}'`;
+                aiPrompt = `นี่คือประวัติการสนทนา:\n${conversationHistory}`;
+            } else {
+                // Send only the last user message
+                aiPrompt = `"${replyContent}" ตอบสั้นที่สุด`;
+            }
 
-        // Generate AI response
-        const aiReply = await conversation(aiPrompt);
+            console.log("aiPrompt", aiPrompt);
+
+            // Generate AI response
+            aiReply = await conversation(aiPrompt);
+            console.log(`คำตอบจาก AI: ${aiReply.substring(0, 50)}...`);
+            
+            // บันทึกคำถามและคำตอบลงใน Redis สำหรับการค้นหาในอนาคต
+            await saveChat(user, `คำถาม: ${replyContent}\nคำตอบ: ${aiReply}`);
+        }
 
         // Add AI's reply
         await messageCollection.updateOne(

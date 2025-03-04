@@ -35,7 +35,7 @@ redisClient.on('reconnecting', () => console.warn('RED :: Reconnecting...'));
 
 // สร้าง OpenAI client ให้ถูกต้อง
 const openaiClient = new OpenAI({
-  apiKey: `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`
+  apiKey: `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`
 });
 
 // ตรวจสอบว่า Redis มี RediSearch หรือไม่
@@ -309,6 +309,7 @@ async function semanticSearch(query, candidates, threshold = 0.7) {
         if (item.embedding) {
           const similarity = calculateCosineSimilarity(queryEmbedding, item.embedding);
           if (similarity > threshold) {
+            console.log(`RED :: Semantic match found: "${item.question.substring(0, 50)}..." with score ${similarity.toFixed(4)}`);
             results.push({
               ...item,
               score: similarity
@@ -377,6 +378,7 @@ async function compareTextMeaningWithAI(query, text) {
 
     // ดึงคะแนนจากการตอบกลับ
     const content = response.choices?.[0]?.message?.content?.trim() || "0";
+    console.log(`RED :: AI similarity analysis result: ${content}`);
     // แปลงเป็นตัวเลข (ถ้ามีตัวเลขในข้อความ)
     const scoreMatch = content.match(/([0-9]\.[0-9]+|[0-9])/);
     const score = scoreMatch ? parseFloat(scoreMatch[0]) : 0;
@@ -420,6 +422,7 @@ ${candidatesText}
 
     const answer = response.choices?.[0]?.message?.content?.trim();
     if (answer) {
+      console.log(`RED :: AI suggested answer: "${answer.substring(0, 100)}..."`);
       return {
         source: 'ai_enhanced',
         message: answer,
@@ -685,6 +688,45 @@ async function searchChatWithoutRedisearch(query, existingResults = []) {
   }
 }
 
+// ฟังก์ชันแยกคำถามและคำตอบจากข้อความ
+function extractQA(text) {
+  // ถ้าไม่มีข้อความ ส่งค่าว่างกลับไป
+  if (!text || typeof text !== 'string') {
+    return { question: '', answer: '' };
+  }
+  
+  // ตรวจสอบรูปแบบคำถาม-คำตอบที่ชัดเจน
+  let question = text;
+  let answer = '';
+  
+  if (text.includes('คำถาม:') && text.includes('คำตอบ:')) {
+    const questionMatch = text.match(/คำถาม:(.*?)(?:คำตอบ:|$)/s);
+    const answerMatch = text.match(/คำตอบ:(.*?)$/s);
+    
+    if (questionMatch && questionMatch[1]) {
+      question = questionMatch[1].trim();
+    }
+    
+    if (answerMatch && answerMatch[1]) {
+      answer = answerMatch[1].trim();
+    }
+  } else if (text.includes('Q:') && text.includes('A:')) {
+    // รองรับรูปแบบภาษาอังกฤษ
+    const questionMatch = text.match(/Q:(.*?)(?:A:|$)/s);
+    const answerMatch = text.match(/A:(.*?)$/s);
+    
+    if (questionMatch && questionMatch[1]) {
+      question = questionMatch[1].trim();
+    }
+    
+    if (answerMatch && answerMatch[1]) {
+      answer = answerMatch[1].trim();
+    }
+  }
+  
+  return { question, answer };
+}
+
 // ปรับปรุงฟังก์ชัน searchSimilarChat ให้ใช้การค้นหาแบบซับซ้อน
 async function searchSimilarChat(query) {
   console.log(`RED :: Searching for similar chat to: "${query.substring(0, 50)}..."`);
@@ -793,6 +835,7 @@ async function searchSimilarChat(query) {
   // 7. ถ้าพบผลลัพธ์ที่มีความคล้ายคลึงสูง ส่งกลับผลลัพธ์แรก
   if (semanticResults.length > 0 && semanticResults[0].score > 0.8) {
     console.log(`RED :: Found similar message with score ${semanticResults[0].score}`);
+    console.log(`RED :: Reply from Redis: ${semanticResults[0].answer || "ไม่พบคำตอบสำหรับคำถามนี้"}`);
     return [
       semanticResults[0].score,
       semanticResults[0].question,
