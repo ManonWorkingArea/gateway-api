@@ -1,7 +1,6 @@
 const redis = require('redis');
 const { OpenAI } = require('openai');
 const crypto = require('crypto');
-const natural = require('natural'); // เพิ่มไลบรารี natural สำหรับการประมวลผลภาษาธรรมชาติ
  
 // Redis Client Setup
 const redisClient = redis.createClient({
@@ -115,24 +114,50 @@ class TextSimilarity {
   }
   
   static calculateTFIDFSimilarity(text1, text2) {
-    // ใช้เทคนิค TF-IDF ง่ายๆ สำหรับคำนวณความคล้ายคลึง
+    // ปรับให้ไม่ใช้ natural แต่คำนวณแบบง่ายเอง
     try {
-      const TfIdf = natural.TfIdf;
-      const tfidf = new TfIdf();
+      // คำนวณความถี่ของคำในแต่ละข้อความ
+      const tokens1 = this.tokenize(text1);
+      const tokens2 = this.tokenize(text2);
       
-      tfidf.addDocument(this.tokenize(text1).join(' '));
-      tfidf.addDocument(this.tokenize(text2).join(' '));
+      // นับความถี่ในแต่ละข้อความ
+      const freq1 = {};
+      const freq2 = {};
       
+      for (const token of tokens1) {
+        freq1[token] = (freq1[token] || 0) + 1;
+      }
+      
+      for (const token of tokens2) {
+        freq2[token] = (freq2[token] || 0) + 1;
+      }
+      
+      // หาคำที่มีในทั้งสองข้อความ
+      const commonTokens = Object.keys(freq1).filter(token => freq2[token]);
+      
+      // คำนวณความคล้ายคลึงจากความถี่ของคำร่วมกัน
       let similarity = 0;
-      tfidf.tfidfs(this.tokenize(text1).join(' '), (i, measure) => {
-        if (i === 1) { // เปรียบเทียบกับเอกสารที่ 2
-          similarity = measure;
-        }
-      });
+      let total1 = 0;
+      let total2 = 0;
       
-      return similarity;
+      for (const token of commonTokens) {
+        similarity += freq1[token] * freq2[token];
+      }
+      
+      // คำนวณขนาดของเวกเตอร์ทั้งสอง
+      for (const token in freq1) {
+        total1 += freq1[token] * freq1[token];
+      }
+      
+      for (const token in freq2) {
+        total2 += freq2[token] * freq2[token];
+      }
+      
+      // คำนวณความคล้ายคลึงแบบ cosine
+      const norm = Math.sqrt(total1) * Math.sqrt(total2);
+      return norm === 0 ? 0 : similarity / norm;
     } catch (error) {
-      console.error('Error calculating TFIDF similarity:', error);
+      console.error('Error calculating similarity:', error);
       // ถ้าเกิดข้อผิดพลาด ให้ใช้ Jaccard แทน
       return this.calculateJaccardSimilarity(text1, text2);
     }
@@ -143,15 +168,9 @@ class TextSimilarity {
     let highestScore = 0;
     
     for (const candidate of candidates) {
-      // คำนวณความคล้ายคลึงผสมระหว่าง Jaccard และ TFIDF (ถ้ามี natural)
+      // คำนวณความคล้ายคลึงผสมระหว่าง Jaccard และ TF-IDF แบบพื้นฐาน
       const jaccardScore = this.calculateJaccardSimilarity(query, candidate.message);
-      let tfidfScore = 0;
-      
-      try {
-        tfidfScore = this.calculateTFIDFSimilarity(query, candidate.message);
-      } catch (error) {
-        tfidfScore = 0;
-      }
+      const tfidfScore = this.calculateTFIDFSimilarity(query, candidate.message);
       
       // คำนวณคะแนนรวม (ให้น้ำหนัก Jaccard มากกว่า)
       const score = (jaccardScore * 0.7) + (tfidfScore * 0.3);
