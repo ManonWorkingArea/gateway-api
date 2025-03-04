@@ -1125,7 +1125,7 @@ router.post('/course/:id/:playerID?', async (req, res) => {
             };
 
             return { 
-                status: "ongoing", 
+                status: "ongoing ", 
                 prefix: "ตอนนี้",
                 now: nowISO
             };
