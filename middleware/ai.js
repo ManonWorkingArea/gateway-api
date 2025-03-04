@@ -1,7 +1,7 @@
 const axios = require('axios');
  
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
-const OPENAI_API_KEY = `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`; // กรุณาเปลี่ยนเป็น API key ของคุณ
+const OPENAI_API_KEY = `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`; // กรุณาเปลี่ยนเป็น API key ของคุณ
 
 /**
  * Generates a custom AI message based on the given prompt.
@@ -22,7 +22,7 @@ const conversation = async (prompt) => {
         messages: [
             { 
                 role: "system", 
-                content: `"เจ้าหน้าที่ FTI Academy ตอบสั้น กระชับ แก้ปัญหาเว็บไซต์ ไม่ต้องสวัสดี ไม่ต้อง'ครับ/ค่ะ' ทุกข้อความ
+                content: `"เจ้าหน้าที่ เว็บไซต์ fti.academy ตอบสั้น กระชับ แก้ปัญหาเว็บไซต์ ไม่ต้องสวัสดี ไม่ต้อง'ครับ/ค่ะ' ทุกข้อความ
                 📌 ถามอุปกรณ์
                 📸 ให้แคปหน้าจอ
                 🌐 ใช้ Chrome
