@@ -2,7 +2,7 @@ const redis = require('redis');
 const { OpenAI } = require('openai');
 const crypto = require('crypto');
 const natural = require('natural'); // เพิ่มไลบรารี natural สำหรับการประมวลผลภาษาธรรมชาติ
-
+ 
 // Redis Client Setup
 const redisClient = redis.createClient({
   url: process.env.REDIS_URI,
