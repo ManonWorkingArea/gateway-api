@@ -2,10 +2,10 @@
 const axios = require('axios');
 
 const OPENAI_API_BASE = "https://api.openai.com/v1";
-const OPENAI_API_KEY = "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"; // กรุณาเปลี่ยนเป็น API key ของคุณ
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY; // กรุณาเปลี่ยนเป็น API key ของคุณ
 
 // ID ของ Assistant ที่สร้างไว้แล้ว (คุณต้องสร้าง Assistant ก่อนในแดชบอร์ด OpenAI)
-const ASSISTANT_ID = "asst_ZX761oDybQHKwKxHL9zvdghL"; // เปลี่ยนเป็น ID ของ Assistant ของคุณ
+const ASSISTANT_ID = process.env.ASSISTANT_ID; // เปลี่ยนเป็น ID ของ Assistant ของคุณ
 
 const headers = {
     "Authorization": `Bearer ${OPENAI_API_KEY}`,
