@@ -35,7 +35,7 @@ redisClient.on('reconnecting', () => console.warn('RED :: Reconnecting...'));
 
 // สร้าง OpenAI client ให้ถูกต้อง
 const openaiClient = new OpenAI({
-  apiKey: `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`
+  apiKey: process.env.OPENAI_API_KEY
 });
 
 // ตรวจสอบว่า Redis มี RediSearch หรือไม่
