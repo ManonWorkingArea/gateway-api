@@ -112,8 +112,10 @@ router.post('/new', async (req, res) => {
       autoReply = await conversation(customPrompt);
       console.log(`คำตอบจาก AI: ${autoReply.substring(0, 50)}...`);
       
-      // บันทึกคำถามและคำตอบลงใน Redis สำหรับการค้นหาในอนาคต
-      await saveChat(user, `คำถาม: ${content}\nคำตอบ: ${autoReply}`);
+      // บันทึกคำถามและคำตอบลงใน Redis สำหรับการค้นหาในอนาคต เฉพาะเมื่อไม่ใช่ข้อความแสดงข้อผิดพลาด
+      if (autoReply !== "ขออภัย ไม่สามารถสร้างข้อความตอบกลับได้ในขณะนี้.") {
+        await saveChat(user, `คำถาม: ${content}\nคำตอบ: ${autoReply}`);
+      }
     }
 
     await messageCollection.updateOne(
@@ -294,8 +296,10 @@ router.post('/reply', async (req, res) => {
             aiReply = await conversation(aiPrompt);
             console.log(`คำตอบจาก AI: ${aiReply.substring(0, 50)}...`);
             
-            // บันทึกคำถามและคำตอบลงใน Redis สำหรับการค้นหาในอนาคต
-            await saveChat(user, `คำถาม: ${replyContent}\nคำตอบ: ${aiReply}`);
+            // บันทึกคำถามและคำตอบลงใน Redis สำหรับการค้นหาในอนาคต เฉพาะเมื่อไม่ใช่ข้อความแสดงข้อผิดพลาด
+            if (aiReply !== "ขออภัย ไม่สามารถสร้างข้อความตอบกลับได้ในขณะนี้.") {
+                await saveChat(user, `คำถาม: ${replyContent}\nคำตอบ: ${aiReply}`);
+            }
         }
 
         // Add AI's reply
