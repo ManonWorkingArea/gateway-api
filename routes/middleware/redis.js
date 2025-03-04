@@ -9,7 +9,7 @@ const crypto = require('crypto');
  
 // Redis Client Setup
 const redisClient = redis.createClient({
-  url: `redis://default:e3PHPsEo92tMA5mNmWmgV8O6cn4tlblB@redis-19867.fcrce171.ap-south-1-1.ec2.redns.redis-cloud.com:19867`,
+  url: process.env.REDIS_URI,
   socket: {
     tls: true,
     connectTimeout: 10000,
