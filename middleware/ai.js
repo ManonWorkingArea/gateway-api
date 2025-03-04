@@ -1,8 +1,13 @@
+const dotenv = require('dotenv');
+// โหลดค่าจากไฟล์ .env
+dotenv.config();
+
 const axios = require('axios');
  
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY; // กรุณาเปลี่ยนเป็น API key ของคุณ
 
+console.log(OPENAI_API_KEY);
 /**
  * Generates a custom AI message based on the given prompt.
  * @param {string} prompt - The input prompt for AI to process.

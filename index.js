@@ -1,8 +1,10 @@
-require('dotenv').config();
 const express       = require('express');
 const bodyParser    = require('body-parser');
 const cors          = require('cors');
+
 const dotenv        = require('dotenv');
+dotenv.config();
+
 const setupRoutes   = require('./routes');
 const socketRouter  = require('./socket');
 const emailRouter   = require('./email');
@@ -42,7 +44,7 @@ const proxyRouter    = require('./proxy.js');  // Import the auth router'
 global.ReadableStream = require('stream/web').ReadableStream;
 
 
-dotenv.config();
+
 const app = express();
 const rateLimit = require('express-rate-limit');
 

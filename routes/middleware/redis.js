@@ -1,3 +1,8 @@
+const dotenv = require('dotenv');
+
+// โหลดค่าจากไฟล์ .env
+dotenv.config();
+
 const redis = require('redis');
 const { OpenAI } = require('openai');
 const crypto = require('crypto');

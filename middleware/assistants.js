@@ -1,4 +1,7 @@
- 
+const dotenv = require('dotenv');
+
+// โหลดค่าจากไฟล์ .env
+dotenv.config();
 const axios = require('axios');
 
 const OPENAI_API_BASE = "https://api.openai.com/v1";
