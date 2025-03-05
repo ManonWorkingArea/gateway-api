@@ -206,7 +206,7 @@ const updateEnrollAnalytics = async (targetDb, courseId, userId, analytics) => {
                 : 'คุณยังไม่ได้เริ่มต้นการเรียน', // Update message for 'revising'
         };
 
-        console.log("Enrollment ID:", enrollment._id);
+        //console.log("Enrollment ID:", enrollment._id);
 
         // Update the enrollment document with the new analytics
         const result = await targetDb.collection('enroll').updateOne(
@@ -990,11 +990,11 @@ router.post('/course/:id/:playerID?', async (req, res) => {
             }
         }
 
-        console.log("checkoutData",checkoutData);
+        //console.log("checkoutData",checkoutData);
 
         const courseProperties = await calculateCoursePropertiesById(courseId, user, targetDb);
 
-        console.log("courseProperties",courseProperties);
+        //console.log("courseProperties",courseProperties);
 
          // Fetch schedule data for onsite courses
          let scheduleData = null;
