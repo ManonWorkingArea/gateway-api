@@ -2575,6 +2575,9 @@ router.post('/certification/:id/:cid?', async (req, res) => {
         const courseCollection = targetDb.collection('course');
         const userCollection = targetDb.collection('user');
         const certificationCollection = targetDb.collection('certification');
+        const enrollCollection = targetDb.collection('enroll');
+        const formCollection = targetDb.collection('form');
+        
         console.log(user, courseId, siteIdString)
         // Fetch course details
         const course = await courseCollection.findOne({ _id: courseId, unit: siteIdString });
@@ -2602,10 +2605,27 @@ router.post('/certification/:id/:cid?', async (req, res) => {
             certification = { _id: result.insertedId, ...newCertification };
         }
 
-        const certificationTemplateCollection = targetDb.collection('certification_template'); // เพิ่มบรรทัดนี้
+        // ดึงข้อมูลการลงทะเบียน (enrollment)
+        const enrollment = await enrollCollection.findOne({ 
+            userID: userDetails._id.toString(), 
+            courseID: courseId.toString() 
+        });
+
+        // ดึงข้อมูลฟอร์มจาก formID หรือ submitID ถ้ามี
+        let formData = null;
+        if (enrollment) {
+            if (enrollment.formID) {
+                formData = await formCollection.findOne({ _id: safeObjectId(enrollment.formID) });
+            } else if (enrollment.submitID) {
+                formData = await formCollection.findOne({ _id: safeObjectId(enrollment.submitID) });
+            }
+        }
+
+        const certificationTemplateCollection = targetDb.collection('certification_template');
 
         // Assign default certification template if needed
         if (course.certification === 'yes' && !course.certificationId) {
+            console.log("No Cert ID");
             const defaultTemplate = await certificationTemplateCollection.findOne({ unit: siteIdString, default: true });
             if (defaultTemplate) {
                 await courseCollection.updateOne(
@@ -2615,11 +2635,14 @@ router.post('/certification/:id/:cid?', async (req, res) => {
                 course.certificationId = defaultTemplate._id;
             }
         }
+        else {
+            console.log("Cert ID", course.certificationId);
+        }
         
         // Fetch related certification template details
         const certificationTemplate = await targetDb.collection('certification_template').findOne({ _id: safeObjectId(course.certificationId) });
-        //console.log("course",course);
-        // Format the response
+        
+        // Format response
         const formattedResponse = {
             success: true,
             course: {
@@ -2645,6 +2668,8 @@ router.post('/certification/:id/:cid?', async (req, res) => {
                 unit: certification.unit,
                 createdAt: certification.createdAt,
             },
+            enrollment: enrollment || null, // ข้อมูลการลงทะเบียน
+            form: formData || null, // ข้อมูลฟอร์ม
             template: certificationTemplate
                 ? {
                     id: certificationTemplate._id,
