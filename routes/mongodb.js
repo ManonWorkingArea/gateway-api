@@ -498,13 +498,17 @@ router.get('/appointment/:id', async (req, res) => {
       const documentId = req.params.id;
       const joinCollection = req.query.join;
       const arrayField = req.query.sub;
+      const useRedis = req.app.get('useRedis') !== false; // ตรวจสอบการตั้งค่า Redis
 
       const cacheKey = `doc:${collectionName}:${documentId}:${joinCollection || 'none'}:${arrayField || 'none'}`;
       
-      // Check if data exists in Redis cache
-      const cachedData = await getCachedData(cacheKey);
-      if (cachedData) {
-        return res.status(200).json(cachedData);
+      // Check if data exists in Redis cache if Redis is enabled
+      let cachedData = null;
+      if (useRedis) {
+        cachedData = await getCachedData(cacheKey);
+        if (cachedData) {
+          return res.status(200).json(cachedData);
+        }
       }
 
       // Change database connection if collection is 'hostname'
@@ -530,8 +534,10 @@ router.get('/appointment/:id', async (req, res) => {
         }
       }
 
-      // Store the result in Redis for 5 minutes (300 seconds)
-      await setCachedData(cacheKey, document, 300);
+      // Store the result in Redis for 5 minutes (300 seconds) if Redis is enabled
+      if (useRedis) {
+        await setCachedData(cacheKey, document, 300);
+      }
 
       res.status(200).json(document);
     } catch (err) {
@@ -633,6 +639,7 @@ router.get('/appointment/:id', async (req, res) => {
       const targetDb = collectionName === 'hostname' ? client.db('API') : db;
       const collection = targetDb.collection(collectionName);
       const { data, options } = req.body;
+      const useRedis = req.app.get('useRedis') !== false; // ตรวจสอบการตั้งค่า Redis
 
       if (!data) {
         return res.status(400).json({ message: 'Data is required' });
@@ -656,9 +663,11 @@ router.get('/appointment/:id', async (req, res) => {
       if (result.matchedCount > 0) {
         const updatedItem = await collection.findOne({ _id: id });
 
-        // Invalidate Redis cache for this document
-        const cacheKey = `doc:${collectionName}:${id}:none:none`;
-        await redisClient.del(cacheKey);
+        // Invalidate Redis cache for this document if Redis is enabled
+        if (useRedis) {
+          const cacheKey = `doc:${collectionName}:${id}:none:none`;
+          await redisClient.del(cacheKey);
+        }
 
         res.status(200).json(updatedItem);
       } else {
@@ -677,15 +686,18 @@ router.get('/appointment/:id', async (req, res) => {
       const collectionName = req.params.collection;
       const targetDb = collectionName === 'hostname' ? client.db('API') : db;
       const collection = targetDb.collection(collectionName);
+      const useRedis = req.app.get('useRedis') !== false; // ตรวจสอบการตั้งค่า Redis
 
       const id = safeObjectId(req.params.id);
 
       const result = await collection.deleteOne({ _id: id });
 
       if (result.deletedCount > 0) {
-        // Invalidate Redis cache for this document
-        const cacheKey = `doc:${collectionName}:${id}:none:none`;
-        await redisClient.del(cacheKey);
+        // Invalidate Redis cache for this document if Redis is enabled
+        if (useRedis) {
+          const cacheKey = `doc:${collectionName}:${id}:none:none`;
+          await redisClient.del(cacheKey);
+        }
 
         res.status(200).json({ message: `Item deleted` });
       } else {

@@ -58,6 +58,7 @@ const apiLimiter = rateLimit({
 
 //app.use(apiLimiter);
 app.set('trust proxy', false);
+app.set('useRedis', false); // ปิดใช้งาน Redis
 app.use(bodyParser.json());
 app.use(cors());
 app.use((req, res, next) => {
