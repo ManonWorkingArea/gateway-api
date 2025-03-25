@@ -40,7 +40,7 @@ const apiLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-app.use(apiLimiter);
+//app.use(apiLimiter);
 app.set('trust proxy', false);
 app.set('useRedis', false); // ปิดใช้งาน Redis
 app.use(bodyParser.json());
