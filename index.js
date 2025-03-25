@@ -1,50 +1,34 @@
-const express       = require('express');
-const bodyParser    = require('body-parser');
-const cors          = require('cors');
+const express           = require('express');
+const bodyParser        = require('body-parser');
+const cors              = require('cors');
+const dotenv            = require('dotenv');
+const setupRoutes       = require('./routes');
+const socketRouter      = require('./socket');
+const emailRouter       = require('./email');
+const accountRouter     = require('./account.js');  // Updated to 'authen'
+const authRouter        = require('./auth.js');  // Import the auth router
+const voteRouter        = require('./vote');  // Updated to 'authen'
+const billingRouter     = require('./billing');  // Updated to 'authen'
+const filemanagerRouter = require('./filemanager');  // Updated to 'authen'
+const cmsRouter         = require('./cms');  // Updated to 'authen'
+const certRouter        = require('./certification');  // Updated to 'authen'
+const aiRouter          = require('./ai'); // Import the AI router
+const http              = require('http');
+const socketio          = require('socket.io');
+const verifySlipRouter  = require('./routes/verifySlip'); 
+const authenRouter      = require('./authen');  // Import the auth router
+const lessonRouter      = require('./lesson');  // Import the auth router
+const messageRouter     = require('./message');  // Import the auth router
+const addressRouter     = require('./address.js');  // Import the auth router
+const storeRouter       = require('./store');  // Import the auth router
+const vdoRouter         = require('./vdo.js');  // Import the auth router
+const fileRouter        = require('./file.js');  // Import the auth router'
+const projectRouter     = require('./projectmanager.js');  // Import the auth router'
+const scrapeRouter      = require('./scrape.js');  // Import the auth router'
+const proxyRouter       = require('./proxy.js');  // Import the auth router'
+global.ReadableStream   = require('stream/web').ReadableStream;
 
-const dotenv        = require('dotenv');
 dotenv.config();
-
-const setupRoutes   = require('./routes');
-const socketRouter  = require('./socket');
-const emailRouter   = require('./email');
-const accountRouter    = require('./account');  // Updated to 'authen'
-const authRouter    = require('./auth');  // Import the auth router
-const voteRouter    = require('./vote');  // Updated to 'authen'
-const billingRouter    = require('./billing');  // Updated to 'authen'
-const filemanagerRouter    = require('./filemanager');  // Updated to 'authen'
-
-const cmsRouter    = require('./cms');  // Updated to 'authen'
-const certificationRouter    = require('./certification');  // Updated to 'authen'
-const aiRouter = require('./ai'); // Import the AI router
-
-const http          = require('http');
-const socketio      = require('socket.io');
-const verifySlipRouter = require('./routes/verifySlip'); 
-
-const authenRouter    = require('./authen');  // Import the auth router
-const lessonRouter    = require('./lesson');  // Import the auth router
-const messageRouter    = require('./message');  // Import the auth router
-
-const addressRouter    = require('./address');  // Import the auth router
-
-const storeRouter    = require('./store');  // Import the auth router
-
-
-const vdoRouter    = require('./vdo.js');  // Import the auth router
-const fileRouter    = require('./file.js');  // Import the auth router'
-
-const projectRouter    = require('./projectmanager.js');  // Import the auth router'
-
-
-const scrapeRouter    = require('./scrape.js');  // Import the auth router'
-
-const proxyRouter    = require('./proxy.js');  // Import the auth router'
-
-global.ReadableStream = require('stream/web').ReadableStream;
-
-
-
 const app = express();
 const rateLimit = require('express-rate-limit');
 
@@ -56,7 +40,7 @@ const apiLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-//app.use(apiLimiter);
+app.use(apiLimiter);
 app.set('trust proxy', false);
 app.set('useRedis', false); // ปิดใช้งาน Redis
 app.use(bodyParser.json());
@@ -96,7 +80,7 @@ async function initializeApp() {
     app.use('/slip', verifySlipRouter);
     app.use('/filemanager', filemanagerRouter);
     app.use('/cms', cmsRouter);
-    app.use('/certification', certificationRouter);
+    app.use('/certification', certRouter);
     app.use('/ai', aiRouter); // Add the /ai route
     app.use('/authen', authenRouter); // Add the /ai route
     app.use('/lesson', lessonRouter); // Add the /ai route

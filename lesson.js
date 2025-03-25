@@ -581,6 +581,7 @@ router.post('/course/:id/:playerID?', async (req, res) => {
                                 lastplay: progressData.lastplay,
                                 status: progressData.status,
                                 updatedAt: progressData.updatedAt,
+                                reason: progressData.reason,
                             } : null,
                         };
                     })
@@ -624,6 +625,7 @@ router.post('/course/:id/:playerID?', async (req, res) => {
                         lastplay: progress.lastplay,
                         status: progress.status,
                         updatedAt: progress.updatedAt,
+                        reason: progress.reason,
                     };
                 }
             } else {
@@ -659,6 +661,7 @@ router.post('/course/:id/:playerID?', async (req, res) => {
                         lastplay: playerProgress.lastplay,
                         status: playerProgress.status,
                         updatedAt: playerProgress.updatedAt,
+                        reason: playerProgress.reason,
                     };
                 }
 
@@ -1200,8 +1203,17 @@ router.post('/course/:id/:playerID?', async (req, res) => {
                 isForm,
                 isPay: !isForm && course.sale_price > 0 && !isPaid, // New logic for isPay
                 isOrder,
-                isPaid
+                isPaid,
+                ...(course.idle === "yes" && { 
+                    idle: {
+                        status: "yes",
+                        popup: "5",
+                        timeout: "30",
+                        debug: true
+                    }
+                }),
             },
+            
             ...(course.type === 'onsite' && scheduleData && { schedule: scheduleData }), // Include schedule data for onsite courses
             playlist: syncedPlayersWithProgress,
             analytics: {
@@ -2691,7 +2703,6 @@ router.post('/certification/:id/:cid?', async (req, res) => {
     }
 });
 
-
 // New endpoint to fetch certification details by certification ID
 router.post('/certification/public/:id', async (req, res) => {
     const { id } = req.params;
@@ -3241,8 +3252,6 @@ router.post('/data/submit', async (req, res) => {
    
     }
 });
-
-
 
 router.post('/getOrder/:id', async (req, res) => {
     try {
@@ -3861,4 +3870,68 @@ async function getM3u8Url(playerID, targetDb) {
         throw error; // Forward the error to be handled by the calling function
     }
 }
+
+router.post('/calendar', async (req, res) => {
+    const { site } = req.body; 
+    const { client } = req;
+
+    try {
+        const { targetDb, siteData } = await getSiteSpecificDb(client, site);
+
+        const courseScheduleCollection = targetDb.collection('course_schedule');
+        const courseCollection = targetDb.collection('course');
+        const institutionCollection = targetDb.collection('institution');
+
+        // Fetch course schedules
+        const schedules = await courseScheduleCollection.find().toArray();
+
+        // Map through schedules to join course and institution data
+        const calendarData = await Promise.all(schedules.map(async (schedule) => {
+            const courseId = safeObjectId(schedule.courseId);
+            const course = await courseCollection.findOne({ _id: courseId });
+
+            // Fetch all institutions related to this course
+            const institutions = course && Array.isArray(course.institution) && course.institution.length > 0
+                ? await institutionCollection.find({ _id: { $in: course.institution.map(inst => safeObjectId(inst._id)) } }).toArray()
+                : [];
+                
+            console.log(`institutions`,institutions);
+
+            // Determine startdate and enddate based on scheduleType
+            let startdate, enddate;
+            if (schedule.scheduleType === 'startdate') {
+                startdate = schedule.startdate;
+                enddate = schedule.enddate; // Assuming enddate is the same as startdate for this type
+            } else if (schedule.scheduleType === 'startdate_enddate') {
+                startdate = schedule.startdate;
+                enddate = schedule.enddate;
+            } else {
+                startdate = schedule.startdate; // Default to startdate if type is unknown
+                enddate = schedule.enddate || null; // Set enddate to null if not provided
+            }
+
+            // Fix duration calculation to include both start and end dates
+            const duration = Math.ceil((new Date(enddate) - new Date(startdate)) / (1000 * 60 * 60 * 24)) + 1; // Add 1 to include both days
+
+            return {
+                id: schedule._id.toString(), // เปลี่ยน id เป็น string
+                type: schedule.type, // เปลี่ยนชื่อเป็น startDate
+                startDate: startdate, // เปลี่ยนชื่อเป็น startDate
+                endDate: enddate, // เปลี่ยนชื่อเป็น endDate
+                course: course, // เปลี่ยนชื่อเป็น endDate
+                title: course ? `${course.name} (${schedule.header})` : 'Unknown Course', // ปรับปรุง title ที่นี่
+                school: institutions.length > 0 
+                    ? institutions.map(inst => ({ name: inst.name, code: inst.code, color: inst.color })) // เปลี่ยนชื่อเป็น code
+                    : [{ name: 'Unknown Institution', code: 'N/A' }] // เปลี่ยนชื่อเป็น code
+            };
+        }));
+
+        res.status(200).json({ success: true, data: calendarData });
+    } catch (error) {
+        console.error('Error fetching calendar data:', error.message);
+        res.status(500).json({ error: 'An error occurred while fetching calendar data.' });
+    }
+});
+
+
 module.exports = router;
