@@ -4,15 +4,15 @@ const punycode = require('tr46');
 // โหลดค่าจากไฟล์ .env
 dotenv.config();
 
-// เปลี่ยนจาก redis เป็น ioredis
+// เปลี่ยนจาก redis เป็น ioredis แบบเรียบง่าย
 const Redis = require('ioredis');
 const { OpenAI } = require('openai');
 const crypto = require('crypto');
  
 // เพิ่มตัวแปร useRedis และฟังก์ชันตรวจสอบ
-const useRedis = true; // ตั้งค่าเริ่มต้นเป็น false
+const useRedis = true;
 
-// สร้าง OpenAI client ให้ถูกต้อง
+// สร้าง OpenAI client
 const openaiClient = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
@@ -36,24 +36,8 @@ const mockRedisClient = {
   on: () => null
 };
 
-// ปรับ Redis Client Setup ให้ใช้ URI
-const redisClient = useRedis ? new Redis(process.env.REDIS_URI || {
-  host: process.env.REDIS_HOST || 'localhost',
-  port: process.env.REDIS_PORT || 6379,
-  username: process.env.REDIS_USERNAME,
-  password: process.env.REDIS_PASSWORD,
-  tls: process.env.REDIS_TLS === 'true' ? {
-    rejectUnauthorized: false
-  } : undefined,
-  retryStrategy(times) {
-    const delay = Math.min(50 * 2 ** times + Math.random() * 100, 3000);
-    console.warn(`Reconnecting to Redis... Attempt ${times}, retrying in ${delay}ms`);
-    return delay;
-  },
-  maxRetriesPerRequest: 3,
-  connectTimeout: 10000,
-  keepAlive: 5000
-}) : mockRedisClient;
+// ปรับการเชื่อมต่อ Redis ให้เรียบง่ายขึ้น
+const redisClient = useRedis ? new Redis(process.env.REDIS_URI) : mockRedisClient;
 
 // ฟังก์ชันตรวจสอบสถานะ Redis
 function checkRedisStatus() {
@@ -64,12 +48,11 @@ function checkRedisStatus() {
   return true;
 }
 
-// Event Listeners - เพิ่มการตรวจสอบ useRedis
+// Event Listeners
 if (useRedis) {
   redisClient.on('connect', () => console.log('RED :: Connected.'));
   redisClient.on('ready', async () => {
     console.log('RED :: Ready.');
-    // ตรวจสอบ RediSearch เมื่อ Redis พร้อมใช้งาน
     await checkRediSearch();
     if (hasRediSearch) {
       await setupIndex();
