@@ -1,5 +1,4 @@
 const dotenv = require('dotenv');
-const punycode = require('tr46');
 
 // โหลดค่าจากไฟล์ .env
 dotenv.config();
@@ -37,7 +36,7 @@ const mockRedisClient = {
 };
 
 // ปรับการเชื่อมต่อ Redis ให้เรียบง่ายขึ้น
-const redisClient = useRedis ? new Redis(process.env.REDIS_URI) : mockRedisClient;
+const redisClient = useRedis ? new Redis(process.env.REDIS_URI + '?family=0') : mockRedisClient;
 
 // ฟังก์ชันตรวจสอบสถานะ Redis
 function checkRedisStatus() {
