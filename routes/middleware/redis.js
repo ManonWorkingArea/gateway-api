@@ -37,16 +37,20 @@ const mockRedisClient = {
 };
 
 // ปรับ Redis Client Setup ให้ใช้ URI
-const redisClient = useRedis ? new Redis(process.env.REDIS_URI, {
-  tls: {
-    rejectUnauthorized: false,
-    servername: punycode.toASCII(new URL(process.env.REDIS_URI).hostname)
-  },
+const redisClient = useRedis ? new Redis(process.env.REDIS_URI || {
+  host: process.env.REDIS_HOST || 'localhost',
+  port: process.env.REDIS_PORT || 6379,
+  username: process.env.REDIS_USERNAME,
+  password: process.env.REDIS_PASSWORD,
+  tls: process.env.REDIS_TLS === 'true' ? {
+    rejectUnauthorized: false
+  } : undefined,
   retryStrategy(times) {
     const delay = Math.min(50 * 2 ** times + Math.random() * 100, 3000);
     console.warn(`Reconnecting to Redis... Attempt ${times}, retrying in ${delay}ms`);
     return delay;
   },
+  maxRetriesPerRequest: 3,
   connectTimeout: 10000,
   keepAlive: 5000
 }) : mockRedisClient;
