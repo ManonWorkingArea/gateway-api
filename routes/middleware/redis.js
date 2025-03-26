@@ -1,9 +1,11 @@
 const dotenv = require('dotenv');
+const punycode = require('tr46');
 
 // โหลดค่าจากไฟล์ .env
 dotenv.config();
 
-const redis = require('redis');
+// เปลี่ยนจาก redis เป็น ioredis
+const Redis = require('ioredis');
 const { OpenAI } = require('openai');
 const crypto = require('crypto');
  
@@ -22,7 +24,6 @@ let hasRediSearch = false;
 const mockRedisClient = {
   get: async () => null,
   set: async () => null,
-  setEx: async () => null,
   hSet: async () => null,
   hGetAll: async () => null,
   sAdd: async () => null,
@@ -31,24 +32,23 @@ const mockRedisClient = {
   zRem: async () => null,
   del: async () => null,
   zCard: async () => 0,
-  sendCommand: async () => [],
-  connect: async () => null,
+  call: async () => [],
   on: () => null
 };
 
-// ปรับ Redis Client Setup
-const redisClient = useRedis ? redis.createClient({
-  url: process.env.REDIS_URI,
-  socket: {
-    tls: true,
-    connectTimeout: 10000,
-    keepAlive: 5000,
-    reconnectStrategy: (retries) => {
-      const delay = Math.min(50 * 2 ** retries + Math.random() * 100, 3000);
-      console.warn(`Reconnecting to Redis... Attempt ${retries}, retrying in ${delay}ms`);
-      return delay;
-    }
-  }
+// ปรับ Redis Client Setup ให้ใช้ URI
+const redisClient = useRedis ? new Redis(process.env.REDIS_URI, {
+  tls: {
+    rejectUnauthorized: false,
+    servername: punycode.toASCII(new URL(process.env.REDIS_URI).hostname)
+  },
+  retryStrategy(times) {
+    const delay = Math.min(50 * 2 ** times + Math.random() * 100, 3000);
+    console.warn(`Reconnecting to Redis... Attempt ${times}, retrying in ${delay}ms`);
+    return delay;
+  },
+  connectTimeout: 10000,
+  keepAlive: 5000
 }) : mockRedisClient;
 
 // ฟังก์ชันตรวจสอบสถานะ Redis
@@ -63,26 +63,25 @@ function checkRedisStatus() {
 // Event Listeners - เพิ่มการตรวจสอบ useRedis
 if (useRedis) {
   redisClient.on('connect', () => console.log('RED :: Connected.'));
-  redisClient.on('ready', () => console.log('RED :: Ready.'));
+  redisClient.on('ready', async () => {
+    console.log('RED :: Ready.');
+    // ตรวจสอบ RediSearch เมื่อ Redis พร้อมใช้งาน
+    await checkRediSearch();
+    if (hasRediSearch) {
+      await setupIndex();
+      await setupVectorIndex();
+    }
+  });
   redisClient.on('error', (err) => console.error('RED :: Error:', err));
   redisClient.on('end', () => console.warn('RED :: Closed.'));
   redisClient.on('reconnecting', () => console.warn('RED :: Reconnecting...'));
-
-  // เชื่อมต่อ Redis เมื่อ useRedis เป็น true
-  (async () => {
-    try {
-      await redisClient.connect();
-    } catch (err) {
-      console.error('Failed to connect to Redis:', err);
-    }
-  })();
 }
 
 // ตรวจสอบว่า Redis มี RediSearch หรือไม่
 async function checkRediSearch() {
   if (!checkRedisStatus()) return false;
   try {
-    await redisClient.sendCommand(['FT._LIST']);
+    await redisClient.call('FT._LIST');
     hasRediSearch = true;
     console.log('RED :: RediSearch module is available');
     return true;
@@ -242,7 +241,8 @@ async function getCachedData(key) {
 async function setCachedData(key, data, expiry = maxCacheAge) {
   if (!checkRedisStatus()) return;
   try {
-    await redisClient.setEx(key, expiry, JSON.stringify(data));
+    // เปลี่ยนจาก setEx เป็น set with EX option
+    await redisClient.set(key, JSON.stringify(data), 'EX', expiry);
   } catch (err) {
     console.error(`Failed to set cache for key ${key}:`, err);
   }
@@ -253,10 +253,10 @@ async function setupIndex() {
   if (!hasRediSearch) return false;
   
   try {
-    await redisClient.sendCommand([
+    await redisClient.call(
       "FT.CREATE", "chatlog_idx", "ON", "HASH", "PREFIX", "1", "chat:",
       "SCHEMA", "user_id", "TEXT", "message", "TEXT", "answer", "TEXT", "category", "TAG", "timestamp", "NUMERIC", "SORTABLE"
-    ]);
+    );
     console.log("RED :: Full-Text Search Index Created.");
     return true;
   } catch (err) {
@@ -270,10 +270,10 @@ async function setupVectorIndex() {
   if (!hasRediSearch) return false;
   
   try {
-    await redisClient.sendCommand([
+    await redisClient.call(
       "FT.CREATE", "vector_idx", "ON", "HASH", "PREFIX", "1", "vec:",
       "SCHEMA", "vector", "VECTOR", "FLAT", "6", "DIM", "1536", "DISTANCE_METRIC", "COSINE"
-    ]);
+    );
     console.log("RED :: Vector Index Created.");
     return true;
   } catch (err) {
@@ -626,20 +626,16 @@ async function searchChatByCategory(category, limit = 50) {
 // Search Messages - ปรับให้ค้นหาตามหมวดหมู่ก่อน
 async function searchChat(query) {
   if (!checkRedisStatus()) return [];
-  // กำหนดหมวดหมู่ของคำถาม
   const category = getCategoryFromText(query);
   
-  // ค้นหาจากแชทในหมวดหมู่เดียวกันก่อน
   const categoryChats = await searchChatByCategory(category, 50);
   
-  // ถ้ามี RediSearch ให้ใช้การค้นหาแบบ full-text
   if (hasRediSearch) {
     try {
-      const result = await redisClient.sendCommand([
+      const result = await redisClient.call(
         "FT.SEARCH", "chatlog_idx", `%${query}%`, "LIMIT", "0", "10"
-      ]);
-      // นำผลลัพธ์ที่ได้จาก RediSearch มารวมกับผลการค้นหาจากหมวดหมู่
-      // แปลงผลลัพธ์ให้อยู่ในรูปแบบเดียวกัน
+      );
+      
       if (Array.isArray(result) && result.length > 1) {
         for (let i = 2; i < result.length; i += 2) {
           const chatId = result[i];
@@ -673,7 +669,6 @@ async function searchChat(query) {
     }
   }
   
-  // ถ้าไม่มี RediSearch หรือการค้นหาล้มเหลว ใช้การค้นหาแบบพื้นฐาน
   return searchChatWithoutRedisearch(query, categoryChats);
 }
 
@@ -790,12 +785,12 @@ async function searchSimilarChat(query) {
       
       if (queryVector) {
         try {
-          const redisResults = await redisClient.sendCommand([
-            "FT.SEARCH", "vector_idx", "*=>[KNN 10 @vector $vec AS score]", 
+          const redisResults = await redisClient.call(
+            "FT.SEARCH", "vector_idx", "*=>[KNN 10 @vector $vec AS score]",
             "PARAMS", "2", "vec", Buffer.from(new Float32Array(queryVector)),
             "RETURN", "3", "message", "answer", "score",
             "SORTBY", "score", "DESC"
-          ]);
+          );
           
           if (Array.isArray(redisResults) && redisResults.length > 1) {
             for (let i = 2; i < redisResults.length; i += 2) {
