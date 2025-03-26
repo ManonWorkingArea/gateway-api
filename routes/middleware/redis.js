@@ -7,8 +7,37 @@ const redis = require('redis');
 const { OpenAI } = require('openai');
 const crypto = require('crypto');
  
-// Redis Client Setup
-const redisClient = redis.createClient({
+// เพิ่มตัวแปร useRedis และฟังก์ชันตรวจสอบ
+const useRedis = false; // ตั้งค่าเริ่มต้นเป็น false
+
+// สร้าง OpenAI client ให้ถูกต้อง
+const openaiClient = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
+
+// ตรวจสอบว่า Redis มี RediSearch หรือไม่
+let hasRediSearch = false;
+
+// สร้าง Mock Redis Client สำหรับกรณีที่ useRedis เป็น false
+const mockRedisClient = {
+  get: async () => null,
+  set: async () => null,
+  setEx: async () => null,
+  hSet: async () => null,
+  hGetAll: async () => null,
+  sAdd: async () => null,
+  zAdd: async () => null,
+  zRange: async () => [],
+  zRem: async () => null,
+  del: async () => null,
+  zCard: async () => 0,
+  sendCommand: async () => [],
+  connect: async () => null,
+  on: () => null
+};
+
+// ปรับ Redis Client Setup
+const redisClient = useRedis ? redis.createClient({
   url: process.env.REDIS_URI,
   socket: {
     tls: true,
@@ -20,55 +49,60 @@ const redisClient = redis.createClient({
       return delay;
     }
   }
-});
+}) : mockRedisClient;
 
-// Event Listeners
-redisClient.on('connect', () => console.log('RED :: Connected.'));
-redisClient.on('ready', () => console.log('RED :: Ready.'));
-redisClient.on('error', (err) => console.error('RED :: Error:', err));
-redisClient.on('end', () => console.warn('RED :: Closed.'));
-redisClient.on('reconnecting', () => console.warn('RED :: Reconnecting...'));
-
-// Connect to Redis
-(async () => {
-  try {
-    await redisClient.connect();
-  } catch (err) {
-    console.error('Failed to connect to Redis:', err);
+// ฟังก์ชันตรวจสอบสถานะ Redis
+function checkRedisStatus() {
+  if (!useRedis) {
+    // console.warn('RED :: Redis is disabled. All Redis operations will return empty results.');
+    return false;
   }
-})();
+  return true;
+}
 
-// สร้าง OpenAI client ให้ถูกต้อง
-const openaiClient = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
+// Event Listeners - เพิ่มการตรวจสอบ useRedis
+if (useRedis) {
+  redisClient.on('connect', () => console.log('RED :: Connected.'));
+  redisClient.on('ready', () => console.log('RED :: Ready.'));
+  redisClient.on('error', (err) => console.error('RED :: Error:', err));
+  redisClient.on('end', () => console.warn('RED :: Closed.'));
+  redisClient.on('reconnecting', () => console.warn('RED :: Reconnecting...'));
+
+  // เชื่อมต่อ Redis เมื่อ useRedis เป็น true
+  (async () => {
+    try {
+      await redisClient.connect();
+    } catch (err) {
+      console.error('Failed to connect to Redis:', err);
+    }
+  })();
+}
 
 // ตรวจสอบว่า Redis มี RediSearch หรือไม่
-let hasRediSearch = false;
-
 async function checkRediSearch() {
+  if (!checkRedisStatus()) return false;
   try {
-    // ตรวจสอบคำสั่ง FT.INFO
     await redisClient.sendCommand(['FT._LIST']);
     hasRediSearch = true;
     console.log('RED :: RediSearch module is available');
     return true;
   } catch (err) {
     hasRediSearch = false;
-    console.warn('RED :: RediSearch module is NOT available, using standard key-value storage instead');
+    console.warn('RED :: RediSearch module is NOT available');
     return false;
   }
 }
 
 // เรียกใช้ตรวจสอบทันทีหลังเชื่อมต่อ
-redisClient.on('ready', async () => {
-  await checkRediSearch();
-  // สร้าง indexes เมื่อเชื่อมต่อสำเร็จ
-  if (hasRediSearch) {
-    await setupIndex();
-    await setupVectorIndex();
-  }
-});
+if (useRedis && redisClient) {
+  redisClient.on('ready', async () => {
+    await checkRediSearch();
+    if (hasRediSearch) {
+      await setupIndex();
+      await setupVectorIndex();
+    }
+  });
+}
 
 // Cache Configuration
 const maxCacheAge = 60 * 60 * 24 * 30; // 30 วัน (ระยะเวลาเก็บแชท)
@@ -195,6 +229,7 @@ class TextSimilarity {
 
 // Caching Functions
 async function getCachedData(key) {
+  if (!checkRedisStatus()) return null;
   try {
     const cachedData = await redisClient.get(key);
     return cachedData ? JSON.parse(cachedData) : null;
@@ -205,6 +240,7 @@ async function getCachedData(key) {
 }
 
 async function setCachedData(key, data, expiry = maxCacheAge) {
+  if (!checkRedisStatus()) return;
   try {
     await redisClient.setEx(key, expiry, JSON.stringify(data));
   } catch (err) {
@@ -277,6 +313,7 @@ async function getEmbedding(text) {
 
 // เพิ่มฟังก์ชันการค้นหาแบบ semantic ใช้ OpenAI เปรียบเทียบความหมาย
 async function semanticSearch(query, candidates, threshold = 0.7) {
+  if (!checkRedisStatus()) return [];
   try {
     if (!candidates || candidates.length === 0) {
       return [];
@@ -362,6 +399,7 @@ function calculateCosineSimilarity(vector1, vector2) {
 
 // เพิ่มฟังก์ชันวิเคราะห์ข้อความโดย OpenAI เพื่อเปรียบเทียบความหมาย
 async function compareTextMeaningWithAI(query, text) {
+  if (!checkRedisStatus()) return 0;
   try {
     const systemPrompt = "คุณเป็น AI ที่เชี่ยวชาญในการวิเคราะห์ความคล้ายคลึงของข้อความ";
     
@@ -443,6 +481,7 @@ ${candidatesText}
 
 // Save Chat Log - ปรับเพิ่มให้แยกคำถาม-คำตอบและบันทึกตามหมวดหมู่
 async function saveChat(userId, message) {
+  if (!checkRedisStatus()) return null;
   try {
     // สร้าง ID ใหม่สำหรับการแชทนี้
     const chatId = crypto.randomUUID();
@@ -540,6 +579,7 @@ function extractKeywords(text) {
 
 // Search Messages by category - ค้นหาตามหมวดหมู่
 async function searchChatByCategory(category, limit = 50) {
+  if (!checkRedisStatus()) return [];
   try {
     // ใช้ ZRANGE แทน zRevRange และกำหนด REV เพื่อให้เรียงจากมากไปน้อย
     const chatIds = await redisClient.zRange(`category:${category}`, 0, limit - 1, { REV: true });
@@ -585,6 +625,7 @@ async function searchChatByCategory(category, limit = 50) {
 
 // Search Messages - ปรับให้ค้นหาตามหมวดหมู่ก่อน
 async function searchChat(query) {
+  if (!checkRedisStatus()) return [];
   // กำหนดหมวดหมู่ของคำถาม
   const category = getCategoryFromText(query);
   
@@ -734,6 +775,7 @@ function extractQA(text) {
 
 // ปรับปรุงฟังก์ชัน searchSimilarChat ให้ใช้การค้นหาแบบซับซ้อน
 async function searchSimilarChat(query) {
+  if (!checkRedisStatus()) return [];
   console.log(`RED :: Searching for similar chat to: "${query.substring(0, 50)}..."`);
   
   // 1. ค้นหาตามหมวดหมู่ก่อน
@@ -856,8 +898,9 @@ async function searchSimilarChat(query) {
   return [];
 }
 
-// Export Middleware
+// Export Middleware with useRedis
 module.exports = {
+  useRedis,
   redisClient,
   getCachedData,
   setCachedData,
