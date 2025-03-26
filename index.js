@@ -47,7 +47,7 @@ app.use(bodyParser.json());
 app.use(cors());
 app.use((req, res, next) => {
   console.log(`REQ :: [${req.hostname}] ${req.method} ${req.url}`);
-  console.log(`REDIS :: ${process.env.REDIS_URL}`);
+  console.log(`REDIS :: ${Redis.REDIS_URL}`);
   next();
 });
 
