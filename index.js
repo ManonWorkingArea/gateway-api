@@ -39,6 +39,7 @@ const apiLimiter = rateLimit({
   standardHeaders: true, 
   legacyHeaders: false,
 });
+const redis = process.env.REDIS_URL;
 
 //app.use(apiLimiter);
 app.set('trust proxy', false);
@@ -47,7 +48,7 @@ app.use(bodyParser.json());
 app.use(cors());
 app.use((req, res, next) => {
   console.log(`REQ :: [${req.hostname}] ${req.method} ${req.url}`);
-  console.log(`REDIS :: ${Redis.REDIS_URL}`);
+  console.log(`REDIS :: ${redis}`);
   next();
 });
 
