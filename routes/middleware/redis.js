@@ -38,7 +38,7 @@ const mockRedisClient = {
 
 // ปรับ Redis Client Setup
 const redisClient = useRedis ? redis.createClient({
-  url: process.env.REDIS_URL,
+  url: process.env.REDIS_URI,
   socket: {
     tls: true,
     connectTimeout: 10000,
