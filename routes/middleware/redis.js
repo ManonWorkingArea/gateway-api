@@ -8,7 +8,7 @@ const { OpenAI } = require('openai');
 const crypto = require('crypto');
  
 // เพิ่มตัวแปร useRedis และฟังก์ชันตรวจสอบ
-const useRedis = true; // ตั้งค่าเริ่มต้นเป็น false
+const useRedis = false; // ตั้งค่าเริ่มต้นเป็น false
 
 // สร้าง OpenAI client ให้ถูกต้อง
 const openaiClient = new OpenAI({
