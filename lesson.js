@@ -1041,6 +1041,8 @@ router.post('/course/:id/:playerID?', async (req, res) => {
         const selectedExamDate = enrollment && enrollment.selectedExamDate 
             ? enrollment.selectedExamDate 
             : (submitFormData ? findValueByName(submitFormData.formData, "เลือกวันที่ทำข้อสอบ") : null);
+            
+            console.log("selectedExamDate",selectedExamDate);
 
         // Function to reformat scheduleConfig
         const formatScheduleConfig = (scheduleConfig) => {
@@ -1137,24 +1139,68 @@ router.post('/course/:id/:playerID?', async (req, res) => {
     
         // Function to filter and add status + now to scheduleConfig
         const filterScheduleByExamDate = (scheduleConfig, selectedExamDate) => {
-            if (!selectedExamDate || !selectedExamDate.value) {
-                return scheduleConfig.map(entry => {
-                    const statusResult = determineStatus(entry.startDate, entry.endDate);
-                    return { ...entry, status: statusResult.status, now: statusResult.now }; // Add status & now
-                });
+            // ถ้าไม่มี selectedExamDate ให้คืนค่า scheduleConfig ทั้งหมด
+            if (!selectedExamDate) {
+                return scheduleConfig;
             }
-        
-            return scheduleConfig
-                .filter(entry => !entry.roundName || entry.roundName === selectedExamDate.value)
-                .map(entry => {
-                    const statusResult = determineStatus(entry.startDate, entry.endDate);
-                    return { ...entry, now: statusResult.now, status: statusResult.status, prefix: statusResult.prefix, round: selectedExamDate.label }; // Add status & now
-                });
+
+            return scheduleConfig.map(config => {
+                // ถ้าเป็น item ที่มี rounds
+                if (config.round && config.rounds && config.rounds.length > 0) {
+                    const filteredRounds = config.rounds.filter(round => {
+                        const roundStartDate = new Date(round.StartDate);
+                        const roundEndDate = round.EndDate ? new Date(round.EndDate) : null;
+                        const examDate = new Date(selectedExamDate);
+
+                        // ถ้ามีทั้ง start และ end date
+                        if (roundEndDate) {
+                            return roundStartDate <= examDate && examDate <= roundEndDate;
+                        }
+                        // ถ้ามีแค่ start date
+                        return roundStartDate <= examDate;
+                    });
+
+                    return {
+                        ...config,
+                        rounds: filteredRounds
+                    };
+                }
+
+                // สำหรับ item ที่ไม่มี rounds
+                const startDate = config.startDate ? new Date(config.startDate) : null;
+                const endDate = config.endDate ? new Date(config.endDate) : null;
+                const examDate = new Date(selectedExamDate);
+
+                if (startDate && endDate) {
+                    if (startDate <= examDate && examDate <= endDate) {
+                        return config;
+                    }
+                } else if (startDate) {
+                    if (startDate <= examDate) {
+                        return config;
+                    }
+                }
+
+                return config;
+            });
         };
         
         // Format and filter scheduleConfig
         const formattedScheduleConfig = course.scheduleConfig ? formatScheduleConfig(course.scheduleConfig) : [];
         const filteredScheduleConfig = filterScheduleByExamDate(formattedScheduleConfig, selectedExamDate);
+        
+        function filteredFinalScheduleConfig(data, roundName = null) {
+            if (roundName) {
+              return data.filter(item =>
+                item.roundName === roundName || item.roundName === null
+              );
+            }
+            return data;
+          }
+
+          const filtered = filteredFinalScheduleConfig(filteredScheduleConfig, selectedExamDate?.value);
+
+          console.log("filtered",filtered);
 
         // Format response
         const formattedResponse = {
@@ -1169,7 +1215,7 @@ router.post('/course/:id/:playerID?', async (req, res) => {
                 cover: course.cover,
                 hours: course.hours,
                 days: course.days,
-                scheduleConfig: filteredScheduleConfig, // ✅ Reformatted scheduleConfig
+                scheduleConfig: filtered, // ✅ Reformatted scheduleConfig
                 prices: {
                     regular: course.regular_price || 0,
                     sale: course.sale_price || 0,
