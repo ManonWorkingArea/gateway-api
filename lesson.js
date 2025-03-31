@@ -1050,18 +1050,28 @@ router.post('/course/:id/:playerID?', async (req, res) => {
                 if (entry.round) {
                     return entry.rounds
                         .filter(round => round.StartDateUsed || round.EndDateUsed)
-                        .map(round => ({
-                            item: entry.item,
-                            startDate: round.StartDateUsed ? round.StartDate : null,
-                            endDate: round.EndDateUsed ? round.EndDate : null,
-                            roundName: round.name
-                        }));
+                        .map(round => {
+                            const config = {
+                                item: entry.item,
+                                startDate: round.StartDateUsed ? round.StartDate : null,
+                                endDate: round.EndDateUsed ? round.EndDate : null,
+                                roundName: round.name
+                            };
+                            return {
+                                ...config,
+                                status: determineStatus(config.startDate, config.endDate).status
+                            };
+                        });
                 } else {
-                    return [{
+                    const config = {
                         item: entry.item,
                         startDate: entry.startDate,
                         endDate: entry.endDate,
                         roundName: null
+                    };
+                    return [{
+                        ...config,
+                        status: determineStatus(config.startDate, config.endDate).status
                     }];
                 }
             });
@@ -2725,6 +2735,7 @@ router.post('/certification/:id/:cid?', async (req, res) => {
                 courseID: certification.courseID,
                 unit: certification.unit,
                 createdAt: certification.createdAt,
+                type: course.certification_type,
             },
             enrollment: enrollment || null, // ข้อมูลการลงทะเบียน
             form: formData || null, // ข้อมูลฟอร์ม
