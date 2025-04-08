@@ -4029,16 +4029,16 @@ router.post('/webhook', async (req, res) => {
 
         // ตรวจสอบ Signature
         if (calculatedSignature !== signature) {
-            return res.status(401).json({ error: 'Invalid signature.' });
+            return res.status(401).json({ error: 'Invalid signature.', debug: { calculatedSignature, signature } });
         }
 
         console.log("Signature verified successfully.");
 
         // ประมวลผลข้อมูลที่ได้รับ
-        res.status(200).json({ message: 'Data processed successfully.' });
+        res.status(200).json({ message: 'Data processed successfully.', debug: { transactionId, reference1, reference2, signature } });
     } catch (error) {
         console.error('Error processing webhook data:', error.message, error.stack);
-        res.status(500).json({ error: 'An error occurred while processing the data.' });
+        res.status(500).json({ error: 'An error occurred while processing the data.', debug: { error: error.message } });
     }
 });
 
