@@ -4003,7 +4003,10 @@ router.post('/process-payment', async (req, res) => {
 
         // คุณสามารถเพิ่มการประมวลผลข้อมูลที่ได้รับที่นี่
 
-        res.status(200).json({ message: 'Data received successfully.' });
+        res.status(200).json({ 
+            message: 'Data received successfully.', 
+            data: { transactionId, reference1, reference2 } 
+        });
     } catch (error) {
         console.error('Error processing data:', error.message, error.stack);
         res.status(500).json({ error: 'An error occurred while processing the data.' });
@@ -4035,7 +4038,10 @@ router.post('/webhook', async (req, res) => {
         console.log("Signature verified successfully.");
 
         // ประมวลผลข้อมูลที่ได้รับ
-        res.status(200).json({ message: 'Data processed successfully.', debug: { transactionId, reference1, reference2, signature } });
+        res.status(200).json({ 
+            message: 'Data processed successfully.', 
+            data: { transactionId, reference1, reference2 } 
+        });
     } catch (error) {
         console.error('Error processing webhook data:', error.message, error.stack);
         res.status(500).json({ error: 'An error occurred while processing the data.', debug: { error: error.message } });
