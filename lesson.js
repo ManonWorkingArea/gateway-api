@@ -4039,8 +4039,8 @@ router.post('/webhook', async (req, res) => {
 
         // ประมวลผลข้อมูลที่ได้รับ
         res.status(200).json({ 
-            message: 'Data processed successfully.', 
-            data: { transactionId, reference1, reference2 } 
+            message: 'Data processed successfully.',
+            data: { transactionId, reference1, reference2, next:'Create Call PostReceipt' } 
         });
     } catch (error) {
         console.error('Error processing webhook data:', error.message, error.stack);
