@@ -4,13 +4,16 @@ const router = express.Router();
 
 // Function to process document using APYHub API
 const processDocumentWithAPYHub = async (documentUrl) => {
-  const apyToken = "APT0X8e7iHihh08ipsaIRCOw9Z7e9HDNL8gZITVcdeZthplIS3sIjq"; // Replace with your actual APYHub token
+  console.debug('เริ่มประมวลผลเอกสารด้วย APYHub:', documentUrl);
+  const apyToken = "APY0JmXvN2ITNOrFGv2lLIi9ZNzWa608fZiKol83fyyppqRJjqUolCIJ6RmHAItK";
   const body = JSON.stringify({
     url: documentUrl,
     requested_service: "apyhub",
   });
+  console.debug('ส่งคำขอไปยัง APYHub ด้วย payload:', body);
 
   try {
+    console.debug('กำลังเรียก API APYHub...');
     const response = await fetch("https://api.apyhub.com/ai/document/extract/invoice/url", {
       method: "POST",
       headers: {
@@ -21,36 +24,42 @@ const processDocumentWithAPYHub = async (documentUrl) => {
     });
 
     const data = await response.json();
+    console.debug('ได้รับการตอบกลับจาก APYHub:', data);
+    
     if (response.ok) {
-      return data; // Return the extracted data
+      console.debug('ประมวลผลเอกสารสำเร็จ');
+      return data;
     } else {
-      console.error("Error processing document with APYHub:", data);
-      throw new Error("Failed to process document with APYHub.");
+      console.error("เกิดข้อผิดพลาดในการประมวลผลเอกสารกับ APYHub:", data);
+      throw new Error("ไม่สามารถประมวลผลเอกสารกับ APYHub ได้");
     }
   } catch (error) {
-    console.error("Network error processing document:", error);
+    console.error("เกิดข้อผิดพลาดในการเชื่อมต่อ:", error);
     throw error;
   }
 };
 
 // Define /ai POST endpoint
 router.post('/', async (req, res) => {
+  console.debug('ได้รับคำขอ POST ที่ /ai endpoint:', req.body);
   const { documentUrl } = req.body;
 
   if (!documentUrl) {
+    console.debug('ไม่พบ documentUrl ในคำขอ');
     return res.status(400).json({
-      error: "Field 'documentUrl' is required.",
+      error: "ต้องระบุฟิลด์ 'documentUrl'",
     });
   }
 
   try {
-    // Process the document with APYHub
+    console.debug('กำลังเริ่มประมวลผลเอกสาร...');
     const result = await processDocumentWithAPYHub(documentUrl);
+    console.debug('ประมวลผลเอกสารเสร็จสิ้น:', result);
 
     res.status(200).json({ result });
   } catch (error) {
-    console.error("Error in /ai endpoint:", error);
-    res.status(500).json({ error: "An error occurred while processing the document." });
+    console.error("เกิดข้อผิดพลาดที่ /ai endpoint:", error);
+    res.status(500).json({ error: "เกิดข้อผิดพลาดในการประมวลผลเอกสาร" });
   }
 });
 

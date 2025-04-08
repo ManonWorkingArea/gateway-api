@@ -7,6 +7,7 @@ const CryptoJS = require('crypto-js');
 const router = express.Router();
 const fetch = require('node-fetch'); // Ensure this package is installed
 const path = require('path');
+const crypto = require('crypto');
 
 const { redisClient } = require('./routes/middleware/redis');  // Import Redis helpers
 
@@ -3990,5 +3991,55 @@ router.post('/calendar', async (req, res) => {
     }
 });
 
+router.post('/process-payment', async (req, res) => {
+    try {
+        const { transactionId, transactionDateTime, tranAmount, reference1, reference2, signature } = req.body;
+
+        if (!transactionId || !transactionDateTime || !tranAmount || !reference1 || !reference2 || !signature) {
+            return res.status(400).json({ error: 'All fields are required.' });
+        }
+
+        console.log("Received data:", req.body);
+
+        // คุณสามารถเพิ่มการประมวลผลข้อมูลที่ได้รับที่นี่
+
+        res.status(200).json({ message: 'Data received successfully.' });
+    } catch (error) {
+        console.error('Error processing data:', error.message, error.stack);
+        res.status(500).json({ error: 'An error occurred while processing the data.' });
+    }
+});
+
+router.post('/webhook', async (req, res) => {
+    try {
+        const { transactionId, reference1, reference2, signature } = req.body;
+        const clientSecret = 'a653f1c1-a1b8-4f5a-b5ea-3e4bef4be14a';
+
+        if (!transactionId || !reference1 || !reference2 || !signature) {
+            return res.status(400).json({ error: 'All fields are required.' });
+        }
+
+        // สร้างข้อความที่ใช้ในการสร้าง HMAC
+        const message = `${transactionId}:${reference1}:${reference2}`;
+
+        // สร้าง HMAC SHA512
+        const hmac = crypto.createHmac('sha512', clientSecret);
+        hmac.update(message);
+        const calculatedSignature = hmac.digest('hex');
+
+        // ตรวจสอบ Signature
+        if (calculatedSignature !== signature) {
+            return res.status(401).json({ error: 'Invalid signature.' });
+        }
+
+        console.log("Signature verified successfully.");
+
+        // ประมวลผลข้อมูลที่ได้รับ
+        res.status(200).json({ message: 'Data processed successfully.' });
+    } catch (error) {
+        console.error('Error processing webhook data:', error.message, error.stack);
+        res.status(500).json({ error: 'An error occurred while processing the data.' });
+    }
+});
 
 module.exports = router;
