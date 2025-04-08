@@ -4013,7 +4013,7 @@ router.post('/process-payment', async (req, res) => {
 router.post('/webhook', async (req, res) => {
     try {
         const { transactionId, reference1, reference2, signature } = req.body;
-        const clientSecret = 'a653f1c1-a1b8-4f5a-b5ea-3e4bef4be14a';
+        const clientSecret = '27b809a8-6305-4f27-9f97-e5c0618c2ee7';
 
         if (!transactionId || !reference1 || !reference2 || !signature) {
             return res.status(400).json({ error: 'All fields are required.' });
