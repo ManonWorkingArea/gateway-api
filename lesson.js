@@ -951,6 +951,9 @@ router.post('/course/:id/:playerID?', async (req, res) => {
         if (course.formID) {
             const postCollection = targetDb.collection('post');
             formData = await postCollection.findOne({ _id: safeObjectId(course.formID) });
+        } else {
+            const postCollection = targetDb.collection('post');
+            formData = await postCollection.findOne({ _id: safeObjectId(`656c1c04ad002b51aa850380`) });
         }
 
 
@@ -4013,6 +4016,21 @@ router.post('/process-payment', async (req, res) => {
     }
 });
 
+async function saveWebhookCallToDb(req, callData) {
+    const { client } = req;
+    const site = callData.reference1; // สมมติว่า site ถูกส่งมาใน reference1
+    const { targetDb, siteData } = await getSiteSpecificDb(client, site);
+
+    if (!siteData || !siteData._id) {
+        throw new Error('Site data not found or invalid.');
+    }
+
+    const collection = targetDb.collection('webhook'); // เปลี่ยนเป็น collection 'webhook'
+
+    // บันทึกข้อมูลด้วย Write Concern
+    await collection.insertOne(callData, { writeConcern: { w: "majority" } });
+}
+
 router.post('/webhook', async (req, res) => {
     try {
         const { transactionId, reference1, reference2, signature } = req.body;
@@ -4021,6 +4039,9 @@ router.post('/webhook', async (req, res) => {
         if (!transactionId || !reference1 || !reference2 || !signature) {
             return res.status(400).json({ error: 'All fields are required.' });
         }
+
+        // บันทึกข้อมูลการเรียกลงใน collection 'webhook'
+        await saveWebhookCallToDb(req, { transactionId, reference1, reference2, signature, timestamp: new Date() });
 
         // สร้างข้อความที่ใช้ในการสร้าง HMAC
         const message = `${transactionId}:${reference1}:${reference2}`;
