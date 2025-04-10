@@ -812,34 +812,50 @@ router.get('/appointment/:id', async (req, res) => {
     }
   });
 
-  router.post(`/:collection/aggregate`, async (req, res, next) => {
+  const isISODateString = (value) => {
+    return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(value);
+  };
+  
+  router.post('/:collection/aggregate', async (req, res, next) => {
     try {
-      const { client, db } = req; // Access client and db from req object
+      const { client, db } = req;
       const collectionName = req.params.collection;
       const collection = db.collection(collectionName);
-
+  
       const { pipeline } = req.body || {};
-
+  
       if (!Array.isArray(pipeline)) {
-        res.status(400).json({ message: `Invalid request format` });
-        return;
+        return res.status(400).json({ message: `Invalid request format` });
       }
-
-      // Apply additional modifications to the pipeline as needed
+  
       const modifiedPipeline = pipeline.map((stage) => {
-        // Check if the stage has a $match operator and convert the _id field to ObjectId
-        if (stage.$match && stage.$match._id) {
-          stage.$match._id = safeObjectId(stage.$match._id);
+        if (stage.$match) {
+          // แปลง _id
+          if (stage.$match._id) {
+            stage.$match._id = safeObjectId(stage.$match._id);
+          }
+  
+          // แปลง createdAt $gte/$lte
+          if (stage.$match.createdAt) {
+            const createdAt = stage.$match.createdAt;
+            if (isISODateString(createdAt.$gte)) {
+              createdAt.$gte = new Date(createdAt.$gte);
+            }
+            if (isISODateString(createdAt.$lte)) {
+              createdAt.$lte = new Date(createdAt.$lte);
+            }
+          }
         }
         return stage;
       });
-
+  
       const result = await collection.aggregate(modifiedPipeline, { allowDiskUse: true }).toArray();
       res.status(200).json(result);
     } catch (err) {
       next(err);
     }
   });
+  
 
   // Batch Update Endpoint
 router.post('/:collection/batchUpdate', async (req, res, next) => { // <-- Add `next` here
