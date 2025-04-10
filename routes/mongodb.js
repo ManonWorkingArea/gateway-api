@@ -816,20 +816,32 @@ router.get('/appointment/:id', async (req, res) => {
     return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(value);
   }
   
-  function recursivelyTransformDates(obj) {
+  function deepTransformCreatedAtOnly(obj) {
     if (Array.isArray(obj)) {
-      return obj.map(recursivelyTransformDates);
+      return obj.map(deepTransformCreatedAtOnly);
     } else if (obj && typeof obj === 'object') {
       for (const key in obj) {
-        if (typeof obj[key] === 'string' && isISODateString(obj[key])) {
-          obj[key] = new Date(obj[key]);
-        } else {
-          obj[key] = recursivelyTransformDates(obj[key]);
+        const val = obj[key];
+  
+        if (key === 'createdAt') {
+          // ตัวอย่างเช่น: { createdAt: { $gte: "..." } }
+          if (typeof val === 'string' && isISODateString(val)) {
+            obj[key] = new Date(val);
+          } else if (typeof val === 'object') {
+            for (const opKey in val) {
+              if (isISODateString(val[opKey])) {
+                val[opKey] = new Date(val[opKey]);
+              }
+            }
+          }
+        } else if (typeof val === 'object') {
+          obj[key] = deepTransformCreatedAtOnly(val);
         }
       }
     }
     return obj;
   }
+  
   
   router.post('/:collection/aggregate', async (req, res, next) => {
     try {
@@ -843,17 +855,14 @@ router.get('/appointment/:id', async (req, res) => {
         return res.status(400).json({ message: `Invalid request format` });
       }
   
-      const modifiedPipeline = pipeline.map((stage) => {
-        if (stage.$match) {
-          // Convert _id if needed
-          if (stage.$match._id) {
-            stage.$match._id = safeObjectId(stage.$match._id);
-          }
+      // Recursively process all ISODate strings in all levels of pipeline
+      const modifiedPipeline = deepTransformISODateStrings(pipeline);
   
-          // Recursively convert ISO date strings to Date
-          recursivelyTransformDates(stage.$match);
+      // Optionally handle _id conversion at top-level $match
+      modifiedPipeline.forEach(stage => {
+        if (stage.$match && stage.$match._id) {
+          stage.$match._id = safeObjectId(stage.$match._id);
         }
-        return stage;
       });
   
       const result = await collection.aggregate(modifiedPipeline, { allowDiskUse: true }).toArray();
@@ -862,6 +871,7 @@ router.get('/appointment/:id', async (req, res) => {
       next(err);
     }
   });
+  
   
   
 
