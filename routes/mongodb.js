@@ -856,7 +856,7 @@ router.get('/appointment/:id', async (req, res) => {
       }
   
       // Recursively process all ISODate strings in all levels of pipeline
-      const modifiedPipeline = deepTransformISODateStrings(pipeline);
+      const modifiedPipeline = deepTransformCreatedAtOnly(pipeline);
   
       // Optionally handle _id conversion at top-level $match
       modifiedPipeline.forEach(stage => {
