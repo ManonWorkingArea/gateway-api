@@ -812,9 +812,24 @@ router.get('/appointment/:id', async (req, res) => {
     }
   });
 
-  const isISODateString = (value) => {
+  function isISODateString(value) {
     return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(value);
-  };
+  }
+  
+  function recursivelyTransformDates(obj) {
+    if (Array.isArray(obj)) {
+      return obj.map(recursivelyTransformDates);
+    } else if (obj && typeof obj === 'object') {
+      for (const key in obj) {
+        if (typeof obj[key] === 'string' && isISODateString(obj[key])) {
+          obj[key] = new Date(obj[key]);
+        } else {
+          obj[key] = recursivelyTransformDates(obj[key]);
+        }
+      }
+    }
+    return obj;
+  }
   
   router.post('/:collection/aggregate', async (req, res, next) => {
     try {
@@ -830,21 +845,13 @@ router.get('/appointment/:id', async (req, res) => {
   
       const modifiedPipeline = pipeline.map((stage) => {
         if (stage.$match) {
-          // แปลง _id
+          // Convert _id if needed
           if (stage.$match._id) {
             stage.$match._id = safeObjectId(stage.$match._id);
           }
   
-          // แปลง createdAt $gte/$lte
-          if (stage.$match.createdAt) {
-            const createdAt = stage.$match.createdAt;
-            if (isISODateString(createdAt.$gte)) {
-              createdAt.$gte = new Date(createdAt.$gte);
-            }
-            if (isISODateString(createdAt.$lte)) {
-              createdAt.$lte = new Date(createdAt.$lte);
-            }
-          }
+          // Recursively convert ISO date strings to Date
+          recursivelyTransformDates(stage.$match);
         }
         return stage;
       });
@@ -855,6 +862,7 @@ router.get('/appointment/:id', async (req, res) => {
       next(err);
     }
   });
+  
   
 
   // Batch Update Endpoint
