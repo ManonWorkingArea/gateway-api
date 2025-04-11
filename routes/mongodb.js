@@ -477,6 +477,198 @@ router.get('/appointment/:id', async (req, res) => {
   }
 });
 
+
+
+
+
+router.post('/dashboard', async (req, res, next) => {
+  try {
+    const { db } = req;
+    const { startUTC, endUTC } = req.body;
+
+    if (!startUTC || !endUTC) {
+      return res.status(400).json({ status: false, message: 'startUTC and endUTC are required' });
+    }
+
+    // Pipeline สำหรับข้อมูล User
+    const userPipeline = [
+      {
+        $match: {
+          createdAt: {
+            $gte: new Date(startUTC),
+            $lte: new Date(endUTC)
+          }
+        }
+      },
+      {
+        $group: {
+          _id: '$userID',
+          enrollCount: { $sum: 1 }
+        }
+      },
+      {
+        $set: {
+          userIdObj: { $toObjectId: '$_id' }
+        }
+      },
+      {
+        $lookup: {
+          from: 'user',
+          localField: 'userIdObj',
+          foreignField: '_id',
+          as: 'user'
+        }
+      },
+      {
+        $unwind: '$user'
+      },
+      {
+        $lookup: {
+          from: 'enroll',
+          let: { userId: '$_id' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$userID', '$$userId'] },
+                    { $gte: ['$createdAt', new Date(startUTC)] },
+                    { $lte: ['$createdAt', new Date(endUTC)] }
+                  ]
+                }
+              }
+            },
+            {
+              $project: {
+                _id: 1,
+                courseID: 1,
+                createdAt: 1,
+                analytics: 1
+              }
+            }
+          ],
+          as: 'enrollAll'
+        }
+      },
+      {
+        $addFields: {
+          completedCount: {
+            $size: {
+              $filter: {
+                input: '$enrollAll',
+                as: 'enroll',
+                cond: {
+                  $and: [
+                    { $eq: ['$$enroll.analytics.status', 'complete'] },
+                    { $eq: ['$$enroll.analytics.complete', '$$enroll.analytics.total'] }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        $sort: {
+          completedCount: -1
+        }
+      },
+      {
+        $limit: 100
+      },
+      {
+        $project: {
+          _id: 0,
+          enrollCount: 1,
+          completedCount: 1,
+          enrollAll: 1,
+          'user._id': 1,
+          'user.firstname': 1,
+          'user.lastname': 1,
+          'user.email': 1,
+          'user.phone': 1
+        }
+      }
+    ];
+
+    // Pipeline สำหรับข้อมูล Course
+    const coursePipeline = [
+      {
+        $match: {
+          status: true,
+          unit: '6425be9928ebd01be519d7bd'
+        }
+      },
+      {
+        $set: {
+          _idStr: { $toString: '$_id' }
+        }
+      },
+      {
+        $lookup: {
+          from: 'enroll',
+          localField: '_idStr',
+          foreignField: 'courseID',
+          as: 'enrolled_users'
+        }
+      },
+      {
+        $addFields: {
+          enrollCount: { $size: '$enrolled_users' },
+          completedCount: {
+            $size: {
+              $filter: {
+                input: '$enrolled_users',
+                as: 'enroll',
+                cond: {
+                  $and: [
+                    { $eq: ['$$enroll.analytics.status', 'complete'] },
+                    { $eq: ['$$enroll.analytics.complete', '$$enroll.analytics.total'] }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        $project: {
+          name: 1,
+          type: 1,
+          lecturer: 1,
+          category: 1,
+          status: 1,
+          enrollCount: 1,
+          completedCount: 1
+        }
+      },
+      {
+        $sort: {
+          enrollCount: -1
+        }
+      }
+    ];
+
+    // ทำการ query ทั้งสองอันพร้อมกัน
+    const [userResult, courseResult] = await Promise.all([
+      db.collection('enroll').aggregate(userPipeline).toArray(),
+      db.collection('course').aggregate(coursePipeline).toArray()
+    ]);
+
+    res.status(200).json({ 
+      status: true, 
+      data: {
+        user: userResult,
+        course: courseResult
+      }
+    });
+
+  } catch (err) {
+    console.error('Error in dashboard endpoint:', err);
+    next(err);
+  }
+});
+
   // GET Method
   router.get('/:collection', async (req, res) => {
     try {
@@ -1020,6 +1212,8 @@ router.post('/:collection/batchUpdate', async (req, res, next) => { // <-- Add `
       next(err);
     }
   });
+
+
   router.use(errorHandler);
   return router;
 };
