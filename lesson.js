@@ -3086,7 +3086,9 @@ function mapOrderData(formData, orderCode, customerTypeCode) {
     const corporateAddress = formData?.["address-21-3-11"]?.value || {};
     const individualAddress = formData?.["address-12-1-7"]?.value || {};
     
-    const isValidValue = (value) => value && value !== 'n/a' && value.trim() !== '';
+    const isValidValue = (value) => {
+        return value && value !== 'n/a' && value.trim() !== '' && value !== 'ไม่มีข้อมูล';
+    };
     
     const formatAddress = (address) => {
         return [
