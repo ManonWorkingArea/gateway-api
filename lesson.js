@@ -984,6 +984,16 @@ router.post('/course/:id/:playerID?', async (req, res) => {
         // Set isForm based on whether submitFormData exists
         const isForm = !submitFormData; // false if submitFormData exists, true if it doesn't
 
+        // Fetch the latest previous submission of this formID by this user, if formID exists or use default
+        let latestPreviousFormSubmission = null;
+        if (user) { // Only search if user is authenticated
+            const formIdToSearch = course.formID || '656c1c04ad002b51aa850380'; // Use course.formID or default
+            const formCollection = targetDb.collection('form');
+            latestPreviousFormSubmission = await formCollection.findOne(
+                { userID: user, formID: formIdToSearch }, // Use formIdToSearch
+                { sort: { createdAt: -1 } } // Get the latest one
+            );
+        }
 
         // Fetch data if isPay = true
         let checkoutData = null;
@@ -1320,7 +1330,8 @@ router.post('/course/:id/:playerID?', async (req, res) => {
             ...(formData && { form: formData }), // Add form data if available
             ...(checkoutData && { checkout: checkoutData }), // Include checkout data if fetched
             ...(isOrder && { order }),
-        };        
+            ...(latestPreviousFormSubmission && { previousFormSubmission: latestPreviousFormSubmission }), // Add latest previous form submission if found
+        };
 
         res.status(200).json(formattedResponse);
         // console.log("formattedResponse",formattedResponse);

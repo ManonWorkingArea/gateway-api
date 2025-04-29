@@ -40,7 +40,7 @@ router.post('/login', async (req, res) => {
         // --- Login Successful ---
 
         let clusterData = null;
-        let fullyPopulatedOmData = [];
+        let omDataForResponse = []; // Initialize variable for response
 
         if (user.clusterId) {
             try {
@@ -49,11 +49,51 @@ router.post('/login', async (req, res) => {
                 clusterData = await clusterCollection.findOne({ _id: clusterIdObject });
 
                 // Call the helper function to get nested OM/VC/SubVC data
-                fullyPopulatedOmData = await getNestedOmDataByClusterId(db, user.clusterId);
+                let fullyPopulatedOmData = await getNestedOmDataByClusterId(db, user.clusterId);
+
+                // --- Filter omData if user type is 'sub' ---
+                if (user.type === 'sub' && Array.isArray(user.assignments) && user.assignments.length > 0) {
+                    // Create a map for faster lookup: { omIdString: Set<vcIdString> }
+                    const assignmentMap = user.assignments.reduce((acc, assignment) => {
+                        if (assignment.omId) {
+                            // Ensure vcIds is an array, default to empty array if not present or null
+                            const vcIds = Array.isArray(assignment.vcIds) ? assignment.vcIds : [];
+                            acc[assignment.omId] = new Set(vcIds); // Store vcIds as a Set
+                        }
+                        return acc;
+                    }, {});
+
+                    omDataForResponse = fullyPopulatedOmData.map(om => {
+                        // Convert ObjectId to string for comparison
+                        const omIdString = om._id.toString();
+                        // Check if this OM is assigned to the sub-user
+                        if (assignmentMap[omIdString]) {
+                            const allowedVcIds = assignmentMap[omIdString];
+                            // Filter vcData based on the assigned vcIds for this OM
+                            // Ensure om.vcData exists and is an array
+                            const vcData = Array.isArray(om.vcData) ? om.vcData : [];
+                            const filteredVcData = vcData.filter(vc =>
+                                // Convert vc._id to string for comparison with Set
+                                allowedVcIds.has(vc._id.toString())
+                            );
+                            // Return the OM object with filtered vcData
+                            // Make sure to include all original OM fields
+                            return { ...om, vcData: filteredVcData };
+                        }
+                        // If the OM itself is not assigned, return null
+                        return null;
+                    }).filter(om => om !== null); // Remove the null entries (OMs not assigned)
+                } else {
+                    // If not a 'sub' user or no assignments, use the full data
+                    omDataForResponse = fullyPopulatedOmData;
+                }
+                 // --- End Filter ---
+
 
             } catch (fetchError) {
                 console.error('Error fetching cluster/OM/VC/SubVC data for user:', user._id, fetchError);
-                // Log error but proceed with login
+                // Log error but proceed with login, omDataForResponse will be empty or default
+                 omDataForResponse = []; // Ensure it's an empty array on error
             }
         }
 
@@ -69,7 +109,7 @@ router.post('/login', async (req, res) => {
             data: {
                 user: responseUserData,
                 cluster: clusterData,
-                omData: fullyPopulatedOmData
+                omData: omDataForResponse // Use the potentially filtered data
             }
             // Consider adding a session token (e.g., JWT) here for subsequent requests
         });

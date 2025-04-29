@@ -39,16 +39,61 @@ router.post('/', async (req, res) => {
     }
 });
 
+
+// GET /sub/:userid (List Sub Users) - Mounted at /users
+router.get('/sub/:userid', async (req, res) => {
+    try {
+        const db = req.client.db('dss');
+        const usersCollection = db.collection('users');
+        const parentId = safeObjectId(req.params.userid);
+
+        const subUsers = await usersCollection.find(
+            { parent: parentId, type: 'sub' }, 
+            { projection: { password: 0, salt: 0 } } 
+        ).toArray();
+
+        res.status(200).json({ success: true, data: subUsers });
+    } catch (error) {
+        console.error('Error fetching sub users:', error);
+        res.status(500).json({ error: 'Failed to fetch sub users' });
+    }
+});
+
 // GET /users (List) - Mounted at /users
 router.get('/', async (req, res) => {
     try {
         const db = req.client.db('dss');
         const usersCollection = db.collection('users');
-        const users = await usersCollection.find({}, { projection: { password: 0, salt: 0 } }).toArray();
-        res.status(200).json({ success: true, data: users });
+        // Fetch all users, excluding password and salt
+        const allUsers = await usersCollection.find({}, { projection: { password: 0, salt: 0 } }).toArray();
+
+        // Separate main users and sub users
+        const mainUsers = allUsers.filter(user => user.type === 'main' || !user.type); // Treat users without type as main
+        const subUsers = allUsers.filter(user => user.type === 'sub' && user.parent);
+
+        // Create a map for quick lookup of sub users by parent ID
+        const subUsersByParent = subUsers.reduce((acc, subUser) => {
+            const parentId = subUser.parent.toString(); // Ensure parent ID is a string for matching
+            if (!acc[parentId]) {
+                acc[parentId] = [];
+            }
+            acc[parentId].push(subUser);
+            return acc;
+        }, {});
+
+        // Attach sub users to their respective main users
+        const structuredUsers = mainUsers.map(mainUser => {
+            const userId = mainUser._id.toString(); // Ensure user ID is a string for matching
+            return {
+                ...mainUser,
+                subUsers: subUsersByParent[userId] || [] // Add subUsers array, empty if none
+            };
+        });
+
+        res.status(200).json({ success: true, data: structuredUsers });
     } catch (error) {
-        console.error('Error fetching users:', error);
-        res.status(500).json({ error: 'Failed to fetch users' });
+        console.error('Error fetching and structuring users:', error);
+        res.status(500).json({ error: 'Failed to fetch and structure users' });
     }
 });
 
@@ -68,6 +113,8 @@ router.get('/:id', async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch user' });
     }
 });
+
+
 
 // PUT /users/:id (Update) - Mounted at /users
 router.put('/:id', async (req, res) => {
