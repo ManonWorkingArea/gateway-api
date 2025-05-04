@@ -39,7 +39,18 @@ router.post("/upload", upload.single("file"), async (req, res) => {
     return res.status(400).json({ error: "No file uploaded" });
   }
 
-  const fileName = generateUniqueFileName(req.file.originalname);
+  // Determine the base name for the file
+  let originalName;
+  if (req.query.filename) {
+    // Use filename from query parameter but keep the original extension
+    const originalExt = path.extname(req.file.originalname);
+    originalName = req.query.filename + originalExt;
+  } else {
+    // Use the original filename from the uploaded file
+    originalName = req.file.originalname;
+  }
+
+  const fileName = generateUniqueFileName(originalName);
   const params = {
     Bucket: S3_BUCKET,
     Key: fileName,
