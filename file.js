@@ -62,7 +62,8 @@ router.post("/upload", upload.single("file"), async (req, res) => {
   try {
     await s3Client.send(new PutObjectCommand(params));
     const fileUrl = `${S3_ENDPOINT}/${S3_BUCKET}/${fileName}`;
-    res.json({ message: "File uploaded successfully", url: fileUrl });
+    const fileExt = path.extname(fileName).substring(1); // Get extension without the dot
+    res.json({ message: "File uploaded successfully", url: fileUrl, type: fileExt });
   } catch (error) {
     res.status(500).json({ error: "Upload failed", details: error.message });
   }
