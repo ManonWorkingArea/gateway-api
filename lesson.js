@@ -894,6 +894,7 @@ router.post('/course/:id/:playerID?', async (req, res) => {
                         const scoreData = await scoreCollection.findOne({
                             examID: exam._id.toString(),
                             userID: user,
+                            courseID: course._id,
                             status: true
                         });
 
@@ -1212,6 +1213,8 @@ router.post('/course/:id/:playerID?', async (req, res) => {
         // Format and filter scheduleConfig
         const formattedScheduleConfig = course.scheduleConfig ? formatScheduleConfig(course.scheduleConfig) : [];
         const filteredScheduleConfig = filterScheduleByExamDate(formattedScheduleConfig, selectedExamDate);
+
+    console.log("selectedExamDate",selectedExamDate);
         
         function filteredFinalScheduleConfig(data, roundName = null) {
             if (roundName) {
