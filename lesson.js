@@ -1711,7 +1711,7 @@ router.post('/score/submit', async (req, res) => {
         const examCollection = targetDb.collection('exam');
 
         // Check if a score record already exists
-        const existingScore = await scoreCollection.findOne({ examID, userID: user, status: true });
+        const existingScore = await scoreCollection.findOne({ examID, courseID, userID: user, status: true });
         if (existingScore) {
             return res.status(409).json({ error: 'Score already recorded for this exam and user.' });
         }
