@@ -1537,6 +1537,9 @@ router.post('/assessment/:id/:exam?', async (req, res) => {
             ? await scoreCollection.find(scoreQuery).toArray()
             : [];
 
+            console.log("scoreQuery",scoreQuery);
+        console.log("scoreData -1",scoreData);
+
         // Fetch exam data by exam ID
         const examData = exam
         ? await examCollection.findOne({ _id: safeObjectId(exam) })
@@ -1601,6 +1604,7 @@ router.post('/assessment/:id/:exam?', async (req, res) => {
             if (user) {
                 const scoreData = await scoreCollection.findOne({
                     examID: examData._id.toString(),
+                    courseID: course._id.toString(),
                     userID: user,
                     status: true
                 });
