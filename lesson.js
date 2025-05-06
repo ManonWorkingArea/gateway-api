@@ -894,9 +894,11 @@ router.post('/course/:id/:playerID?', async (req, res) => {
                         const scoreData = await scoreCollection.findOne({
                             examID: exam._id.toString(),
                             userID: user,
-                            courseID: course._id,
+                            courseID: course._id.toString(),
                             status: true
                         });
+
+                        console.log("scoreData",scoreData,course._id);
 
                         // Attach score to the exam data if found
                         if (scoreData) {
@@ -1602,6 +1604,8 @@ router.post('/assessment/:id/:exam?', async (req, res) => {
                     userID: user,
                     status: true
                 });
+
+                console.log("scoreData",scoreData);
 
                 if (scoreData) {
                     contest.score = {
