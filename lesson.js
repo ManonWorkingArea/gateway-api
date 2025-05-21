@@ -1,5 +1,4 @@
-const express = require('express');
-const jwt = require('jsonwebtoken'); // Import jsonwebtoken
+const express = require('express');const jwt = require('jsonwebtoken'); // Import jsonwebtoken
 const { authenticateClient, safeObjectId, errorHandler } = require('./routes/middleware/mongoMiddleware');
 const axios = require('axios'); // For making HTTP requests
 const { crossOriginResourcePolicy } = require('helmet');
@@ -429,6 +428,58 @@ router.post('/course', async (req, res) => {
     }
 });
 
+router.post('/course/featured', async (req, res) => {
+    const { site, keyword } = req.body; // Changed hilights to keyword
+
+    try {
+        if (!site) {
+            return res.status(400).json({ error: 'Site parameter is required' });
+        }
+
+        const { client } = req;
+        const { targetDb, siteData } = await getSiteSpecificDb(client, site);
+
+        if (!siteData || !siteData._id) {
+            return res.status(404).json({ error: 'Site data not found or invalid.' });
+        }
+
+        const siteIdString = siteData._id.toString();
+        const { course } = await getDbCollections(client, site, ['course']);
+
+        const query = { unit: siteIdString, status: true };
+
+        // Add keyword filtering if keyword is provided
+        if (keyword) {
+            query.keywords = keyword; // Filter by the exact keyword in the array
+        }
+
+        console.log('DAT :: MongoDB :: Fetching highlight courses with filter:', query); // Log the query
+        const allCourses = await course
+            .find(query)
+            .project({
+                _id: 1, name: 1, slug: 1, lecturer: 1, hours: 1, days: 1,
+                category: 1, type: 1, mode: 1, display: 1,
+                regular_price: 1, sale_price: 1,
+                description: 1, short_description: 1,cover: 1,
+                thumbnail: 1, lesson_type: 1, status: 1, updatedAt: 1
+            })
+            .toArray();
+
+        const response = {
+            success: true,
+            data: allCourses,
+            meta: {
+                totalItems: allCourses.length
+            },
+            cache: false // Assuming no caching for highlights or implement if needed
+        };
+
+        res.status(200).json(response);
+    } catch (error) {
+        console.error('Error fetching highlight courses:', error.message);
+        res.status(500).json({ error: 'An error occurred while fetching highlight courses.' });
+    }
+});
 
 // Endpoint to fetch course details and related player data
 router.post('/course/:id/:playerID?', async (req, res) => {
@@ -1242,6 +1293,7 @@ router.post('/course/:id/:playerID?', async (req, res) => {
                 description: course.description,
                 shortDescription: course.short_description,
                 cover: course.cover,
+                thumbnail: course.thumbnail,
                 hours: course.hours,
                 days: course.days,
                 scheduleConfig: filtered, // ✅ Reformatted scheduleConfig
@@ -1348,6 +1400,7 @@ router.post('/course/:id/:playerID?', async (req, res) => {
         }
     }
 });
+
 
 const calculateCoursePropertiesById = async (courseId, userId, targetDb) => {
     const enrollCollection = targetDb.collection('enroll');
@@ -4094,3 +4147,4 @@ router.post('/webhook', async (req, res) => {
 });
 
 module.exports = router;
+
