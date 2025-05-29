@@ -577,8 +577,14 @@ router.post('/dashboard', async (req, res, next) => {
           checked: {
             $cond: {
               if: { $gt: [{ $size: '$dashboardStats' }, 0] },
-              then: { $arrayElemAt: ['$dashboardStats.status', 0] },
-              else: false
+              then: {
+                status: { $arrayElemAt: ['$dashboardStats.status', 0] },
+                checkedAt: { $arrayElemAt: ['$dashboardStats.updatedAt', 0] }
+              },
+              else: {
+                status: false,
+                checkedAt: null
+              }
             }
           }
         }
