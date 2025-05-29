@@ -981,15 +981,23 @@ router.post('/course/:id/:playerID?', async (req, res) => {
         const surveyCollection = targetDb.collection('survey');
         let surveyData = null;
 
-        if (course.survey === 'yes' && course.surveyId) {
-            surveyData = await surveyCollection.findOne({ _id: safeObjectId(course.surveyId) });
+        if (course.survey === 'yes') {
+            if (course.surveyId) {
+                surveyData = await surveyCollection.findOne({ _id: safeObjectId(course.surveyId) });
+            } else {
+                // Fetch default survey if surveyId is not present
+                surveyData = await surveyCollection.findOne({ unit: siteIdString, default: true });
+                if (surveyData) {
+                    course.surveyId = surveyData._id.toString(); // Update course.surveyId with the default survey's ID
+                }
+            }
         }
 
         // Fetch user survey submission
         const surveySubmission = await surveySubmissionCollection.findOne({
             userId: user,
             courseId: courseId.toString(),
-            surveyId: course.surveyId
+            surveyId: course.surveyId // Use the potentially updated course.surveyId
         });
 
         // Merge survey data with submission status
@@ -1035,8 +1043,12 @@ router.post('/course/:id/:playerID?', async (req, res) => {
             enrollID = null;
         }
 
+        const courseProperties = await calculateCoursePropertiesById(courseId, user, targetDb);
+
+        console.log("courseProperties",courseProperties);
+
         // Set isForm based on whether submitFormData exists
-        const isForm = !submitFormData; // false if submitFormData exists, true if it doesn't
+        const isForm = courseProperties.isForm; // false if submitFormData exists, true if it doesn't
 
         // Fetch the latest previous submission of this formID by this user, if formID exists or use default
         let latestPreviousFormSubmission = null;
@@ -1063,9 +1075,7 @@ router.post('/course/:id/:playerID?', async (req, res) => {
 
         //console.log("checkoutData",checkoutData);
 
-        const courseProperties = await calculateCoursePropertiesById(courseId, user, targetDb);
-
-        //console.log("courseProperties",courseProperties);
+        
 
          // Fetch schedule data for onsite courses
          let scheduleData = null;
@@ -1267,7 +1277,7 @@ router.post('/course/:id/:playerID?', async (req, res) => {
         const formattedScheduleConfig = course.scheduleConfig ? formatScheduleConfig(course.scheduleConfig) : [];
         const filteredScheduleConfig = filterScheduleByExamDate(formattedScheduleConfig, selectedExamDate);
 
-    console.log("selectedExamDate",selectedExamDate);
+        console.log("selectedExamDate",selectedExamDate);
         
         function filteredFinalScheduleConfig(data, roundName = null) {
             if (roundName) {
@@ -1281,6 +1291,8 @@ router.post('/course/:id/:playerID?', async (req, res) => {
           const filtered = filteredFinalScheduleConfig(filteredScheduleConfig, selectedExamDate?.value);
 
           console.log("filtered",filtered);
+
+          console.log("isForm",isForm);
 
         // Format response
         const formattedResponse = {
@@ -1324,11 +1336,13 @@ router.post('/course/:id/:playerID?', async (req, res) => {
                     enrollID,
                     submitID: enrollment?.submitID || null, // Include submitID if available
                 },
+                enrollType: enrollment?.type || null,
                 isEnroll: !! enrollment,
                 isSurvey: !! surveyData,
                 isComplete,
                 isForm,
-                isPay: !isForm && course.sale_price > 0 && !isPaid, // New logic for isPay
+                //isPay: !isForm && course.sale_price > 0 && !isPaid, // New logic for isPay
+                isPay: !isForm &&course.sale_price > 0 && !isPaid, // New logic for isPay
                 isOrder,
                 isPaid,
                 ...(course.idle === "yes" && { 
@@ -1431,6 +1445,8 @@ const calculateCoursePropertiesById = async (courseId, userId, targetDb) => {
     const isEnroll = !!enrollment;
     const isSurvey = !!surveyData;
     const isForm = enrollment?.submitID ? false : !!formData; // isForm is false if enrollment has submitID
+
+    console.log("isForm", isForm);
     const isPay = !isForm && course.sale_price > 0; // Logic for paid courses
     const isComplete = enrollment?.analytics?.percent === 100 || false; // Example completion logic
 
@@ -1580,6 +1596,170 @@ router.post('/assessment/:id/:exam?', async (req, res) => {
             ? await enrollCollection.findOne({ courseID: course._id.toString(), userID: user })
             : null;
 
+        // Get selectedExamDate from enrollment if available
+        const selectedExamDate = enrollment?.selectedExamDate || null;
+
+        // Helper functions for scheduleConfig processing
+        const formatScheduleConfig = (scheduleConfig) => {
+            return scheduleConfig.flatMap((entry) => {
+                if (entry.round) {
+                    return entry.rounds
+                        .filter(round => round.StartDateUsed || round.EndDateUsed)
+                        .map(round => {
+                            const config = {
+                                item: entry.item,
+                                startDate: round.StartDateUsed ? round.StartDate : null,
+                                endDate: round.EndDateUsed ? round.EndDate : null,
+                                roundName: round.name
+                            };
+                            return {
+                                ...config,
+                                status: determineStatus(config.startDate, config.endDate).status
+                            };
+                        });
+                } else {
+                    const config = {
+                        item: entry.item,
+                        startDate: entry.startDate,
+                        endDate: entry.endDate,
+                        roundName: null
+                    };
+                    return [{
+                        ...config,
+                        status: determineStatus(config.startDate, config.endDate).status
+                    }];
+                }
+            });
+        };
+
+        const getNowInTimezoneTimestamp = () => {
+            const now = new Date();
+            now.setHours(now.getHours() + 7); // Convert to UTC+7
+            return {
+                nowISO: now.toISOString().replace("Z", "+07:00"), // ISO format
+                nowTimestamp: now.getTime() // Timestamp in milliseconds
+            };
+        };
+
+        const getTimePrefix = (targetTimestamp, nowTimestamp) => {
+            const diffMs = targetTimestamp - nowTimestamp; // Difference in milliseconds
+            const diffSec = Math.round(diffMs / 1000); // Convert to seconds
+            const diffMin = Math.round(diffSec / 60); // Convert to minutes
+            const diffHr = Math.round(diffMin / 60); // Convert to hours
+            const diffDay = Math.round(diffHr / 24); // Convert to days
+
+            if (Math.abs(diffSec) < 10) return "ตอนนี้"; // If it's happening now (within 10 sec)
+
+            if (Math.abs(diffSec) < 60) return diffSec > 0 ? `ในอีก ${diffSec} วินาที` : `${Math.abs(diffSec)} วินาที ที่ผ่านมา`;
+            if (Math.abs(diffMin) < 60) return diffMin > 0 ? `ในอีก ${diffMin} นาที` : `${Math.abs(diffMin)} นาที ที่ผ่านมา`;
+            if (Math.abs(diffHr) < 24) return diffHr > 0 ? `ในอีก ${diffHr} ชั่วโมง` : `${Math.abs(diffHr)} ชั่วโมง ที่ผ่านมา`;
+
+            return diffDay > 0 ? `ในอีก ${diffDay} วัน` : `${Math.abs(diffDay)} วัน ที่ผ่านมา`;
+        };
+
+        const determineStatus = (startDate, endDate) => {
+            const { nowISO, nowTimestamp } = getNowInTimezoneTimestamp(); // Get current timestamp in UTC+7
+            const startTimestamp = startDate ? new Date(startDate).getTime() : null;
+            const endTimestamp = endDate ? new Date(endDate).getTime() : null;
+
+            if (!startTimestamp) return { status: "unknown", prefix: "unknown", now: nowISO };
+
+            if (!endTimestamp) { 
+                return { 
+                    status: nowTimestamp >= startTimestamp ? "ongoing" : "upcoming",
+                    prefix: getTimePrefix(startTimestamp, nowTimestamp),
+                    now: nowISO
+                };
+            }
+
+            if (startTimestamp === endTimestamp) {
+                return {
+                    status: nowTimestamp >= startTimestamp && nowTimestamp <= endTimestamp ? "ongoing" : "upcoming",
+                    prefix: getTimePrefix(startTimestamp, nowTimestamp),
+                    now: nowISO
+                };
+            }
+
+            if (nowTimestamp < startTimestamp) return { 
+                status: "upcoming", 
+                prefix: getTimePrefix(startTimestamp, nowTimestamp),
+                now: nowISO
+            };
+
+            if (nowTimestamp > endTimestamp) return { 
+                status: "expired", 
+                prefix: getTimePrefix(endTimestamp, nowTimestamp),
+                now: nowISO
+            };
+
+            return { 
+                status: "ongoing", 
+                prefix: "ตอนนี้",
+                now: nowISO
+            };
+        };
+
+        const filterScheduleByExamDate = (scheduleConfig, selectedExamDate) => {
+            // ถ้าไม่มี selectedExamDate ให้คืนค่า scheduleConfig ทั้งหมด
+            if (!selectedExamDate) {
+                return scheduleConfig;
+            }
+
+            return scheduleConfig.map(config => {
+                // ถ้าเป็น item ที่มี rounds
+                if (config.round && config.rounds && config.rounds.length > 0) {
+                    const filteredRounds = config.rounds.filter(round => {
+                        const roundStartDate = new Date(round.StartDate);
+                        const roundEndDate = round.EndDate ? new Date(round.EndDate) : null;
+                        const examDate = new Date(selectedExamDate);
+
+                        // ถ้ามีทั้ง start และ end date
+                        if (roundEndDate) {
+                            return roundStartDate <= examDate && examDate <= roundEndDate;
+                        }
+                        // ถ้ามีแค่ start date
+                        return roundStartDate <= examDate;
+                    });
+
+                    return {
+                        ...config,
+                        rounds: filteredRounds
+                    };
+                }
+
+                // สำหรับ item ที่ไม่มี rounds
+                const startDate = config.startDate ? new Date(config.startDate) : null;
+                const endDate = config.endDate ? new Date(config.endDate) : null;
+                const examDate = new Date(selectedExamDate);
+
+                if (startDate && endDate) {
+                    if (startDate <= examDate && examDate <= endDate) {
+                        return config;
+                    }
+                } else if (startDate) {
+                    if (startDate <= examDate) {
+                        return config;
+                    }
+                }
+
+                return config;
+            });
+        };
+
+        const filteredFinalScheduleConfig = (data, roundName = null) => {
+            if (roundName) {
+              return data.filter(item =>
+                item.roundName === roundName || item.roundName === null
+              );
+            }
+            return data;
+        };
+
+        // Format and filter scheduleConfig
+        const formattedScheduleConfig = course.scheduleConfig ? formatScheduleConfig(course.scheduleConfig) : [];
+        const filteredScheduleConfig = filterScheduleByExamDate(formattedScheduleConfig, selectedExamDate);
+        const filtered = filteredFinalScheduleConfig(filteredScheduleConfig, selectedExamDate?.value);
+
         // Fetch score data (filtered by exam ID if provided)
         const scoreQuery = { courseID: course._id.toString(), userID: user };
         if (exam) {
@@ -1698,6 +1878,7 @@ router.post('/assessment/:id/:exam?', async (req, res) => {
                 cover: course.cover,
                 hours: course.hours,
                 days: course.days,
+                scheduleConfig: filtered, // ✅ Added scheduleConfig
                 prices: {
                     regular: course.regular_price,
                     sale: course.sale_price,
@@ -2164,7 +2345,7 @@ router.post('/assign', async (req, res) => {
         //console.log("decryptedData", decryptedData);
 
         // Extract properties from the decrypted data
-        const { site, courseID, authen } = decryptedData;
+        const { site, courseID, authen, type } = decryptedData;
 
         // Authen User Middleware
         const authResult = await authenticateUserToken(authen, res);
@@ -2243,6 +2424,7 @@ router.post('/assign', async (req, res) => {
         const newEnrollment = {
             courseID,
             userID: user, // User ID from token
+            type,
             analytics,
             createdAt: new Date(),
             updatedAt: new Date(),

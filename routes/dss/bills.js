@@ -26,15 +26,25 @@ router.post('/', async (req, res) => {
         const billData = req.body;
 
         // --- 1. Duplicate Invoice Check ---
-        const { invoiceId, clusterId, omId, vcId, vendorName, vendorAddress, customerName, customerAddress, items } = billData;
+        const { invoiceId, clusterId, omId, vcId, subVcId, vendorName, vendorAddress, customerName, customerAddress, items } = billData;
 
         if (!invoiceId || !clusterId || !omId || !vcId) {
             return res.status(400).json({ error: 'invoiceId, clusterId, omId, and vcId are required' });
         }
 
-        const existingBill = await billsCollection.findOne({
-            invoiceId: invoiceId, clusterId: clusterId, omId: omId, vcId: vcId
-        });
+        const duplicateQuery = {
+            invoiceId: invoiceId, 
+            clusterId: clusterId, 
+            omId: omId, 
+            vcId: vcId
+        };
+        
+        // Only add subVcId to query if it exists
+        if (subVcId) {
+            duplicateQuery.subVcId = subVcId;
+        }
+
+        const existingBill = await billsCollection.findOne(duplicateQuery);
 
         if (existingBill) {
             return res.status(409).json({ error: 'Duplicate invoiceId for the same cluster, om, and vc combination' });

@@ -142,7 +142,7 @@ router.post('/', async (req, res) => {
         const suppliersCollection = db.collection(SUPPLIERS_COLLECTION);
         const ownerFromHeader = req.headers.owner; // Use header for owner assignment
 
-        const { name, contactPerson, email, phone, address, taxId, website, status, notes } = req.body;
+        const { name, contactPerson, email, phone, address, taxId, website, status, notes, balanceSheets } = req.body;
 
         // --- Validation ---
         if (!name || typeof name !== 'string' || name.trim() === '') {
@@ -187,6 +187,7 @@ router.post('/', async (req, res) => {
             website: website?.trim() || null,
             status: ['active', 'inactive'].includes(status) ? status : 'active', // Default to active
             notes: notes?.trim() || null,
+            balanceSheets: balanceSheets || null,
             owner: ownerValue, // Assign owner from header
             createdAt: new Date(),
             updatedAt: new Date()
@@ -267,6 +268,15 @@ router.put('/:id', async (req, res) => {
                  }
              }
         });
+
+        // Handle balanceSheets separately (might be object/array)
+        if (updatePayload.balanceSheets !== undefined) {
+            const balanceSheetsValue = updatePayload.balanceSheets === null ? null : updatePayload.balanceSheets;
+            if (JSON.stringify(balanceSheetsValue) !== JSON.stringify(currentSupplier.balanceSheets)) {
+                updateData.balanceSheets = balanceSheetsValue;
+                hasChanges = true;
+            }
+        }
 
         // Handle address update (update nested fields carefully)
         if (updatePayload.address !== undefined) {

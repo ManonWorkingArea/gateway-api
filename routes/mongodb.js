@@ -574,7 +574,7 @@ router.post('/dashboard', async (req, res, next) => {
         }
       },
       {
-        $limit: 100
+        $limit: 1000
       },
       {
         $project: {
