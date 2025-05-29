@@ -551,6 +551,14 @@ router.post('/dashboard', async (req, res, next) => {
         }
       },
       {
+        $lookup: {
+          from: 'dashboard_statistics',
+          localField: '_id',
+          foreignField: 'userid',
+          as: 'dashboardStats'
+        }
+      },
+      {
         $addFields: {
           completedCount: {
             $size: {
@@ -564,6 +572,13 @@ router.post('/dashboard', async (req, res, next) => {
                   ]
                 }
               }
+            }
+          },
+          checked: {
+            $cond: {
+              if: { $gt: [{ $size: '$dashboardStats' }, 0] },
+              then: { $arrayElemAt: ['$dashboardStats.status', 0] },
+              else: false
             }
           }
         }
@@ -582,6 +597,7 @@ router.post('/dashboard', async (req, res, next) => {
           enrollCount: 1,
           completedCount: 1,
           enrollAll: 1,
+          checked: 1,
           'user._id': 1,
           'user.firstname': 1,
           'user.lastname': 1,
