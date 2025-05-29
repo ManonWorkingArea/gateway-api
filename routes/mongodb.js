@@ -669,6 +669,65 @@ router.post('/dashboard', async (req, res, next) => {
   }
 });
 
+router.post('/dashboard-checked', async (req, res, next) => {
+  try {
+    const { db } = req;
+    const { userid, status } = req.body;
+
+    // Validate input
+    if (!userid || typeof status !== 'boolean') {
+      return res.status(400).json({ 
+        status: false, 
+        message: 'userid and status (boolean) are required' 
+      });
+    }
+
+    const collection = db.collection('dashboard_statistics');
+    
+    // Use upsert to either insert new document or update existing one
+    const filter = { userid: userid };
+    const update = {
+      $set: {
+        userid: userid,
+        status: status,
+        updatedAt: new Date()
+      },
+      $setOnInsert: {
+        createdAt: new Date()
+      }
+    };
+
+    const result = await collection.updateOne(filter, update, { upsert: true });
+
+    // Get the updated/inserted document
+    const updatedDocument = await collection.findOne({ userid: userid });
+
+    if (result.upsertedCount > 0) {
+      res.status(201).json({ 
+        status: true, 
+        message: 'Dashboard statistics created successfully',
+        data: updatedDocument
+      });
+    } else if (result.modifiedCount > 0) {
+      res.status(200).json({ 
+        status: true, 
+        message: 'Dashboard statistics updated successfully',
+        data: updatedDocument
+      });
+    } else {
+      res.status(200).json({ 
+        status: true, 
+        message: 'No changes needed',
+        data: updatedDocument
+      });
+    }
+
+  } catch (err) {
+    console.error('Error in dashboard-checked endpoint:', err);
+    next(err);
+  }
+});
+
   // GET Method
   router.get('/:collection', async (req, res) => {
     try {
