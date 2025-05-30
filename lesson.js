@@ -183,6 +183,9 @@ const updateEnrollAnalytics = async (targetDb, courseId, userId, analytics) => {
         // Adjust `complete` count to include `revising` as a valid completion level
         const adjustedComplete = analytics.complete;
 
+        // Check if all tasks are complete (100% completion)
+        const isFullyComplete = adjustedComplete === analytics.total && analytics.total > 0;
+
         // Map the analytics data to the enrollment format
         const updatedAnalytics = {
             total: analytics.total,
@@ -208,21 +211,29 @@ const updateEnrollAnalytics = async (targetDb, courseId, userId, analytics) => {
 
         //console.log("Enrollment ID:", enrollment._id);
 
+        // Prepare the update object
+        const updateData = {
+            $set: {
+                'analytics.total': updatedAnalytics.total,
+                'analytics.pending': updatedAnalytics.pending,
+                'analytics.processing': updatedAnalytics.processing,
+                'analytics.complete': updatedAnalytics.complete,
+                'analytics.percent': updatedAnalytics.percent,
+                'analytics.status': updatedAnalytics.status,
+                'analytics.message': updatedAnalytics.message,
+                updatedAt: new Date(),
+            },
+        };
+
+        // Add completeDateAt if all tasks are complete and it doesn't already exist
+        if (isFullyComplete && !enrollment.completeDateAt) {
+            updateData.$set.completeDateAt = new Date();
+        }
+
         // Update the enrollment document with the new analytics
         const result = await targetDb.collection('enroll').updateOne(
             { _id: enrollment._id },
-            {
-                $set: {
-                    'analytics.total': updatedAnalytics.total,
-                    'analytics.pending': updatedAnalytics.pending,
-                    'analytics.processing': updatedAnalytics.processing,
-                    'analytics.complete': updatedAnalytics.complete,
-                    'analytics.percent': updatedAnalytics.percent,
-                    'analytics.status': updatedAnalytics.status,
-                    'analytics.message': updatedAnalytics.message,
-                    updatedAt: new Date(),
-                },
-            }
+            updateData
         );
 
         return result.modifiedCount > 0;
