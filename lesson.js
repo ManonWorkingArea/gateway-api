@@ -2252,6 +2252,7 @@ router.post('/progress/:option', async (req, res) => {
                     status: 'complete', // Set status to 'complete'
                     reason: reason || '',
                     updatedAt: new Date(),
+                    completeDateAt: new Date(),
                 },
             };
         
