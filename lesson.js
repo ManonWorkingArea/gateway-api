@@ -1138,12 +1138,11 @@ router.post('/course/:id/:playerID?', async (req, res) => {
             return scheduleConfig.flatMap((entry) => {
                 if (entry.round) {
                     return entry.rounds
-                        .filter(round => round.StartDateUsed || round.EndDateUsed)
                         .map(round => {
                             const config = {
                                 item: entry.item,
-                                startDate: round.StartDateUsed ? round.StartDate : null,
-                                endDate: round.EndDateUsed ? round.EndDate : null,
+                                startDate: typeof round.StartDate !== "undefined" ? round.StartDate : null,
+                                endDate: typeof round.EndDate !== "undefined" ? round.EndDate : null,
                                 roundName: round.name
                             };
                             return {
@@ -1165,6 +1164,7 @@ router.post('/course/:id/:playerID?', async (req, res) => {
                 }
             });
         };
+        
         // Function to get the current time in UTC+7 as a timestamp
         const getNowInTimezoneTimestamp = () => {
             const now = new Date();
@@ -2594,26 +2594,25 @@ router.post('/enroll', async (req, res) => {
 
             // Function to reformat scheduleConfig
             const formatScheduleConfig = (scheduleConfig) => {
-            return scheduleConfig.flatMap((entry) => {
-                if (entry.round) {
-                    return entry.rounds
-                        .filter(round => round.StartDateUsed || round.EndDateUsed)
-                        .map(round => ({
-                            item: entry.item,
-                            startDate: round.StartDateUsed ? round.StartDate : null,
-                            endDate: round.EndDateUsed ? round.EndDate : null,
-                            roundName: round.name
-                        }));
-                } else {
+                return scheduleConfig.flatMap(entry => {
+                  if (entry.round) {
+                    return entry.rounds.map(round => ({
+                      item: entry.item,
+                      startDate: round.StartDate || null,
+                      endDate: round.EndDate || null,
+                      roundName: round.name
+                    }));
+                  } else {
                     return [{
-                        item: entry.item,
-                        startDate: entry.startDate,
-                        endDate: entry.endDate,
-                        roundName: null
+                      item: entry.item,
+                      startDate: entry.startDate,
+                      endDate: entry.endDate,
+                      roundName: null
                     }];
-                }
-            });
-            };
+                  }
+                });
+              };
+              
             // Function to get the current time in UTC+7 as a timestamp
             const getNowInTimezoneTimestamp = () => {
             const now = new Date();
@@ -2686,20 +2685,21 @@ router.post('/enroll', async (req, res) => {
 
             // Function to filter and add status + now to scheduleConfig
             const filterScheduleByExamDate = (scheduleConfig, selectedExamDate) => {
-            if (!selectedExamDate || !selectedExamDate.value) {
-                return scheduleConfig.map(entry => {
+                if (!selectedExamDate || !selectedExamDate.value) {
+                  return scheduleConfig.map(entry => {
                     const statusResult = determineStatus(entry.startDate, entry.endDate);
-                    return { ...entry, status: statusResult.status, now: statusResult.now }; // Add status & now
-                });
-            }
-
-            return scheduleConfig
-                .filter(entry => !entry.roundName || entry.roundName === selectedExamDate.value)
-                .map(entry => {
+                    return { ...entry, status: statusResult.status, now: statusResult.now, prefix: statusResult.prefix };
+                  });
+                }
+              
+                return scheduleConfig
+                  .filter(entry => !entry.roundName || entry.roundName === selectedExamDate.value)
+                  .map(entry => {
                     const statusResult = determineStatus(entry.startDate, entry.endDate);
-                    return { ...entry, now: statusResult.now, status: statusResult.status, prefix: statusResult.prefix }; // Add status & now
-                });
-            };
+                    return { ...entry, status: statusResult.status, now: statusResult.now, prefix: statusResult.prefix };
+                  });
+              };
+              
 
             // Format and filter scheduleConfig
             const formattedScheduleConfig = (courseDetails && courseDetails.scheduleConfig) 
