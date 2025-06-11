@@ -1614,20 +1614,18 @@ router.post('/assessment/:id/:exam?', async (req, res) => {
         const formatScheduleConfig = (scheduleConfig) => {
             return scheduleConfig.flatMap((entry) => {
                 if (entry.round) {
-                    return entry.rounds
-                        .filter(round => round.StartDateUsed || round.EndDateUsed)
-                        .map(round => {
-                            const config = {
-                                item: entry.item,
-                                startDate: round.StartDateUsed ? round.StartDate : null,
-                                endDate: round.EndDateUsed ? round.EndDate : null,
-                                roundName: round.name
-                            };
-                            return {
-                                ...config,
-                                status: determineStatus(config.startDate, config.endDate).status
-                            };
-                        });
+                    return entry.rounds.map(round => {
+                        const config = {
+                            item: entry.item,
+                            startDate: typeof round.StartDate !== "undefined" ? round.StartDate : null,
+                            endDate: typeof round.EndDate !== "undefined" ? round.EndDate : null,
+                            roundName: round.name
+                        };
+                        return {
+                            ...config,
+                            status: determineStatus(config.startDate, config.endDate).status
+                        };
+                    });
                 } else {
                     const config = {
                         item: entry.item,
@@ -1642,6 +1640,7 @@ router.post('/assessment/:id/:exam?', async (req, res) => {
                 }
             });
         };
+        
 
         const getNowInTimezoneTimestamp = () => {
             const now = new Date();
