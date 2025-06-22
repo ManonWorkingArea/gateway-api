@@ -167,7 +167,7 @@ router.post('/orders', async (req, res) => {
         const siteIdString = siteData._id.toString();
 
         // Get current date in UTC to ensure filtering for orders created in 2025
-        const startOf2025 = new Date('2025-04-01T00:00:00.000Z');
+        const startOf2025 = new Date('2025-06-20T00:00:00.000Z');
         const endOf2025 = new Date('2025-12-31T23:59:59.999Z');
 
         // Fetch orders where the unit matches, createdAt is in 2025, and status is pending
