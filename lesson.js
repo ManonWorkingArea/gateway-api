@@ -3468,7 +3468,7 @@ router.post('/data/submit', async (req, res) => {
 
         // Generate order code
         const rawCode = await generateOrderCode(collection);
-        const customerTypeCode = formData["radiobox-17-0-11"]?.value?.value === "online" ? "02" : "01";
+        const customerTypeCode = formData["radiobox-17-0-11"]?.value?.value === "online" ? "05" : "06";
         const orderCode = `${customerTypeCode}${rawCode}`;
 
         // Check if an order already exists for the given courseID and userID
