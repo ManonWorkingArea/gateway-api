@@ -15,6 +15,7 @@ const inventoryRoutes = require('./routes/dss/inventorys');
 const attributeRoutes = require('./routes/dss/attributes');
 const suppliersRouter = require('./routes/dss/suppliers');
 const storeRoutes = require('./routes/dss/store');
+const promotionRoutes = require('./routes/dss/promotions');
 
 // Middleware to authenticate client
 router.use(authenticateClient);
@@ -32,4 +33,5 @@ router.use('/inventorys', inventoryRoutes);
 router.use('/attributes', attributeRoutes);
 router.use('/suppliers', suppliersRouter);
 router.use('/store', storeRoutes);
+router.use('/promotions', promotionRoutes);
 module.exports = router; 
