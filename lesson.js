@@ -584,6 +584,33 @@ router.post('/course/:id/:playerID?', async (req, res) => {
             },
         ])
         .toArray();
+
+        // Fetch lecturer details
+        let lecturerDetails = [];
+        if (course.lecturer && Array.isArray(course.lecturer) && course.lecturer.length > 0) {
+            const lecturerIds = course.lecturer.map(lecturer => safeObjectId(lecturer._id));
+            lecturerDetails = await targetDb.collection('lecturer')
+                .find({ _id: { $in: lecturerIds } })
+                .toArray();
+        }
+
+        // Fetch institution details
+        let institutionDetails = [];
+        if (course.institution && Array.isArray(course.institution) && course.institution.length > 0) {
+            const institutionIds = course.institution.map(institution => safeObjectId(institution._id));
+            institutionDetails = await targetDb.collection('institution')
+                .find({ _id: { $in: institutionIds } })
+                .toArray();
+        }
+
+        // Fetch target details
+        let targetDetails = [];
+        if (course.target && Array.isArray(course.target) && course.target.length > 0) {
+            const targetIds = course.target.map(target => safeObjectId(target._id));
+            targetDetails = await targetDb.collection('target')
+                .find({ _id: { $in: targetIds } })
+                .toArray();
+        }
         
         // Step 1: Fetch the main players with index
         const mainPlayers = await playerCollection
@@ -1321,6 +1348,9 @@ router.post('/course/:id/:playerID?', async (req, res) => {
                 name: course.name,
                 slug: course.slug,
                 category: categoryDetails,
+                lecturer: lecturerDetails,
+                institution: institutionDetails,
+                target: targetDetails,
                 description: course.description,
                 shortDescription: course.short_description,
                 cover: course.cover,
