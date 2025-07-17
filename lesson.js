@@ -1357,6 +1357,7 @@ router.post('/course/:id/:playerID?', async (req, res) => {
                 thumbnail: course.thumbnail,
                 hours: course.hours,
                 days: course.days,
+                ...(course.has_nights && { nights: course.nights }),
                 scheduleConfig: filtered, // ✅ Reformatted scheduleConfig
                 prices: {
                     regular: course.regular_price || 0,
