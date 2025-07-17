@@ -1090,11 +1090,19 @@ router.post('/course/:id/:playerID?', async (req, res) => {
 
          // Fetch schedule data for onsite courses
          let scheduleData = null;
+         let courseScheduleData = null;
          if (course.type === 'onsite') {
              const scheduleCollection = targetDb.collection('schedule');
              scheduleData = await scheduleCollection
                  .find({ courseId: courseId.toString(), parent: siteIdString })
                  .sort({ date: 1 }) // Assuming schedules have a 'date' field for sorting
+                 .toArray();
+
+             // Fetch course_schedule data for onsite courses
+             const courseScheduleCollection = targetDb.collection('course_schedule');
+             courseScheduleData = await courseScheduleCollection
+                 .find({ courseId: courseId.toString() })
+                 .sort({ startdate: 1 }) // Sort by start date
                  .toArray();
          }
          //console.log("courseId",courseId.toString());
@@ -1367,6 +1375,7 @@ router.post('/course/:id/:playerID?', async (req, res) => {
             },
             
             ...(course.type === 'onsite' && scheduleData && { schedule: scheduleData }), // Include schedule data for onsite courses
+            ...(course.type === 'onsite' && courseScheduleData && { courseSchedule: courseScheduleData }), // Include course_schedule data for onsite courses
             playlist: syncedPlayersWithProgress,
             analytics: {
                 total: counts.total,
