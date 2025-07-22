@@ -671,7 +671,7 @@ router.post('/dashboard', async (req, res, next) => {
       }
     ];
 
-    // Pipeline สำหรับหาหลักสูตรที่มีคน enroll มากที่สุดในช่วงเวลาที่กำหนด (เฉพาะ unit ที่กำหนด)
+    // Pipeline สำหรับหาหลักสูตรที่มีคน enroll ในช่วงเวลาที่กำหนด (เฉพาะ unit ที่กำหนด)
     const topEnrolledCoursePipeline = [
       {
         $match: {
@@ -717,9 +717,6 @@ router.post('/dashboard', async (req, res, next) => {
         $sort: {
           enrollCount: -1
         }
-      },
-      {
-        $limit: 10
       },
       {
         $project: {
