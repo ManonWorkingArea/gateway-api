@@ -671,7 +671,7 @@ router.post('/dashboard', async (req, res, next) => {
       }
     ];
 
-    // Pipeline สำหรับหาหลักสูตรที่มีคน enroll มากที่สุดในช่วงเวลาที่กำหนด
+    // Pipeline สำหรับหาหลักสูตรที่มีคน enroll มากที่สุดในช่วงเวลาที่กำหนด (เฉพาะ unit ที่กำหนด)
     const topEnrolledCoursePipeline = [
       {
         $match: {
@@ -708,6 +708,12 @@ router.post('/dashboard', async (req, res, next) => {
         }
       },
       {
+        $match: {
+          'course.unit': '6425be9928ebd01be519d7bd',
+          'course.status': true
+        }
+      },
+      {
         $sort: {
           enrollCount: -1
         }
@@ -725,7 +731,8 @@ router.post('/dashboard', async (req, res, next) => {
           'course.type': 1,
           'course.lecturer': 1,
           'course.category': 1,
-          'course.status': 1
+          'course.status': 1,
+          'course.unit': 1
         }
       }
     ];
