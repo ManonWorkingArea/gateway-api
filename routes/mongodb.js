@@ -671,17 +671,78 @@ router.post('/dashboard', async (req, res, next) => {
       }
     ];
 
-    // ทำการ query ทั้งสองอันพร้อมกัน
-    const [userResult, courseResult] = await Promise.all([
+    // Pipeline สำหรับหาหลักสูตรที่มีคน enroll มากที่สุดในช่วงเวลาที่กำหนด
+    const topEnrolledCoursePipeline = [
+      {
+        $match: {
+          createdAt: {
+            $gte: new Date(startUTC),
+            $lte: new Date(endUTC)
+          }
+        }
+      },
+      {
+        $group: {
+          _id: '$courseID',
+          enrollCount: { $sum: 1 },
+          enrollmentDates: { $push: '$createdAt' }
+        }
+      },
+      {
+        $set: {
+          courseIdObj: { $toObjectId: '$_id' }
+        }
+      },
+      {
+        $lookup: {
+          from: 'course',
+          localField: 'courseIdObj',
+          foreignField: '_id',
+          as: 'course'
+        }
+      },
+      {
+        $unwind: {
+          path: '$course',
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      {
+        $sort: {
+          enrollCount: -1
+        }
+      },
+      {
+        $limit: 10
+      },
+      {
+        $project: {
+          _id: 0,
+          courseID: '$_id',
+          enrollCount: 1,
+          'course._id': 1,
+          'course.name': 1,
+          'course.type': 1,
+          'course.lecturer': 1,
+          'course.category': 1,
+          'course.status': 1
+        }
+      }
+    ];
+
+    // ทำการ query ทั้งสามอันพร้อมกัน
+    const [userResult, courseResult, topEnrolledResult] = await Promise.all([
       db.collection('enroll').aggregate(userPipeline).toArray(),
-      db.collection('course').aggregate(coursePipeline).toArray()
+      db.collection('course').aggregate(coursePipeline).toArray(),
+      db.collection('enroll').aggregate(topEnrolledCoursePipeline).toArray()
     ]);
 
     res.status(200).json({ 
       status: true, 
       data: {
         user: userResult,
-        course: courseResult
+        course: courseResult,
+        topEnrolledCourses: topEnrolledResult
       }
     });
 
