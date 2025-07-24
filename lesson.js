@@ -1385,6 +1385,7 @@ router.post('/course/:id/:playerID?', async (req, res) => {
                     playlistUpdatedAt: latestUpdatedAt,
                     enrollID,
                     submitID: enrollment?.submitID || null, // Include submitID if available
+                    function: course.exam_only === true ? 'exam' : 'course', // Add function based on exam_only
                 },
                 enrollType: enrollment?.type || null,
                 isEnroll: !! enrollment,
