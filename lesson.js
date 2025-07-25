@@ -2992,14 +2992,29 @@ router.post('/certification/:id/:cid?', async (req, res) => {
             courseID: courseId.toString() 
         });
 
-        // ดึงข้อมูลฟอร์มจาก formID หรือ submitID ถ้ามี
+        // ดึงข้อมูลฟอร์มจาก formID, submitID หรือ userID + courseID ถ้ามี
         let formData = null;
         if (enrollment) {
             if (enrollment.formID) {
                 formData = await formCollection.findOne({ _id: safeObjectId(enrollment.formID) });
             } else if (enrollment.submitID) {
                 formData = await formCollection.findOne({ _id: safeObjectId(enrollment.submitID) });
+            } else {
+                // ลองดึงข้อมูล form จาก userID และ courseID
+                formData = await formCollection.findOne({ 
+                    userID: userDetails._id.toString(), 
+                    courseID: courseId.toString() 
+                });
             }
+        }
+
+        // ถ้าไม่พบข้อมูล form ให้ return object ที่แจ้งว่าไม่มีข้อมูล
+        if (!formData) {
+            formData = {
+                message: "ไม่พบข้อมูลฟอร์ม",
+                hasData: false,
+                formData: null
+            };
         }
 
         const certificationTemplateCollection = targetDb.collection('certification_template');
