@@ -215,7 +215,6 @@ router.post('/page', async (req, res) => {
                 owner: site,
                 parent: pageDoc._id.toString(),
                 type: 'post',
-                status: true,
             });
 
             if (!postDoc) {
@@ -239,7 +238,6 @@ router.post('/page', async (req, res) => {
                     owner: site,
                     parent: pageDoc._id.toString(),
                     type: 'post',
-                    status: true,
                 })
                 .sort({ createdAt: -1 }) // Assuming you have a `createdAt` field for sorting
                 .limit(5)
