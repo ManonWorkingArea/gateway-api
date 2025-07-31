@@ -1619,7 +1619,7 @@ router.post('/enroll/update', async (req, res) => {
     //console.log("decryptedData",decryptedData);
     
     // Extract properties from the decrypted data
-    const { corporateName, remainingUpdateLimit, courseId, enrollId, timestamp, site, authen } = decryptedData;
+    const { type, corporateName, remainingUpdateLimit, courseId, enrollId, timestamp, site, authen } = decryptedData;
 
     try {
         // Validate required fields
@@ -1662,7 +1662,7 @@ router.post('/enroll/update', async (req, res) => {
 
         // Prepare the certification update
         const certificationUpdate = {
-            type: 'corporate',
+            type: type || 'personal', // Use type from body, default to 'personal' if not provided
             corporateName: corporateName,
             remainingUpdateLimit: remainingUpdateLimit || 0,
             timestamp: timestamp || new Date().toISOString(),
