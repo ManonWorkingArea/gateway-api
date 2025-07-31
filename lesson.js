@@ -1458,7 +1458,8 @@ router.post('/course/:id/:playerID?', async (req, res) => {
                 enrollment: { 
                     ...enrollment, 
                     submit: submitFormData || null, // Add submitFormData into enrollment
-                    selectedExamDate: selectedExamDate // Add selectedExamDate into enrollment
+                    selectedExamDate: selectedExamDate, // Add selectedExamDate into enrollment
+                    certification: enrollment.certification || null // Add certification data if exists
                 }
             }),
             ...(player && { player }), // Add specific player data if present
