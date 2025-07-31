@@ -1368,6 +1368,19 @@ router.post('/course/:id/:playerID?', async (req, res) => {
                     template: course.certification_template,
                     type: course.certification_type,
                     id: course.certificationId,
+                    owner: (() => {
+                        const owners = [];
+                        // Always include 'personal' as default
+                        if (course.cert_owner_personal === 'yes' || !course.cert_owner_personal) {
+                            owners.push('personal');
+                        }
+                        // Add 'corporate' only if explicitly set to 'yes'
+                        if (course.cert_owner_corperate === 'yes') {
+                            owners.push('corporate');
+                        }
+                        // Ensure 'personal' is always included if no owners are set
+                        return owners.length > 0 ? owners : ['personal'];
+                    })(),
                 },
                 survey: {
                     has: course.survey,
@@ -1939,6 +1952,19 @@ router.post('/assessment/:id/:exam?', async (req, res) => {
                     template: course.certification_template,
                     type: course.certification_type,
                     id: course.certificationId,
+                    owner: (() => {
+                        const owners = [];
+                        // Always include 'personal' as default
+                        if (course.cert_owner_personal === 'yes' || !course.cert_owner_personal) {
+                            owners.push('personal');
+                        }
+                        // Add 'corporate' only if explicitly set to 'yes'
+                        if (course.cert_owner_corperate === 'yes') {
+                            owners.push('corporate');
+                        }
+                        // Ensure 'personal' is always included if no owners are set
+                        return owners.length > 0 ? owners : ['personal'];
+                    })(),
                 },
                 survey: {
                     has: course.survey,
