@@ -1633,7 +1633,7 @@ router.post('/enroll/update', async (req, res) => {
 
         // Only validate corporateName if type is 'corporate'
         if (type === 'corporate' && !corporateName) {
-            //return res.status(400).json({ error: 'corporateName is required when type is corporate.' });
+            return res.status(400).json({ error: 'corporateName is required when type is corporate.' });
         }
 
         // Authenticate user (optional, depending on your requirements)
@@ -1661,41 +1661,60 @@ router.post('/enroll/update', async (req, res) => {
             return res.status(404).json({ error: 'Enrollment not found.' });
         }
 
-        // Prepare the certification update
-        const certificationUpdate = {
-            type: type || 'personal', // Use type from body, default to 'personal' if not provided
-            corporateName: corporateName,
-            remainingUpdateLimit: remainingUpdateLimit || 0,
-            timestamp: timestamp || new Date().toISOString(),
-            updatedAt: new Date()
-        };
+        let updateResult;
+        let updatedCertification;
 
-        // Update the enrollment with certification information
-        const updateResult = await enrollCollection.updateOne(
-            { _id: safeObjectId(enrollId) },
-            {
-                $set: {
-                    'certification': certificationUpdate,
-                    updatedAt: new Date()
+        // Handle different type scenarios
+        if (type === 'personal') {
+            // Clear certification for personal type
+            updateResult = await enrollCollection.updateOne(
+                { _id: safeObjectId(enrollId) },
+                {
+                    $unset: {
+                        'certification': ''
+                    },
+                    $set: {
+                        updatedAt: new Date()
+                    }
                 }
-            }
-        );
+            );
+            updatedCertification = null;
+        } else {
+            // Set certification data for corporate or other types
+            const certificationUpdate = {
+                type: type || 'personal',
+                corporateName: corporateName,
+                remainingUpdateLimit: remainingUpdateLimit || 0,
+                timestamp: timestamp || new Date().toISOString(),
+                updatedAt: new Date()
+            };
+
+            updateResult = await enrollCollection.updateOne(
+                { _id: safeObjectId(enrollId) },
+                {
+                    $set: {
+                        'certification': certificationUpdate,
+                        updatedAt: new Date()
+                    }
+                }
+            );
+            updatedCertification = certificationUpdate;
+        }
 
         if (updateResult.matchedCount === 0) {
             return res.status(404).json({ error: 'Enrollment not found or could not be updated.' });
         }
 
-        // Fetch the updated enrollment to return
-        const updatedEnrollment = await enrollCollection.findOne({ _id: safeObjectId(enrollId) });
-
         res.status(200).json({
             success: true,
-            message: 'Enrollment updated with corporate certification successfully.',
+            message: type === 'personal' 
+                ? 'Enrollment certification cleared successfully.' 
+                : 'Enrollment updated with certification successfully.',
             data: {
                 enrollId: enrollId,
                 courseId: courseId,
-                certification: updatedEnrollment.certification,
-                updatedAt: updatedEnrollment.updatedAt
+                certification: updatedCertification,
+                updatedAt: new Date()
             }
         });
 
