@@ -1611,6 +1611,93 @@ router.post('/reset/:id', async (req, res) => {
     }
 });
 
+// Endpoint to update enrollment with corporate certification information
+router.post('/enroll/update', async (req, res) => {
+    const { corporateName, remainingUpdateLimit, courseId, enrollId, timestamp, site, authen } = req.body;
+
+    try {
+        // Validate required fields
+        if (!enrollId) {
+            return res.status(400).json({ error: 'enrollId is required.' });
+        }
+
+        if (!site) {
+            return res.status(400).json({ error: 'Site parameter is required.' });
+        }
+
+        if (!corporateName) {
+            return res.status(400).json({ error: 'corporateName is required.' });
+        }
+
+        // Authenticate user (optional, depending on your requirements)
+        let user = null;
+        if (authen) {
+            const authResult = await authenticateUserToken(authen, res);
+            if (authResult.status) {
+                user = authResult.user;
+            }
+        }
+
+        const { client } = req;
+        const { targetDb, siteData } = await getSiteSpecificDb(client, site);
+
+        if (!siteData || !siteData._id) {
+            return res.status(404).json({ error: 'Site data not found or invalid.' });
+        }
+
+        const enrollCollection = targetDb.collection('enroll');
+
+        // Fetch the enrollment by enrollId
+        const enrollment = await enrollCollection.findOne({ _id: safeObjectId(enrollId) });
+
+        if (!enrollment) {
+            return res.status(404).json({ error: 'Enrollment not found.' });
+        }
+
+        // Prepare the certification update
+        const certificationUpdate = {
+            type: 'corporate',
+            corporateName: corporateName,
+            remainingUpdateLimit: remainingUpdateLimit || 0,
+            timestamp: timestamp || new Date().toISOString(),
+            updatedAt: new Date()
+        };
+
+        // Update the enrollment with certification information
+        const updateResult = await enrollCollection.updateOne(
+            { _id: safeObjectId(enrollId) },
+            {
+                $set: {
+                    'certification': certificationUpdate,
+                    updatedAt: new Date()
+                }
+            }
+        );
+
+        if (updateResult.matchedCount === 0) {
+            return res.status(404).json({ error: 'Enrollment not found or could not be updated.' });
+        }
+
+        // Fetch the updated enrollment to return
+        const updatedEnrollment = await enrollCollection.findOne({ _id: safeObjectId(enrollId) });
+
+        res.status(200).json({
+            success: true,
+            message: 'Enrollment updated with corporate certification successfully.',
+            data: {
+                enrollId: enrollId,
+                courseId: courseId,
+                certification: updatedEnrollment.certification,
+                updatedAt: updatedEnrollment.updatedAt
+            }
+        });
+
+    } catch (error) {
+        console.error('Error updating enrollment:', error.message, error.stack);
+        res.status(500).json({ error: 'An error occurred while updating enrollment.' });
+    }
+});
+
 // Endpoint to fetch course details with score, exam, and answer data including questions
 router.post('/assessment/:id/:exam?', async (req, res) => {
     const { id, exam } = req.params;
