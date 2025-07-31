@@ -1631,8 +1631,9 @@ router.post('/enroll/update', async (req, res) => {
             return res.status(400).json({ error: 'Site parameter is required.' });
         }
 
-        if (!corporateName) {
-            return res.status(400).json({ error: 'corporateName is required.' });
+        // Only validate corporateName if type is 'corporate'
+        if (type === 'corporate' && !corporateName) {
+            return res.status(400).json({ error: 'corporateName is required when type is corporate.' });
         }
 
         // Authenticate user (optional, depending on your requirements)
