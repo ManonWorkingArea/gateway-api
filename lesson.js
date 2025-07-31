@@ -1613,7 +1613,12 @@ router.post('/reset/:id', async (req, res) => {
 
 // Endpoint to update enrollment with corporate certification information
 router.post('/enroll/update', async (req, res) => {
-    const { corporateName, remainingUpdateLimit, courseId, enrollId, timestamp, site, authen } = req.body;
+    // Decrypt the data from the request body
+    const decryptedData = decrypt(req.body.data);
+    //console.log("decryptedData",decryptedData);
+    
+    // Extract properties from the decrypted data
+    const { corporateName, remainingUpdateLimit, courseId, enrollId, timestamp, site, authen } = decryptedData;
 
     try {
         // Validate required fields
