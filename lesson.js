@@ -495,7 +495,7 @@ router.post('/course/featured', async (req, res) => {
 // Endpoint to fetch course details and related player data
 router.post('/course/:id/:playerID?', async (req, res) => {
     const { id, playerID } = req.params;
-    const { site, authen } = req.body;
+    const { site, authen, disableCache = true } = req.body; // Add disableCache parameter
 
     // Authen User Middleware
     // Authen User Middleware (optional)
@@ -517,9 +517,21 @@ router.post('/course/:id/:playerID?', async (req, res) => {
             return res.status(400).json({ error: 'Site parameter is required.' });
         }
 
-        const cacheKey = `playerData:${courseId}`;
-        const cachedPlayerData = await redisClient.get(cacheKey);
-
+        const cacheKey = `courseData:${courseId}:${user || 'anonymous'}`;
+        
+        // Check cache only if caching is enabled
+        if (!disableCache) {
+            const cachedData = await redisClient.get(cacheKey);
+            if (cachedData) {
+                console.log('DAT :: Redis Cache Hit');
+                return res.status(200).json({ 
+                    ...JSON.parse(cachedData), 
+                    cache: true 
+                });
+            }
+        }
+        
+        console.log('DAT :: MongoDB - Fresh Data');
         const { client } = req;
         const { targetDb, siteData } = await getSiteSpecificDb(client, site);
 
@@ -589,9 +601,33 @@ router.post('/course/:id/:playerID?', async (req, res) => {
         let lecturerDetails = [];
         if (course.lecturer && Array.isArray(course.lecturer) && course.lecturer.length > 0) {
             const lecturerIds = course.lecturer.map(lecturer => safeObjectId(lecturer._id));
-            lecturerDetails = await targetDb.collection('lecturer')
+            const rawLecturerDetails = await targetDb.collection('lecturer')
                 .find({ _id: { $in: lecturerIds } })
+                .project({
+                    _id: 1,
+                    unit: 1,
+                    name: 1,
+                    code: 1,
+                    description: 1,
+                    education: 1,
+                    type: 1,
+                    order: 1,
+                    logo: 1, // Include logo field
+                    createdAt: 1,
+                    updatedAt: 1
+                })
                 .toArray();
+            
+            // Transform the data to ensure proper date formatting
+            lecturerDetails = rawLecturerDetails.map(lecturer => ({
+                ...lecturer,
+                createdAt: lecturer.createdAt instanceof Date 
+                    ? lecturer.createdAt.toISOString() 
+                    : lecturer.createdAt,
+                updatedAt: lecturer.updatedAt instanceof Date 
+                    ? lecturer.updatedAt.toISOString() 
+                    : lecturer.updatedAt
+            }));
         }
 
         // Fetch institution details
@@ -1469,6 +1505,19 @@ router.post('/course/:id/:playerID?', async (req, res) => {
             ...(isOrder && { order }),
             ...(latestPreviousFormSubmission && { previousFormSubmission: latestPreviousFormSubmission }), // Add latest previous form submission if found
         };
+
+        // Add cache information to response
+        formattedResponse.cache = false;
+
+        // Cache the response if caching is enabled
+        if (!disableCache) {
+            try {
+                await redisClient.setEx(cacheKey, 300, JSON.stringify(formattedResponse)); // Cache for 5 minutes
+                console.log('DAT :: Cached courseData');
+            } catch (cacheError) {
+                console.warn('Failed to cache course data:', cacheError.message);
+            }
+        }
 
         res.status(200).json(formattedResponse);
         // console.log("formattedResponse",formattedResponse);
