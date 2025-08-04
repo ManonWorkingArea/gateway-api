@@ -603,24 +603,19 @@ router.post('/course/:id/:playerID?', async (req, res) => {
             const lecturerIds = course.lecturer.map(lecturer => safeObjectId(lecturer._id));
             const rawLecturerDetails = await targetDb.collection('lecturer')
                 .find({ _id: { $in: lecturerIds } })
-                .project({
-                    _id: 1,
-                    unit: 1,
-                    name: 1,
-                    code: 1,
-                    description: 1,
-                    education: 1,
-                    type: 1,
-                    order: 1,
-                    logo: 1, // Include logo field
-                    createdAt: 1,
-                    updatedAt: 1
-                })
-                .toArray();
+                .toArray(); // Get all fields without projection to debug
             
-            // Transform the data to ensure proper date formatting
+            // Transform the data to ensure proper date formatting and add missing fields
             lecturerDetails = rawLecturerDetails.map(lecturer => ({
-                ...lecturer,
+                _id: lecturer._id,
+                unit: lecturer.unit,
+                name: lecturer.name,
+                code: lecturer.code,
+                description: lecturer.description,
+                education: lecturer.education,
+                type: lecturer.type,
+                order: lecturer.order,
+                logo: lecturer.logo || null, // Include logo field with fallback
                 createdAt: lecturer.createdAt instanceof Date 
                     ? lecturer.createdAt.toISOString() 
                     : lecturer.createdAt,
