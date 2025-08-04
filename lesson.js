@@ -1586,8 +1586,17 @@ const calculateCoursePropertiesById = async (courseId, userId, targetDb) => {
     // Calculate properties
     const isEnroll = !!enrollment;
     const isSurvey = !!surveyData;
-    const isForm = enrollment?.submitID ? false : !!formData; // isForm is false if enrollment has submitID
+    
+    // Check isForm based on course.form_required
+    // If form_required is not "yes", isForm should always be false
+    let isForm = false;
+    if (course.form_required === 'yes') {
+        // Only if form_required is "yes", check if enrollment has submitID
+        isForm = enrollment?.submitID ? false : !!formData; // isForm is false if enrollment has submitID
+    }
+    // If form_required is null, "no", or any other value, isForm remains false
 
+    console.log("course.form_required:", course.form_required);
     console.log("isForm", isForm);
     const isPay = !isForm && course.sale_price > 0; // Logic for paid courses
     const isComplete = enrollment?.analytics?.percent === 100 || false; // Example completion logic
