@@ -597,32 +597,64 @@ router.post('/course/:id/:playerID?', async (req, res) => {
         ])
         .toArray();
 
-        // Fetch lecturer details
+        // Fetch lecturer details - Always fetch fresh data from lecturer collection
         let lecturerDetails = [];
         if (course.lecturer && Array.isArray(course.lecturer) && course.lecturer.length > 0) {
-            const lecturerIds = course.lecturer.map(lecturer => safeObjectId(lecturer._id));
-            const rawLecturerDetails = await targetDb.collection('lecturer')
-                .find({ _id: { $in: lecturerIds } })
-                .toArray(); // Get all fields without projection to debug
-            
-            // Transform the data to ensure proper date formatting and add missing fields
-            lecturerDetails = rawLecturerDetails.map(lecturer => ({
-                _id: lecturer._id,
-                unit: lecturer.unit,
-                name: lecturer.name,
-                code: lecturer.code,
-                description: lecturer.description,
-                education: lecturer.education,
-                type: lecturer.type,
-                order: lecturer.order,
-                logo: lecturer.logo || null, // Include logo field with fallback
-                createdAt: lecturer.createdAt instanceof Date 
-                    ? lecturer.createdAt.toISOString() 
-                    : lecturer.createdAt,
-                updatedAt: lecturer.updatedAt instanceof Date 
-                    ? lecturer.updatedAt.toISOString() 
-                    : lecturer.updatedAt
-            }));
+            // Extract lecturer IDs from course.lecturer array
+            const lecturerIds = course.lecturer.map(lecturer => {
+                // If lecturer is stored as object with _id, extract the _id
+                if (lecturer && typeof lecturer === 'object' && lecturer._id) {
+                    return safeObjectId(lecturer._id);
+                }
+                // If lecturer is stored as string ID directly
+                if (typeof lecturer === 'string') {
+                    return safeObjectId(lecturer);
+                }
+                // Fallback: try to convert lecturer itself as ID
+                return safeObjectId(lecturer);
+            }).filter(id => id !== null); // Remove invalid IDs
+
+            console.log('Fresh lecturer IDs to fetch:', lecturerIds);
+
+            if (lecturerIds.length > 0) {
+                // Always fetch fresh data from lecturer collection
+                const freshLecturerDetails = await targetDb.collection('lecturer')
+                    .find({ _id: { $in: lecturerIds } })
+                    .toArray(); // Get all fields to ensure we have the latest data
+                
+                console.log('Fresh lecturer details found:', freshLecturerDetails.length);
+                console.log('Sample lecturer data:', freshLecturerDetails[0] ? {
+                    _id: freshLecturerDetails[0]._id,
+                    name: freshLecturerDetails[0].name,
+                    logo: freshLecturerDetails[0].logo,
+                    updatedAt: freshLecturerDetails[0].updatedAt
+                } : 'No data');
+                
+                // Transform the fresh data to ensure proper formatting
+                lecturerDetails = freshLecturerDetails.map(lecturer => ({
+                    _id: lecturer._id,
+                    unit: lecturer.unit,
+                    name: lecturer.name,
+                    code: lecturer.code,
+                    description: lecturer.description,
+                    education: lecturer.education,
+                    type: lecturer.type,
+                    order: lecturer.order,
+                    logo: lecturer.logo || null, // Fresh logo data
+                    createdAt: lecturer.createdAt instanceof Date 
+                        ? lecturer.createdAt.toISOString() 
+                        : lecturer.createdAt,
+                    updatedAt: lecturer.updatedAt instanceof Date 
+                        ? lecturer.updatedAt.toISOString() 
+                        : lecturer.updatedAt
+                }));
+
+                console.log('Transformed lecturer details:', lecturerDetails.map(l => ({
+                    name: l.name,
+                    logo: l.logo,
+                    updatedAt: l.updatedAt
+                })));
+            }
         }
 
         // Fetch institution details
