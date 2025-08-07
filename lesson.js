@@ -674,6 +674,28 @@ router.post('/course/:id/:playerID?', async (req, res) => {
                 .find({ _id: { $in: targetIds } })
                 .toArray();
         }
+
+        // Fetch document details linked to this course
+        let documentDetails = [];
+        const documentCollection = targetDb.collection('document');
+        documentDetails = await documentCollection
+            .find({ courseId: course._id.toString() })
+            .sort({ createdAt: -1 }) // Sort by newest first
+            .toArray();
+
+        console.log('Document details found for course:', documentDetails.length);
+        
+        // Transform document data to ensure proper formatting
+        const formattedDocuments = documentDetails.map(doc => ({
+            _id: doc._id,
+            courseId: doc.courseId,
+            file: doc.file,
+            name: doc.name,
+            type: doc.type,
+            createdAt: doc.createdAt instanceof Date 
+                ? doc.createdAt.toISOString() 
+                : doc.createdAt
+        }));
         
         // Step 1: Fetch the main players with index
         const mainPlayers = await playerCollection
@@ -1414,6 +1436,7 @@ router.post('/course/:id/:playerID?', async (req, res) => {
                 lecturer: lecturerDetails,
                 institution: institutionDetails,
                 target: targetDetails,
+                documents: formattedDocuments, // Add documents to course data
                 description: course.description,
                 shortDescription: course.short_description,
                 cover: course.cover,
