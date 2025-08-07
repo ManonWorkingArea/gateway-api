@@ -679,7 +679,7 @@ router.post('/course/:id/:playerID?', async (req, res) => {
         let documentDetails = [];
         const documentCollection = targetDb.collection('document');
         documentDetails = await documentCollection
-            .find({ courseId: course._id.toString() })
+            .find({ courseId: course.master })
             .sort({ createdAt: -1 }) // Sort by newest first
             .toArray();
 
