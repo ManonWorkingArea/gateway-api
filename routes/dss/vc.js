@@ -135,3 +135,104 @@ router.delete('/om/:omId', async (req, res) => {
 });
 
 module.exports = router; 
+
+// ==================== MARKERS ENDPOINTS ====================
+
+// GET /vc/markers - List all markers
+router.get('/markers', async (req, res) => {
+    try {
+        const db = req.client.db('dss');
+        const markersCollectionName = 'vc_markers_defs';
+        // Ensure collection exists
+        const collections = await db.listCollections({ name: markersCollectionName }).toArray();
+        if (collections.length === 0) await db.createCollection(markersCollectionName);
+
+        const markers = await db.collection(markersCollectionName)
+            .find({}, { projection: { /* return all fields */ } })
+            .toArray();
+
+        res.status(200).json({ success: true, data: markers });
+    } catch (error) {
+        console.error('Error fetching VC markers:', error);
+        res.status(500).json({ error: 'Failed to fetch VC markers' });
+    }
+});
+
+// POST /vc/markers - Create a new marker { name, color, description }
+router.post('/markers', async (req, res) => {
+    try {
+        const db = req.client.db('dss');
+        const collection = db.collection('vc_markers_defs');
+        const { name, color, description, code } = req.body || {};
+
+        if (!name) {
+            return res.status(400).json({ error: 'name is required' });
+        }
+
+        const newMarker = {
+            name,
+            color: color || null,
+            description: description || null,
+            ...(code ? { code } : {}),
+            createdAt: new Date(),
+            updatedAt: new Date(),
+        };
+
+        const result = await collection.insertOne(newMarker);
+        res.status(201).json({ success: true, data: { id: result.insertedId, ...newMarker } });
+    } catch (error) {
+        console.error('Error creating VC marker:', error);
+        res.status(500).json({ error: 'Failed to create VC marker' });
+    }
+});
+
+// PUT /vc/markers/:id - Update a marker by ObjectId
+router.put('/markers/:id', async (req, res) => {
+    try {
+        const db = req.client.db('dss');
+        const collection = db.collection('vc_markers_defs');
+        const markerId = safeObjectId(req.params.id);
+        if (!markerId) {
+            return res.status(400).json({ error: 'Invalid marker id' });
+        }
+
+        const { name, color, description, code } = req.body || {};
+        const toSet = {
+            ...(name !== undefined ? { name } : {}),
+            ...(color !== undefined ? { color } : {}),
+            ...(description !== undefined ? { description } : {}),
+            ...(code !== undefined ? { code } : {}),
+            updatedAt: new Date(),
+        };
+
+        const result = await collection.updateOne({ _id: markerId }, { $set: toSet });
+        if (result.matchedCount === 0) {
+            return res.status(404).json({ error: 'Marker not found' });
+        }
+        res.status(200).json({ success: true });
+    } catch (error) {
+        console.error('Error updating VC marker:', error);
+        res.status(500).json({ error: 'Failed to update VC marker' });
+    }
+});
+
+// DELETE /vc/markers/:id - Delete a marker by ObjectId
+router.delete('/markers/:id', async (req, res) => {
+    try {
+        const db = req.client.db('dss');
+        const collection = db.collection('vc_markers_defs');
+        const markerId = safeObjectId(req.params.id);
+        if (!markerId) {
+            return res.status(400).json({ error: 'Invalid marker id' });
+        }
+
+        const result = await collection.deleteOne({ _id: markerId });
+        if (result.deletedCount === 0) {
+            return res.status(404).json({ error: 'Marker not found' });
+        }
+        res.status(200).json({ success: true });
+    } catch (error) {
+        console.error('Error deleting VC marker:', error);
+        res.status(500).json({ error: 'Failed to delete VC marker' });
+    }
+});

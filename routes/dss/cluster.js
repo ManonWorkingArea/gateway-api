@@ -595,3 +595,56 @@ router.delete('/:clusterId/apptech/:id', async (req, res) => {
 });
 
 module.exports = router; 
+
+// ==================== VC-MARKERS MAPPING ====================
+
+// GET /clusters/:clusterId/vc-markers
+// Returns mapping of vcId -> markerIds[] for a given cluster. Two shapes supported based on query 'array=true'
+router.get('/:clusterId/vc-markers', async (req, res) => {
+    try {
+        const db = req.client.db('dss');
+        const mappingCol = db.collection('vc_markers');
+        const { clusterId } = req.params;
+
+        const docs = await mappingCol.find({ clusterId }).toArray();
+        const wantsArray = String(req.query.array || '').toLowerCase() === 'true';
+
+        if (wantsArray) {
+            const data = docs.map(d => ({ vcId: d.vcId, markerIds: d.markerIds || [] }));
+            return res.status(200).json({ success: true, data });
+        }
+
+        const obj = {};
+        for (const d of docs) obj[d.vcId] = d.markerIds || [];
+        return res.status(200).json({ success: true, data: obj });
+    } catch (error) {
+        console.error('Error fetching cluster VC markers mapping:', error);
+        res.status(500).json({ error: 'Failed to fetch VC markers mapping' });
+    }
+});
+
+// PUT /clusters/:clusterId/vc-markers { vcId, markerIds: [] }
+router.put('/:clusterId/vc-markers', async (req, res) => {
+    try {
+        const db = req.client.db('dss');
+        const mappingCol = db.collection('vc_markers');
+        const { clusterId } = req.params;
+        const { vcId, markerIds } = req.body || {};
+
+        if (!vcId || !Array.isArray(markerIds)) {
+            return res.status(400).json({ error: 'vcId and markerIds[] are required' });
+        }
+
+        // Upsert mapping document keyed by clusterId + vcId
+        await mappingCol.updateOne(
+            { clusterId, vcId },
+            { $set: { markerIds } },
+            { upsert: true }
+        );
+
+        res.status(200).json({ success: true });
+    } catch (error) {
+        console.error('Error updating VC markers mapping:', error);
+        res.status(500).json({ error: 'Failed to update VC markers mapping' });
+    }
+});

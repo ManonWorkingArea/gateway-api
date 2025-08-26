@@ -22,6 +22,8 @@ router.use(authenticateClient);
 
 // Mount Routers
 router.use('/cluster', clusterRoutes);
+// Alias plural path for compatibility
+router.use('/clusters', clusterRoutes);
 router.use('/om', omRoutes);
 router.use('/vc', vcRoutes);
 router.use('/sub_vc', subVcRoutes);
