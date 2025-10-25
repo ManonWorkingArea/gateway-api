@@ -16,6 +16,7 @@ const attributeRoutes = require('./routes/dss/attributes');
 const suppliersRouter = require('./routes/dss/suppliers');
 const storeRoutes = require('./routes/dss/store');
 const promotionRoutes = require('./routes/dss/promotions');
+const cmsRoutes = require('./routes/dss/cms');
 
 // Middleware to authenticate client
 router.use(authenticateClient);
@@ -36,4 +37,5 @@ router.use('/attributes', attributeRoutes);
 router.use('/suppliers', suppliersRouter);
 router.use('/store', storeRoutes);
 router.use('/promotions', promotionRoutes);
+router.use('/cms', cmsRoutes);
 module.exports = router; 
