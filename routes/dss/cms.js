@@ -31,8 +31,12 @@ const cmsController = {
       // Add filters (ยกเว้น pagination, sort และ key parameters)
       Object.keys(filters).forEach(key => {
         if (filters[key] && key !== 'key') { // ไม่รวม key parameter
+          // ถ้าเป็น clusterId ให้ใช้ตรงๆ ไม่ต้อง regex
+          if (key === 'clusterId') {
+            query[key] = filters[key];
+          }
           // สำหรับ text search ใช้ regex
-          if (typeof filters[key] === 'string' && !filters[key].match(/^[0-9a-fA-F]{24}$/)) {
+          else if (typeof filters[key] === 'string' && !filters[key].match(/^[0-9a-fA-F]{24}$/)) {
             query[key] = { $regex: filters[key], $options: 'i' };
           } else {
             query[key] = filters[key];
@@ -103,6 +107,7 @@ const cmsController = {
     try {
       const db = req.client.db('dss');
       const { collection, id } = req.params;
+      const { clusterId } = req.query;
       
       const cmsCollection = db.collection(collection);
       const objectId = safeObjectId(id);
@@ -111,12 +116,21 @@ const cmsController = {
         return res.status(400).json({ error: 'Invalid ID format' });
       }
       
-      const item = await cmsCollection.findOne({ _id: objectId });
+      // Build query with clusterId if provided
+      const query = { _id: objectId };
+      if (clusterId) {
+        query.clusterId = clusterId;
+      }
+      
+      console.log('CMS Debug - getById query:', query);
+      
+      const item = await cmsCollection.findOne(query);
       
       if (!item) {
         return res.status(404).json({ 
           error: `${collection} item not found`,
-          id: id
+          id: id,
+          clusterId: clusterId
         });
       }
       
@@ -140,16 +154,24 @@ const cmsController = {
     try {
       const db = req.client.db('dss');
       const { collection } = req.params;
+      const { clusterId } = req.query;
       const data = req.body;
       
       const cmsCollection = db.collection(collection);
       
-      // Add timestamps
+      // Add timestamps and clusterId if provided
       const newItem = {
         ...data,
         createdAt: new Date(),
         updatedAt: new Date()
       };
+      
+      // Add clusterId to document if provided in query
+      if (clusterId) {
+        newItem.clusterId = clusterId;
+      }
+      
+      console.log('CMS Debug - Creating item:', newItem);
       
       const result = await cmsCollection.insertOne(newItem);
       
@@ -175,6 +197,7 @@ const cmsController = {
     try {
       const db = req.client.db('dss');
       const { collection, id } = req.params;
+      const { clusterId } = req.query;
       const data = req.body;
       
       const cmsCollection = db.collection(collection);
@@ -184,25 +207,34 @@ const cmsController = {
         return res.status(400).json({ error: 'Invalid ID format' });
       }
       
+      // Build query with clusterId if provided
+      const query = { _id: objectId };
+      if (clusterId) {
+        query.clusterId = clusterId;
+      }
+      
+      console.log('CMS Debug - update query:', query);
+      
       // Remove _id from update data and add update timestamp
       const updateData = { ...data };
       delete updateData._id;
       updateData.updatedAt = new Date();
       
       const result = await cmsCollection.updateOne(
-        { _id: objectId },
+        query,
         { $set: updateData }
       );
       
       if (result.matchedCount === 0) {
         return res.status(404).json({ 
           error: `${collection} item not found`,
-          id: id
+          id: id,
+          clusterId: clusterId
         });
       }
       
       // Return updated document
-      const updatedDoc = await cmsCollection.findOne({ _id: objectId });
+      const updatedDoc = await cmsCollection.findOne(query);
       
       res.json({
         success: true,
@@ -224,6 +256,7 @@ const cmsController = {
     try {
       const db = req.client.db('dss');
       const { collection, id } = req.params;
+      const { clusterId } = req.query;
       
       const cmsCollection = db.collection(collection);
       const objectId = safeObjectId(id);
@@ -232,19 +265,29 @@ const cmsController = {
         return res.status(400).json({ error: 'Invalid ID format' });
       }
       
-      const result = await cmsCollection.deleteOne({ _id: objectId });
+      // Build query with clusterId if provided
+      const query = { _id: objectId };
+      if (clusterId) {
+        query.clusterId = clusterId;
+      }
+      
+      console.log('CMS Debug - delete query:', query);
+      
+      const result = await cmsCollection.deleteOne(query);
       
       if (result.deletedCount === 0) {
         return res.status(404).json({ 
           error: `${collection} item not found`,
-          id: id
+          id: id,
+          clusterId: clusterId
         });
       }
       
       res.json({
         success: true,
         message: `${collection} item deleted successfully`,
-        id: id
+        id: id,
+        clusterId: clusterId
       });
       
     } catch (error) {

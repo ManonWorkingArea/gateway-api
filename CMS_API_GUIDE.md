@@ -35,6 +35,7 @@ GET /dss/cms/{collection}
 ```
 
 #### Parameters
+- `clusterId` - ID ของ cluster สำหรับกรองข้อมูล (สำคัญ!)
 - `sort` - เรียงลำดับ (field หรือ -field สำหรับ DESC)
 - `paging` - เปิด/ปิด pagination (true/false)
 - `page` - หน้าที่ต้องการ (เริ่มจาก 1)
@@ -43,20 +44,20 @@ GET /dss/cms/{collection}
 
 #### ตัวอย่าง
 ```bash
-# ดึงข้อมูลทั้งหมด
-GET /dss/cms/banner
+# ดึงข้อมูลทั้งหมดจาก cluster ระบุ
+GET /dss/cms/news?key=DU1eYMDG7j8yb199YDPg3&clusterId=6801d7765d22052ed2bdf10b
 
-# ดึงข้อมูลแบบ pagination
-GET /dss/cms/banner?paging=true&page=1&limit=10
+# ดึงข้อมูลแบบ pagination จาก cluster
+GET /dss/cms/banner?paging=true&page=1&limit=10&clusterId=6801d7765d22052ed2bdf10b&key=DU1eYMDG7j8yb199YDPg3
 
-# เรียงลำดับตามวันที่สร้าง (ใหม่ไปเก่า) + key
-GET /dss/cms/banner?sort=-createdAt&key=DU1eYMDG7j8yb199YDPg3
+# เรียงลำดับตามวันที่สร้าง (ใหม่ไปเก่า)
+GET /dss/cms/banner?sort=-createdAt&clusterId=6801d7765d22052ed2bdf10b&key=DU1eYMDG7j8yb199YDPg3
 
-# ค้นหาตามชื่อ + key
-GET /dss/cms/banner?title=โปรโมชั่น&key=DU1eYMDG7j8yb199YDPg3
+# ค้นหาตามชื่อในคลัสเตอร์ระบุ
+GET /dss/cms/banner?title=โปรโมชั่น&clusterId=6801d7765d22052ed2bdf10b&key=DU1eYMDG7j8yb199YDPg3
 
 # รวมหลายเงื่อนไข
-GET /dss/cms/banner?active=true&sort=-createdAt&paging=true&page=1&limit=5&key=DU1eYMDG7j8yb199YDPg3
+GET /dss/cms/banner?active=true&sort=-createdAt&paging=true&page=1&limit=5&clusterId=6801d7765d22052ed2bdf10b&key=DU1eYMDG7j8yb199YDPg3
 ```
 
 #### Response
@@ -84,12 +85,12 @@ GET /dss/cms/banner?active=true&sort=-createdAt&paging=true&page=1&limit=5&key=D
 
 ### 2. ดึงข้อมูลเดียว (GET by ID)
 ```
-GET /dss/cms/{collection}/{id}
+GET /dss/cms/{collection}/{id}?clusterId={clusterId}
 ```
 
 #### ตัวอย่าง
 ```bash
-GET /dss/cms/banner/67123abc456def789012345
+GET /dss/cms/banner/67123abc456def789012345?clusterId=6801d7765d22052ed2bdf10b&key=DU1eYMDG7j8yb199YDPg3
 ```
 
 #### Response
@@ -109,12 +110,12 @@ GET /dss/cms/banner/67123abc456def789012345
 
 ### 3. สร้างข้อมูลใหม่ (POST)
 ```
-POST /dss/cms/{collection}
+POST /dss/cms/{collection}?clusterId={clusterId}
 ```
 
 #### ตัวอย่าง
 ```bash
-POST /dss/cms/banner
+POST /dss/cms/banner?clusterId=6801d7765d22052ed2bdf10b&key=DU1eYMDG7j8yb199YDPg3
 Content-Type: application/json
 
 {
@@ -126,6 +127,8 @@ Content-Type: application/json
   "endDate": "2025-11-30"
 }
 ```
+
+**หมายเหตุ:** `clusterId` จะถูกเพิ่มเข้าไปใน document อัตโนมัติ
 
 #### Response
 ```json
@@ -147,12 +150,12 @@ Content-Type: application/json
 
 ### 4. อัปเดตข้อมูล (PUT)
 ```
-PUT /dss/cms/{collection}/{id}
+PUT /dss/cms/{collection}/{id}?clusterId={clusterId}
 ```
 
 #### ตัวอย่าง
 ```bash
-PUT /dss/cms/banner/67123abc456def789012345
+PUT /dss/cms/banner/67123abc456def789012345?clusterId=6801d7765d22052ed2bdf10b&key=DU1eYMDG7j8yb199YDPg3
 Content-Type: application/json
 
 {
@@ -179,12 +182,12 @@ Content-Type: application/json
 
 ### 5. ลบข้อมูล (DELETE)
 ```
-DELETE /dss/cms/{collection}/{id}
+DELETE /dss/cms/{collection}/{id}?clusterId={clusterId}
 ```
 
 #### ตัวอย่าง
 ```bash
-DELETE /dss/cms/banner/67123abc456def789012345
+DELETE /dss/cms/banner/67123abc456def789012345?clusterId=6801d7765d22052ed2bdf10b&key=DU1eYMDG7j8yb199YDPg3
 ```
 
 #### Response
