@@ -9,16 +9,28 @@ const cmsController = {
     try {
       const db = req.client.db('dss'); // ใช้ MongoDB connection จาก middleware
       const { collection } = req.params;
-      const { sort, paging, page, limit, ...filters } = req.query;
+      const { sort, paging, page, limit, key, ...filters } = req.query; // เพิ่ม key ใน destructuring
+      
+      console.log('CMS Debug - Collection:', collection);
+      console.log('CMS Debug - Query params:', req.query);
+      console.log('CMS Debug - Filters:', filters);
       
       const cmsCollection = db.collection(collection);
+      
+      // ตรวจสอบว่ามี collection หรือไม่
+      const collectionExists = await db.listCollections({ name: collection }).hasNext();
+      console.log('CMS Debug - Collection exists:', collectionExists);
+      
+      // นับจำนวน documents ใน collection
+      const totalDocs = await cmsCollection.countDocuments({});
+      console.log('CMS Debug - Total documents in collection:', totalDocs);
       
       // Build query object for MongoDB
       let query = {};
       
-      // Add filters (ยกเว้น pagination และ sort parameters)
+      // Add filters (ยกเว้น pagination, sort และ key parameters)
       Object.keys(filters).forEach(key => {
-        if (filters[key]) {
+        if (filters[key] && key !== 'key') { // ไม่รวม key parameter
           // สำหรับ text search ใช้ regex
           if (typeof filters[key] === 'string' && !filters[key].match(/^[0-9a-fA-F]{24}$/)) {
             query[key] = { $regex: filters[key], $options: 'i' };
@@ -27,6 +39,8 @@ const cmsController = {
           }
         }
       });
+      
+      console.log('CMS Debug - MongoDB query:', query);
       
       let cursor = cmsCollection.find(query);
       
@@ -68,6 +82,7 @@ const cmsController = {
         });
       } else {
         result = await cursor.toArray();
+        console.log('CMS Debug - Result count:', result.length);
         res.json({
           success: true,
           data: result
@@ -250,6 +265,9 @@ function isValidCollectionName(collectionName) {
     'banner', 'news', 'promotions', 'categories', 'content', 
     'pages', 'media', 'settings', 'announcements', 'events'
   ];
+  
+  console.log('CMS Debug - Validating collection:', collectionName);
+  console.log('CMS Debug - Is valid:', allowedCollections.includes(collectionName));
   
   // ถ้าต้องการให้เปิดกว้างมากขึ้น ใช้ regex validation แทน
   // return /^[a-zA-Z][a-zA-Z0-9_]*$/.test(collectionName);
