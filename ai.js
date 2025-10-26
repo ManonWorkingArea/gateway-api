@@ -5,7 +5,7 @@ const router = express.Router();
 // Function to process document using APYHub API
 const processDocumentWithAPYHub = async (documentUrl) => {
   console.debug('เริ่มประมวลผลเอกสารด้วย APYHub:', documentUrl);
-  const apyToken = "APY0JmXvN2ITNOrFGv2lLIi9ZNzWa608fZiKol83fyyppqRJjqUolCIJ6RmHAItK";
+  const apyToken = "APY0Cf99TYvtbYlAVMpOR3WuN9kB7t0oEU7VkNVMBA7IWObVngg799MiMr9O1Jtq";
   const body = JSON.stringify({
     url: documentUrl,
     requested_service: "apyhub",
