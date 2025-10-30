@@ -1,4 +1,5 @@
 const express           = require('express');
+const dns               = require('dns');
 const bodyParser        = require('body-parser');
 const cors              = require('cors');
 const dotenv            = require('dotenv');
@@ -34,6 +35,15 @@ global.ReadableStream   = require('stream/web').ReadableStream;
 dotenv.config();
 const app = express();
 const rateLimit = require('express-rate-limit');
+
+// Prefer IPv4 first to avoid environments where IPv6 egress is blocked (prevents TLS handshake issues)
+try {
+  if (typeof dns.setDefaultResultOrder === 'function') {
+    dns.setDefaultResultOrder('ipv4first');
+  }
+} catch (e) {
+  // Non-fatal: older Node versions may not support this API
+}
 
 // Rate limiting
 const apiLimiter = rateLimit({

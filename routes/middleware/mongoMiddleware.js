@@ -32,19 +32,52 @@ async function connectToMongoDB(retries = 5) {
 
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
+      const maxPoolSize = Number(process.env.MONGODB_MAX_POOL_SIZE) || 100;
+      const serverSelectionTimeoutMS = Number(process.env.MONGODB_SERVER_SELECTION_TIMEOUT_MS) || 10000;
+      const socketTimeoutMS = Number(process.env.MONGODB_SOCKET_TIMEOUT_MS) || 45000;
+      const tls = process.env.MONGODB_TLS === 'false' ? false : true; // default true (Atlas requires TLS)
+      const tlsInsecure = process.env.MONGODB_TLS_INSECURE === 'true';
+
       mongoClient = new MongoClient(process.env.MONGODB_URI, {
+        // Parser/Topology
         useNewUrlParser: true,
         useUnifiedTopology: true,
-        maxPoolSize: 100,
-        serverSelectionTimeoutMS: 5000,
-        socketTimeoutMS: 45000,
+        // Pooling/timeouts
+        maxPoolSize,
+        minPoolSize: Number(process.env.MONGODB_MIN_POOL_SIZE) || 0,
+        serverSelectionTimeoutMS,
+        waitQueueTimeoutMS: Number(process.env.MONGODB_WAIT_QUEUE_TIMEOUT_MS) || 5000,
+        socketTimeoutMS,
+        // Reliability
         retryWrites: true,
+        retryReads: true,
+        // TLS
+        tls,
+        tlsInsecure,
+        // Metadata
+        appName: process.env.MONGODB_APP_NAME || 'gateway-api',
       });
       await mongoClient.connect();
       console.log('MON :: Connected');
       break;
     } catch (err) {
       console.error(`MongoDB connection attempt ${attempt} failed:`, err);
+      if (err && err.name === 'MongoServerSelectionError' && err.reason) {
+        try {
+          const reason = err.reason;
+          const serverKeys = reason.servers && typeof reason.servers.keys === 'function'
+            ? Array.from(reason.servers.keys())
+            : [];
+          console.error('MongoDB server selection details:', {
+            type: reason.type,
+            setName: reason.setName,
+            heartbeatFrequencyMS: reason.heartbeatFrequencyMS,
+            servers: serverKeys,
+          });
+        } catch (_) {
+          // best-effort logging only
+        }
+      }
       if (attempt === retries) throw err;
       await new Promise(resolve => setTimeout(resolve, attempt * 1000));
     } finally {
