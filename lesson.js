@@ -2816,6 +2816,7 @@ router.post('/enroll', async (req, res) => {
                 endRegistDate: 1,
                 startRegistDate: 1,
                 scheduleConfig: 1,
+                recommended_courses: 1,
             })
             .sort({ createdAt: -1 }) // Sort courses by createdAt in descending order
             .toArray();
@@ -2825,6 +2826,27 @@ router.post('/enroll', async (req, res) => {
             map[course._id.toString()] = course;
             return map;
         }, {});
+
+        // Fetch recommended course details from all enrolled courses
+        const allRecommendedIds = new Set();
+        courses.forEach(course => {
+            if (course.recommended_courses && Array.isArray(course.recommended_courses)) {
+                course.recommended_courses.forEach(id => allRecommendedIds.add(id));
+            }
+        });
+        
+        let recommendedCourseMap = {};
+        if (allRecommendedIds.size > 0) {
+            const recIds = [...allRecommendedIds].map(id => safeObjectId(id)).filter(Boolean);
+            const recommendedCourses = await courseCollection
+                .find({ _id: { $in: recIds } })
+                .project({ _id: 1, name: 1, cover: 1, type: 1, slug: 1, regular_price: 1, sale_price: 1, unit: 1 })
+                .toArray();
+            recommendedCourseMap = recommendedCourses.reduce((map, c) => {
+                map[c._id.toString()] = c;
+                return map;
+            }, {});
+        }
 
         // Fetch related order data for each enrollment
         const orderIds = enrollments.map((enrollment) => safeObjectId(enrollment.orderID)).filter(Boolean);
@@ -3026,11 +3048,30 @@ router.post('/enroll', async (req, res) => {
             enrollment.course && enrollment.course.unit === siteIdString
         );
 
+        // Collect all recommended courses from filtered enrollments, deduplicate, filter same unit
+        const recommendedSet = new Set();
+        filteredEnrollments.forEach(enrollment => {
+            if (enrollment.course?.recommended_courses && Array.isArray(enrollment.course.recommended_courses)) {
+                enrollment.course.recommended_courses.forEach(id => {
+                    const idStr = id.toString ? id.toString() : id;
+                    // Exclude courses the user is already enrolled in
+                    if (!filteredEnrollments.some(e => e.course?._id?.toString() === idStr)) {
+                        recommendedSet.add(idStr);
+                    }
+                });
+            }
+        });
+
+        const recommendedCourses = [...recommendedSet]
+            .map(id => recommendedCourseMap[id])
+            .filter(c => c && c.unit === siteIdString);
+
         // console.log("filteredEnrollments",filteredEnrollments);
 
         res.status(200).json({
             success: true,
             data: filteredEnrollments,
+            recommendedCourses: recommendedCourses,
         });
     } catch (error) {
         console.error('Error fetching enrollments:', error.message, error.stack);
