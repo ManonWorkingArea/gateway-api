@@ -577,25 +577,28 @@ router.post('/course/:id/:playerID?', async (req, res) => {
             code: { $regex: `^${code.trim()}$`, $options: 'i' }, // Enforce full-string matching
         }));
         
-        const categoryDetails = await targetDb.collection('category')
-        .aggregate([
-            {
-                $match: {
-                    $or: regexConditions,
+        let categoryDetails = [];
+        if (regexConditions.length > 0) {
+            categoryDetails = await targetDb.collection('category')
+            .aggregate([
+                {
+                    $match: {
+                        $or: regexConditions,
+                    },
                 },
-            },
-            {
-                $group: {
-                    _id: "$code", // Group by 'code'
-                    name: { $first: "$name" }, // Keep the first 'name' for each 'code'
-                    code: { $first: "$code" }, // Keep the first 'code' for each group
+                {
+                    $group: {
+                        _id: "$code",
+                        name: { $first: "$name" },
+                        code: { $first: "$code" },
+                    },
                 },
-            },
-            {
-                $project: { _id: 0, name: 1, code: 1 }, // Remove _id from the output
-            },
-        ])
-        .toArray();
+                {
+                    $project: { _id: 0, name: 1, code: 1 },
+                },
+            ])
+            .toArray();
+        }
 
         // Fetch lecturer details - Always fetch fresh data from lecturer collection
         let lecturerDetails = [];
@@ -1487,6 +1490,7 @@ router.post('/course/:id/:playerID?', async (req, res) => {
                     function: course.exam_only === true ? 'exam' : 'course', // Add function based on exam_only
                 },
                 enrollType: enrollment?.type || null,
+                enrollMode: course.enroll_mode || 'direct', // โหมดการลงทะเบียน: direct หรือ choose
                 isEnroll: !! enrollment,
                 isSurvey: !! surveyData,
                 isComplete,
