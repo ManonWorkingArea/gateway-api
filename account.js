@@ -494,6 +494,8 @@ router.post('/recover-password', async (req, res) => {
     const { client } = req; // MongoDB client from middleware
     const { site, email } = req.body;
 
+    console.log('[RECOVER] Request body:', { site, email });
+
     if (!site || !email) {
       return res.status(400).json({ 
         status: false, 
@@ -512,11 +514,14 @@ router.post('/recover-password', async (req, res) => {
       });
     }
 
-    // Find the user by email
-    const userResponses = await userCollection.find({
-      parent: site, // Ensure the user belongs to the correct site
-      email,        // Match the email
-    }).toArray();
+    // Find the user by email (check both email and username fields)
+    const userQuery = {
+      parent: site,
+      $or: [{ email }, { username: email }],
+    };
+    console.log('[RECOVER] User query:', JSON.stringify(userQuery));
+    const userResponses = await userCollection.find(userQuery).toArray();
+    console.log('[RECOVER] Found users:', userResponses.length);
 
     let userResponse;
     if (userResponses.length === 1) {
