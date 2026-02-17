@@ -3058,17 +3058,23 @@ router.post('/enroll', async (req, res) => {
             if (enrollment.course?.recommended_courses && Array.isArray(enrollment.course.recommended_courses)) {
                 enrollment.course.recommended_courses.forEach(id => {
                     const idStr = id.toString ? id.toString() : id;
-                    // Exclude courses the user is already enrolled in
-                    if (!filteredEnrollments.some(e => e.course?._id?.toString() === idStr)) {
-                        recommendedSet.add(idStr);
-                    }
+                    recommendedSet.add(idStr);
                 });
             }
         });
 
+        // Build enrolled course ID set for marking
+        const enrolledCourseIds = new Set(filteredEnrollments.map(e => e.course?._id?.toString()).filter(Boolean));
+
         const recommendedCourses = [...recommendedSet]
-            .map(id => recommendedCourseMap[id])
-            .filter(c => c && c.unit === siteIdString);
+            .map(id => {
+                const c = recommendedCourseMap[id];
+                if (c && c.unit === siteIdString) {
+                    return { ...c, isEnrolled: enrolledCourseIds.has(id) };
+                }
+                return null;
+            })
+            .filter(Boolean);
 
         // console.log("filteredEnrollments",filteredEnrollments);
 
