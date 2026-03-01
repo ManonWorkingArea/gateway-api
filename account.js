@@ -196,18 +196,19 @@ router.post('/register', async (req, res) => {
 
     // Prepare email content
     const emailData = {
-      from: siteData.siteName + " <fti.academy@website-backend.email>",
-      to: [firstname + ' ' + lastname + ' <' + email + '>'], // Replace with the user's email for production
+      to: email,
+      fromName: siteData.siteName,
       subject: "รหัส OTP สำหรับเปิดใช้งานบัญชี",
-      plain: `Your OTP code is ${otp}`,
+      text: `Your OTP code is ${otp}`,
       html: htmlContent,
     };
 
     // Send email via API
     try {
-      await axios.post('https://gateway.cloudrestfulapi.com/email/send', emailData, {
+      await axios.post('https://email.origins.observer/send-email', emailData, {
         headers: {
           'Content-Type': 'application/json',
+          'x-tenant': siteData.hostname,
         },
       });
     } catch (emailError) {
@@ -306,16 +307,16 @@ router.post('/verify-otp', async (req, res) => {
 
       // Send welcome email
       const welcomeEmail = {
-        from: siteData.siteName + " <fti.academy@website-backend.email>",
-        to: [user.firstname + ' ' + user.lastname + ' <' + email + '>'],
+        to: email,
+        fromName: siteData.siteName,
         subject: "Welcome to Our Service",
-        plain: `Hello ${user.firstname},\n\nWelcome to Our Service! We're glad to have you on board.\n\nBest regards,\nYour Service Team`,
+        text: `Hello ${user.firstname},\n\nWelcome to Our Service! We're glad to have you on board.\n\nBest regards,\nYour Service Team`,
         html: htmlContent,
       };
 
       try {
-        await axios.post('https://gateway.cloudrestfulapi.com/email/send', welcomeEmail, {
-          headers: { 'Content-Type': 'application/json' },
+        await axios.post('https://email.origins.observer/send-email', welcomeEmail, {
+          headers: { 'Content-Type': 'application/json', 'x-tenant': siteData.hostname },
         });
       } catch (emailError) {
         console.error('Error sending welcome email:', emailError.response?.data || emailError.message);
@@ -389,7 +390,7 @@ router.post('/verify-otp', async (req, res) => {
 router.post('/resend-otp', async (req, res) => {
   try {
     const { client } = req; // MongoDB client from middleware
-    const { site, email } = req.body;
+    const { site, email, mode } = req.body; // mode: 'activate' | 'recovery'
 
     if (!site || !email) {
       return res.status(400).json({ 
@@ -413,20 +414,22 @@ router.post('/resend-otp', async (req, res) => {
       return res.status(404).json({ status: false, message: 'User not found' });
     }
 
-    if (user.status === 'active') {
+    // Block resend for activation mode only if user is already active
+    if (mode !== 'recovery' && user.status === 'active') {
       return res.status(400).json({ status: false, message: 'User is already active' });
     }
 
     // Generate a new OTP
     const newOtp = Math.floor(1000 + Math.random() * 9000);
 
-    // Update the user record with the new OTP
+    // Update the user record with the new OTP (and set unactive for recovery)
+    const otpUpdate = mode === 'recovery'
+      ? { $set: { otp: newOtp, status: 'unactive' }, $currentDate: { updatedAt: true } }
+      : { $set: { otp: newOtp }, $currentDate: { updatedAt: true } };
+
     await userCollection.updateOne(
-      {
-        parent: site, // Ensure the user belongs to the correct site
-        email,        // Match the user's email
-      },
-      { $set: { otp: newOtp }, $currentDate: { updatedAt: true } }
+      { parent: site, email },
+      otpUpdate
     );
 
     // Fetch email template from the 'post' collection using theme configuration
@@ -441,35 +444,45 @@ router.post('/resend-otp', async (req, res) => {
     }
     
     // Render the email content using the builderRender plugin
-    const builderRender = require('./builderRender'); // Import the builderRender plugin
+    const builderRender = require('./builderRender');
+
+    // Choose subject, link and message based on mode
+    const isRecovery = mode === 'recovery';
+    const emailSubject = isRecovery
+      ? 'รหัส OTP สำหรับการกู้คืนรหัสผ่าน'
+      : 'รหัส OTP สำหรับเปิดใช้งานบัญชี';
+    const actionLink = isRecovery
+      ? `https://${siteData.hostname}/user/recovery?email=${encodeURIComponent(email)}&otp=${newOtp}`
+      : `https://${siteData.hostname}/user/activate?email=${encodeURIComponent(email)}&otp=${newOtp}`;
+    const actionLabel = isRecovery ? 'ยืนยัน OTP' : 'เปิดใช้งานบัญชี';
+    const actionNote = isRecovery
+      ? 'กรุณาใช้รหัสนี้ภายใน 15 นาที'
+      : 'กรุณาใช้รหัสนี้ภายใน 15 นาทีเพื่อเปิดใช้งานบัญชีของคุณ';
+
     const dynamicData = `
       <strong>รหัส OTP ใหม่ของคุณ</strong><br/>
       <br/>
       รหัส OTP ใหม่ของคุณคือ <strong>${newOtp}</strong><br/>
-      กรุณาใช้รหัสนี้ภายใน 15 นาทีเพื่อเปิดใช้งานบัญชีของคุณ<br/>
+      ${actionNote}<br/>
       หากคุณไม่ได้ร้องขอรหัสนี้ กรุณาเพิกเฉยต่ออีเมลฉบับนี้ หรือ ติดต่อฝ่ายสนับสนุน<br/><br/>
-      หรือคุณสามารถเปิดใช้งานบัญชีของคุณโดยใช้ลิงก์ต่อไปนี้:<br/>
-      <a href="https://${siteData.hostname}/user/activate?email=${encodeURIComponent(email)}&otp=${newOtp}">
-        เปิดใช้งานบัญชี
-      </a>
+      <a href="${actionLink}">${actionLabel}</a>
     `;
-  
-    
+
     const htmlContent = builderRender(emailTemplate.builder, dynamicData);
 
     // Prepare email content
     const emailData = {
-      from: siteData.siteName + " <fti.academy@website-backend.email>",
-      to: [user.firstname + ' ' + user.lastname + ' <' + email + '>'], // Replace with the user's email for production
-      subject: "รหัส OTP สำหรับเปิดใช้งานบัญชี",
-      plain: `Your new OTP code is ${newOtp}.`,
+      to: email,
+      fromName: siteData.siteName,
+      subject: emailSubject,
+      text: `Your new OTP code is ${newOtp}.`,
       html: htmlContent,
     };
 
     // Send the new OTP to the user's email
     try {
-      await axios.post('https://gateway.cloudrestfulapi.com/email/send', emailData, {
-        headers: { 'Content-Type': 'application/json' },
+      await axios.post('https://email.origins.observer/send-email', emailData, {
+        headers: { 'Content-Type': 'application/json', 'x-tenant': siteData.hostname },
       });
     } catch (emailError) {
       console.error('Error sending OTP email:', emailError.response?.data || emailError.message);
@@ -582,17 +595,17 @@ router.post('/recover-password', async (req, res) => {
 
     // Prepare the email content
     const emailData = {
-      from: `${siteData.siteName} <fti.academy@website-backend.email>`,
-      to: [userResponse.firstname + ' ' + userResponse.lastname + ' <' + email + '>'], // Send to the user's actual email
+      to: email,
+      fromName: siteData.siteName,
       subject: "รหัส OTP สำหรับการกู้คืนรหัสผ่าน",
-      plain: `Your OTP for password recovery is ${recoveryOtp}.`,
-      html: htmlContent, // Use rendered HTML content
+      text: `Your OTP for password recovery is ${recoveryOtp}.`,
+      html: htmlContent,
     };
 
     // Send the OTP email
     try {
-      await axios.post('https://gateway.cloudrestfulapi.com/email/send', emailData, {
-        headers: { 'Content-Type': 'application/json' },
+      await axios.post('https://email.origins.observer/send-email', emailData, {
+        headers: { 'Content-Type': 'application/json', 'x-tenant': siteData.hostname },
       });
     } catch (emailError) {
       console.error('Error sending OTP email:', emailError.response?.data || emailError.message);
@@ -676,17 +689,17 @@ router.post('/reset-password', async (req, res) => {
 
     // Prepare a password change confirmation email
     const emailData = {
-      from: siteData.siteName + " <fti.academy@website-backend.email>",
-      to: [user.firstname + ' ' + user.lastname + ' <' + email + '>'], // Replace with the user's email for production
+      to: email,
+      fromName: siteData.siteName,
       subject: "เปลี่ยนรหัสผ่านสำเร็จแล้ว",
-      plain: `Hello ${user.firstname},\n\nYour password has been successfully changed. If you did not request this change, please contact our support team immediately.\n\nBest regards,\nYour Service Team`,
+      text: `Hello ${user.firstname},\n\nYour password has been successfully changed. If you did not request this change, please contact our support team immediately.\n\nBest regards,\nYour Service Team`,
       html: htmlContent,
     };
 
     // Send confirmation email
     try {
-      await axios.post('https://gateway.cloudrestfulapi.com/email/send', emailData, {
-        headers: { 'Content-Type': 'application/json' },
+      await axios.post('https://email.origins.observer/send-email', emailData, {
+        headers: { 'Content-Type': 'application/json', 'x-tenant': siteData.hostname },
       });
     } catch (emailError) {
       console.error('Error sending confirmation email:', emailError.response?.data || emailError.message);
