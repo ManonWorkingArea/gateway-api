@@ -168,7 +168,7 @@ router.post('/orders', async (req, res) => {
 
         // Get current date in UTC to ensure filtering for orders created in 2025
         const startOf2025 = new Date('2026-02-01T00:00:00.000Z');
-        const endOf2025 = new Date('2026-03-31T23:59:59.999Z');
+        const endOf2025 = new Date('2026-04-31T23:59:59.999Z');
 
         // Fetch orders where the unit matches, createdAt is in 2025, and status is pending
         const orders = await orderCollection.find({
