@@ -1448,6 +1448,7 @@ router.post('/course/:id/:playerID?', async (req, res) => {
                 days: course.days,
                 ...(course.has_nights && { nights: course.nights }),
                 scheduleConfig: filtered, // ✅ Reformatted scheduleConfig
+                scheduleBypassUsers: Array.isArray(course.scheduleBypassUsers) ? course.scheduleBypassUsers : [],
                 prices: {
                     regular: course.regular_price || 0,
                     sale: course.sale_price || 0,
@@ -2168,6 +2169,7 @@ router.post('/assessment/:id/:exam?', async (req, res) => {
                 hours: course.hours,
                 days: course.days,
                 scheduleConfig: filtered, // ✅ Added scheduleConfig
+                scheduleBypassUsers: Array.isArray(course.scheduleBypassUsers) ? course.scheduleBypassUsers : [],
                 prices: {
                     regular: course.regular_price,
                     sale: course.sale_price,
@@ -2820,6 +2822,7 @@ router.post('/enroll', async (req, res) => {
                 endRegistDate: 1,
                 startRegistDate: 1,
                 scheduleConfig: 1,
+                scheduleBypassUsers: 1,
                 recommended_courses: 1,
             })
             .sort({ createdAt: -1 }) // Sort courses by createdAt in descending order
