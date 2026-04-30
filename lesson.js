@@ -2826,6 +2826,7 @@ router.post('/enroll', async (req, res) => {
                 recommended_courses: 1,
                 certificate_profile_edit_enabled: 1,
                 certificate_profile_edit_fields: 1,
+                certificate_profile_edit_button_label: 1,
                 certificate_profile_edit_start_date: 1,
                 certificate_profile_edit_end_date: 1,
             })
