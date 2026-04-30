@@ -3620,6 +3620,95 @@ router.post('/form/submit', async (req, res) => {
     }
 });
 
+router.post('/form/update', async (req, res) => {
+    try {
+        const decryptedData = decrypt(req.body.data);
+        const { site, formData, formID, status, courseID, process, enrollID, submitID, authen } = decryptedData;
+
+        const authResult = await authenticateUserToken(authen, res);
+        if (!authResult.status) return authResult.response;
+        const user = authResult.user;
+
+        if (!site || !formData || !formID || !courseID || !enrollID) {
+            return res.status(400).json({ error: 'Site, formData, formID, courseID, and enrollID are required.' });
+        }
+
+        const { client } = req;
+        const { targetDb, siteData } = await getSiteSpecificDb(client, site);
+
+        if (!siteData || !siteData._id) {
+            return res.status(404).json({ error: 'Site data not found or invalid.' });
+        }
+
+        const siteIdString = siteData._id.toString();
+        const formCollection = targetDb.collection('form');
+        const enrollCollection = targetDb.collection('enroll');
+
+        let existingForm = null;
+
+        if (submitID) {
+            existingForm = await formCollection.findOne({
+                _id: safeObjectId(submitID),
+                userID: user,
+            });
+        }
+
+        if (!existingForm) {
+            existingForm = await formCollection.findOne(
+                {
+                    userID: user,
+                    enrollID: enrollID.toString(),
+                },
+                {
+                    sort: {
+                        updatedAt: -1,
+                        createdAt: -1,
+                    },
+                }
+            );
+        }
+
+        if (!existingForm) {
+            return res.status(404).json({ error: 'Existing form submission not found for the specified enrollment.' });
+        }
+
+        const updatePayload = {
+            parent: siteIdString,
+            formData,
+            formID,
+            status,
+            courseID,
+            process: process || existingForm.process || {},
+            enrollID: enrollID.toString(),
+            userID: user,
+            updatedAt: new Date(),
+        };
+
+        const updateResult = await formCollection.updateOne(
+            { _id: existingForm._id },
+            { $set: updatePayload }
+        );
+
+        if (updateResult.matchedCount === 0) {
+            return res.status(404).json({ error: 'Form submission could not be updated.' });
+        }
+
+        await enrollCollection.updateOne(
+            { _id: safeObjectId(enrollID) },
+            { $set: { submitID: existingForm._id.toString() } }
+        );
+
+        res.status(200).json({
+            success: true,
+            message: 'Form updated successfully.',
+            data: { updatedId: existingForm._id },
+        });
+    } catch (error) {
+        console.error('Error updating form:', error.message, error.stack);
+        res.status(500).json({ error: 'An error occurred while updating the form.' });
+    }
+});
+
 router.post('/order/submit', async (req, res) => {
     try {
         // Decrypt the incoming data
