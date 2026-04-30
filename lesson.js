@@ -2824,6 +2824,10 @@ router.post('/enroll', async (req, res) => {
                 scheduleConfig: 1,
                 scheduleBypassUsers: 1,
                 recommended_courses: 1,
+                certificate_profile_edit_enabled: 1,
+                certificate_profile_edit_fields: 1,
+                certificate_profile_edit_start_date: 1,
+                certificate_profile_edit_end_date: 1,
             })
             .sort({ createdAt: -1 }) // Sort courses by createdAt in descending order
             .toArray();
