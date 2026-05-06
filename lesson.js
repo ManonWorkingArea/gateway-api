@@ -3848,7 +3848,7 @@ function mapOrderData(formData, orderCode, customerTypeCode) {
             div_code: '115-99',
             sub_section_items: [
                 {
-                    sub_section_code: '103-97-041',
+                    sub_section_code: '103-97-042',
                     sub_section_qty: 1,
                     sub_section_amount: 850,
                 },
