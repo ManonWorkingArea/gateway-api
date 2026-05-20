@@ -93,7 +93,9 @@ async function claimPendingOrders(orderCollection, filter) {
             }
         );
 
-        const claimedOrder = claimResult && (claimResult.value || claimResult);
+        const claimedOrder = claimResult && Object.prototype.hasOwnProperty.call(claimResult, 'value')
+            ? claimResult.value
+            : claimResult;
         if (!claimedOrder) {
             break;
         }
