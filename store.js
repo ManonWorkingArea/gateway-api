@@ -58,7 +58,8 @@ async function claimPendingOrders(orderCollection, filter) {
                 $or: [
                     { process: { $exists: false } },
                     { process: null },
-                    { process: 'pending' }
+                    { process: 'pending' },
+                    { process: 'draft' }
                 ]
             },
             {
@@ -306,7 +307,7 @@ router.post('/orders', async (req, res) => {
         });
 
         if (orders.length === 0) {
-            return res.status(404).json({ status: false, message: 'No pending orders created in 2025 found for the given unit' });
+            return res.status(404).json({ status: false, message: 'No pending orders found for the given unit in the configured date window' });
         }
 
         // For each order, fetch userID, formID, enrollID along with order data
