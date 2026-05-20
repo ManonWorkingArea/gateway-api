@@ -483,8 +483,6 @@ router.post('/orders', async (req, res) => {
                             
                         } else {
                             console.log("Failed to post receipt.");
-                            await releaseOrderForRetry(orderCollection, order._id);
-
                             return {
                                 orderId: order._id,
                                 orderCode: order.orderCode,
@@ -494,7 +492,7 @@ router.post('/orders', async (req, res) => {
                                 result: 'receipt_failed',
                                 paymentDetected: true,
                                 receiptIssued: false,
-                                finalStatus: 'pending',
+                                    finalStatus: 'processing',
                                 billData,
                             };
                         }
