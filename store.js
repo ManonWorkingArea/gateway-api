@@ -43,6 +43,103 @@ function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+const ORDER_BATCH_LIMIT = 100;
+const STALE_PROCESSING_MS = 60 * 60 * 1000;
+
+async function claimPendingOrders(orderCollection, filter) {
+    const claimedOrders = [];
+
+    for (let i = 0; i < ORDER_BATCH_LIMIT; i += 1) {
+        const claimedAt = new Date();
+        const claimResult = await orderCollection.findOneAndUpdate(
+            {
+                ...filter,
+                status: 'pending',
+                $or: [
+                    { process: { $exists: false } },
+                    { process: null },
+                    { process: 'pending' }
+                ]
+            },
+            {
+                $set: {
+                    process: 'processing',
+                    processingStartedAt: claimedAt
+                }
+            },
+            {
+                sort: { createdAt: -1 },
+                projection: {
+                    _id: 1,
+                    orderCode: 1,
+                    rawCode: 1,
+                    courseID: 1,
+                    formID: 1,
+                    userID: 1,
+                    unit: 1,
+                    status: 1,
+                    payment: 1,
+                    type: 1,
+                    approve: 1,
+                    createdAt: 1,
+                    updatedAt: 1,
+                    ref1: 1,
+                    ref2: 1,
+                    detailData: 1,
+                    process: 1,
+                    processingStartedAt: 1
+                },
+                returnDocument: 'after'
+            }
+        );
+
+        const claimedOrder = claimResult && (claimResult.value || claimResult);
+        if (!claimedOrder) {
+            break;
+        }
+
+        claimedOrders.push(claimedOrder);
+    }
+
+    return claimedOrders;
+}
+
+async function releaseOrderForRetry(orderCollection, orderId) {
+    await orderCollection.updateOne(
+        { _id: orderId },
+        {
+            $set: {
+                process: 'pending'
+            },
+            $unset: {
+                processingStartedAt: ''
+            }
+        }
+    );
+}
+
+async function resetStaleProcessingOrders(orderCollection, unit) {
+    const staleBefore = new Date(Date.now() - STALE_PROCESSING_MS);
+
+    const result = await orderCollection.updateMany(
+        {
+            unit,
+            process: 'processing',
+            processingStartedAt: { $lte: staleBefore }
+        },
+        {
+            $set: {
+                process: 'pending'
+            },
+            $unset: {
+                processingStartedAt: ''
+            }
+        }
+    );
+
+    return result.modifiedCount || 0;
+}
+
 // Function to make a POST request to the /PostReceipt API
 async function postReceiptApi({
     div_code, 
@@ -148,6 +245,36 @@ async function callBillLookupApi(reference1, reference2, transactionAmount) {
 }
 
 
+router.post('/orders/reset-processing', async (req, res) => {
+    try {
+        const { site } = req.body;
+        const client = req.client;
+
+        if (!site) {
+            return res.status(400).json({ status: false, message: 'Site ID is required' });
+        }
+
+        const { targetDb, siteData } = await getSiteSpecificDb(client, site);
+
+        if (!siteData || !siteData._id) {
+            return res.status(404).json({ error: 'Site data not found or invalid.' });
+        }
+
+        const orderCollection = targetDb.collection('order');
+        const resetCount = await resetStaleProcessingOrders(orderCollection, siteData._id.toString());
+
+        return res.status(200).json({
+            status: true,
+            message: 'Stale processing orders reset successfully',
+            resetCount,
+        });
+    } catch (error) {
+        console.error('An error occurred while resetting processing orders:', error);
+        return res.status(500).json({ status: false, message: 'An error occurred while resetting processing orders' });
+    }
+});
+
+
 router.post('/orders', async (req, res) => {
     try {
         const { site } = req.body;
@@ -170,32 +297,11 @@ router.post('/orders', async (req, res) => {
         const startOf2025 = new Date('2026-05-01T00:00:00.000Z');
         const endOf2025 = new Date('2026-06-30T23:59:59.999Z');
 
-        // Fetch orders where the unit matches, createdAt is in 2025, and status is pending
-        const orders = await orderCollection.find({
+        // Claim newest pending orders first so the next cron run does not pick them again.
+        const orders = await claimPendingOrders(orderCollection, {
             unit: siteIdString,
-            status: 'pending',
             createdAt: { $gte: startOf2025, $lte: endOf2025 }
-        })
-        .project({
-            _id: 1,
-            orderCode: 1,
-            rawCode: 1,
-            courseID: 1,
-            formID: 1,
-            userID: 1,
-            unit: 1,
-            status: 1,
-            payment: 1,
-            type: 1,
-            approve: 1,
-            createdAt: 1,
-            updatedAt: 1,
-            ref1: 1,
-            ref2: 1,
-            detailData: 1
-        })
-        .limit(100) // Limit to the first 10 results
-        .toArray();
+        });
 
         if (orders.length === 0) {
             return res.status(404).json({ status: false, message: 'No pending orders created in 2025 found for the given unit' });
@@ -225,6 +331,7 @@ router.post('/orders', async (req, res) => {
 
             if (!billData) {
                 console.log(`Failed to get Bill Lookup data for Order: ${order._id}`);
+                await releaseOrderForRetry(orderCollection, order._id);
                 return {
                     ...order,  // Include the full order data
                     userID: order.userID,  // Include userID
@@ -250,6 +357,9 @@ router.post('/orders', async (req, res) => {
                                 process: 'draft',
                                 'detailData.transfered_date': billData.tranDate,
                                 'detailData.bankAccount': billData.bankAccount 
+                            },
+                            $unset: {
+                                processingStartedAt: ''
                             }
                         }
                     );
@@ -298,7 +408,7 @@ router.post('/orders', async (req, res) => {
                     
                     const receiptResponse = await postReceiptApi(postReceiptData);
                     
-                    if (receiptResponse.success) {
+                    if (receiptResponse && receiptResponse.success) {
                         console.log("Receipt successfully posted:", receiptResponse);
 
                         // Update Order Status, Process, and Details to 'confirm' since the amounts match
@@ -312,6 +422,9 @@ router.post('/orders', async (req, res) => {
                                     'detailData.receipt_date': new Date(),
                                     'detailData.bankAccount': billData.bankAccount,
                                     'detailData.tranNo': receiptResponse.data 
+                                },
+                                $unset: {
+                                    processingStartedAt: ''
                                 }
                             }
                         );
@@ -334,9 +447,12 @@ router.post('/orders', async (req, res) => {
                         
                     } else {
                         console.log("Failed to post receipt.");
+                        await releaseOrderForRetry(orderCollection, order._id);
                     }
                 }
-            }            
+            } else {
+                await releaseOrderForRetry(orderCollection, order._id);
+            }
 
             return {
                 ...order,  // Include the full order data
