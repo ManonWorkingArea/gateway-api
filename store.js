@@ -309,119 +309,55 @@ router.post('/orders', async (req, res) => {
 
         // For each order, fetch userID, formID, enrollID along with order data
         const enrichedOrders = await Promise.all(orders.map(async (order) => {
-            const userCollection = targetDb.collection('user');
-            const enrollCollection = targetDb.collection('enroll');
-            const formCollection = targetDb.collection('form');
+            try {
+                const userCollection = targetDb.collection('user');
+                const enrollCollection = targetDb.collection('enroll');
+                const formCollection = targetDb.collection('form');
 
-            // Fetch userID from the user collection (just _id)
-            const user = await userCollection.findOne({ _id: order.userID }, { projection: { _id: 1 } });
+                // Fetch userID from the user collection (just _id)
+                const user = await userCollection.findOne({ _id: order.userID }, { projection: { _id: 1 } });
 
-            // Fetch formID from the form collection (just _id)
-            const form = await formCollection.findOne({ formID: order.formID, userID: order.userID }, { projection: { _id: 1 } });
+                // Fetch formID from the form collection (just _id)
+                const form = await formCollection.findOne({ formID: order.formID, userID: order.userID }, { projection: { _id: 1 } });
 
-            // Fetch enrollID by orderID from the enroll collection (just _id)
-            const enroll = await enrollCollection.findOne({
-                courseID: order.courseID.toString(),
-                userID: order.userID.toString(),
-                orderID: order._id.toString()
-            }, { projection: { _id: 1 } });
+                // Fetch enrollID by orderID from the enroll collection (just _id)
+                const enroll = await enrollCollection.findOne({
+                    courseID: order.courseID.toString(),
+                    userID: order.userID.toString(),
+                    orderID: order._id.toString()
+                }, { projection: { _id: 1 } });
 
-            // Make API call to check BillLookup with 1 second delay per request
-            const billData = await callBillLookupApi(order.detailData.transfered_ref1, order.detailData.transfered_ref2, order.detailData.transfered_amount);
+                // Make API call to check BillLookup with 1 second delay per request
+                const billData = await callBillLookupApi(order.detailData.transfered_ref1, order.detailData.transfered_ref2, order.detailData.transfered_amount);
 
-            if (!billData) {
-                console.log(`Failed to get Bill Lookup data for Order: ${order._id}`);
-                await releaseOrderForRetry(orderCollection, order._id);
-                return {
-                    ...order,  // Include the full order data
-                    userID: order.userID,  // Include userID
-                    formID: order.formID,  // Include formID
-                    enrollID: enroll ? enroll._id : null,  // Include enrollID if found
-                    billData: null,  // No data from API
-                };
-            }
-
-            const formattedRef1 = `097${order.detailData.transfered_ref1.padStart(11, '0')}`;
-            const formattedRef2 = `000${order.detailData.transfered_ref2}`;
-
-            if (billData.responseCode === '0002' && billData.reference1 === formattedRef1 && billData.reference2 === formattedRef2) {
-                if (billData.tranAmount !== order.detailData.transfered_amount) {
-                    console.log("Order:" + order._id + " has Already paid but Amount not Match");
-            
-                    // Update Order Status, Process, and Details to 'draft' since the amounts don't match
-                    await orderCollection.updateOne(
-                        { _id: order._id },
-                        { 
-                            $set: { 
-                                status: 'draft', 
-                                process: 'draft',
-                                'detailData.transfered_date': billData.tranDate,
-                                'detailData.bankAccount': billData.bankAccount 
-                            },
-                            $unset: {
-                                processingStartedAt: ''
-                            }
-                        }
-                    );
-            
-                    // Change Enroll Status to false if found
-                    if (enroll) {
-                        await enrollCollection.updateOne(
-                            { _id: enroll._id },
-                            { $set: { status: false } }
-                        );
-                    }
-            
-                    // Change Form Status and Process to 'draft' if found
-                    if (form) {
-                        await formCollection.updateOne(
-                            { _id: form._id },
-                            { $set: { status: false, process: 'draft' } }
-                        );
-                    }
-                } else {
-                    console.log("Order:" + order._id + " has Already paid");
-            
-                    const postReceiptData = {
-                        div_code: order.detailData.div_code,
-                        sub_section_items: [
-                            {
-                                sub_section_code: order.detailData.sub_section_items[0].sub_section_code,
-                                sub_section_qty: order.detailData.sub_section_items[0].sub_section_qty,
-                                sub_section_amount: order.detailData.sub_section_items[0].sub_section_amount
-                            }
-                        ],
-                        bank_account: order.detailData.bank_account,
-                        transfered_date: billData.tranDate,
-                        transfered_amount: order.detailData.transfered_amount,
-                        transfered_ref1: formattedRef1,
-                        transfered_ref2: formattedRef2,
-                        tax_id: order.detailData.tax_id,
-                        branch_id: order.detailData.branch_id,
-                        customer_name: order.detailData.customer_name,
-                        address_1: order.detailData.address_1,
-                        address_2: order.detailData.address_2,
-                        city_name: order.detailData.city_name,
-                        province_name: order.detailData.province_name,
-                        post_code: String(order.detailData.post_code)
+                if (!billData) {
+                    console.log(`Failed to get Bill Lookup data for Order: ${order._id}`);
+                    await releaseOrderForRetry(orderCollection, order._id);
+                    return {
+                        ...order,  // Include the full order data
+                        userID: order.userID,  // Include userID
+                        formID: order.formID,  // Include formID
+                        enrollID: enroll ? enroll._id : null,  // Include enrollID if found
+                        billData: null,  // No data from API
                     };
-                    
-                    const receiptResponse = await postReceiptApi(postReceiptData);
-                    
-                    if (receiptResponse && receiptResponse.success) {
-                        console.log("Receipt successfully posted:", receiptResponse);
+                }
 
-                        // Update Order Status, Process, and Details to 'confirm' since the amounts match
+                const formattedRef1 = `097${order.detailData.transfered_ref1.padStart(11, '0')}`;
+                const formattedRef2 = `000${order.detailData.transfered_ref2}`;
+
+                if (billData.responseCode === '0002' && billData.reference1 === formattedRef1 && billData.reference2 === formattedRef2) {
+                    if (billData.tranAmount !== order.detailData.transfered_amount) {
+                        console.log("Order:" + order._id + " has Already paid but Amount not Match");
+                
+                        // Update Order Status, Process, and Details to 'draft' since the amounts don't match
                         await orderCollection.updateOne(
                             { _id: order._id },
                             { 
                                 $set: { 
-                                    status: 'confirm', 
-                                    process: 'confirm',
+                                    status: 'draft', 
+                                    process: 'draft',
                                     'detailData.transfered_date': billData.tranDate,
-                                    'detailData.receipt_date': new Date(),
-                                    'detailData.bankAccount': billData.bankAccount,
-                                    'detailData.tranNo': receiptResponse.data 
+                                    'detailData.bankAccount': billData.bankAccount 
                                 },
                                 $unset: {
                                     processingStartedAt: ''
@@ -429,38 +365,116 @@ router.post('/orders', async (req, res) => {
                             }
                         );
                 
-                        // Change Enroll Status to true if found
+                        // Change Enroll Status to false if found
                         if (enroll) {
                             await enrollCollection.updateOne(
                                 { _id: enroll._id },
-                                { $set: { status: true } }
+                                { $set: { status: false } }
                             );
                         }
                 
-                        // Change Form Status and Process to 'confirm' if found
+                        // Change Form Status and Process to 'draft' if found
                         if (form) {
                             await formCollection.updateOne(
                                 { _id: form._id },
-                                { $set: { status: true, process: 'confirm' } }
+                                { $set: { status: false, process: 'draft' } }
                             );
                         }
-                        
                     } else {
-                        console.log("Failed to post receipt.");
-                        await releaseOrderForRetry(orderCollection, order._id);
-                    }
-                }
-            } else {
-                await releaseOrderForRetry(orderCollection, order._id);
-            }
+                        console.log("Order:" + order._id + " has Already paid");
+                
+                        const postReceiptData = {
+                            div_code: order.detailData.div_code,
+                            sub_section_items: [
+                                {
+                                    sub_section_code: order.detailData.sub_section_items[0].sub_section_code,
+                                    sub_section_qty: order.detailData.sub_section_items[0].sub_section_qty,
+                                    sub_section_amount: order.detailData.sub_section_items[0].sub_section_amount
+                                }
+                            ],
+                            bank_account: order.detailData.bank_account,
+                            transfered_date: billData.tranDate,
+                            transfered_amount: order.detailData.transfered_amount,
+                            transfered_ref1: formattedRef1,
+                            transfered_ref2: formattedRef2,
+                            tax_id: order.detailData.tax_id,
+                            branch_id: order.detailData.branch_id,
+                            customer_name: order.detailData.customer_name,
+                            address_1: order.detailData.address_1,
+                            address_2: order.detailData.address_2,
+                            city_name: order.detailData.city_name,
+                            province_name: order.detailData.province_name,
+                            post_code: String(order.detailData.post_code)
+                        };
+                        
+                        const receiptResponse = await postReceiptApi(postReceiptData);
+                        
+                        if (receiptResponse && receiptResponse.success) {
+                            console.log("Receipt successfully posted:", receiptResponse);
 
-            return {
-                ...order,  // Include the full order data
-                userID: order.userID,  // Include userID
-                formID: order.formID,  // Include formID
-                enrollID: enroll ? enroll._id : null,  // Include enrollID if found
-                billData: billData, // Include the result of the API call
-            };
+                            // Update Order Status, Process, and Details to 'confirm' since the amounts match
+                            await orderCollection.updateOne(
+                                { _id: order._id },
+                                { 
+                                    $set: { 
+                                        status: 'confirm', 
+                                        process: 'confirm',
+                                        'detailData.transfered_date': billData.tranDate,
+                                        'detailData.receipt_date': new Date(),
+                                        'detailData.bankAccount': billData.bankAccount,
+                                        'detailData.tranNo': receiptResponse.data 
+                                    },
+                                    $unset: {
+                                        processingStartedAt: ''
+                                    }
+                                }
+                            );
+                    
+                            // Change Enroll Status to true if found
+                            if (enroll) {
+                                await enrollCollection.updateOne(
+                                    { _id: enroll._id },
+                                    { $set: { status: true } }
+                                );
+                            }
+                    
+                            // Change Form Status and Process to 'confirm' if found
+                            if (form) {
+                                await formCollection.updateOne(
+                                    { _id: form._id },
+                                    { $set: { status: true, process: 'confirm' } }
+                                );
+                            }
+                            
+                        } else {
+                            console.log("Failed to post receipt.");
+                            await releaseOrderForRetry(orderCollection, order._id);
+                        }
+                    }
+                } else {
+                    await releaseOrderForRetry(orderCollection, order._id);
+                }
+
+                return {
+                    ...order,  // Include the full order data
+                    userID: order.userID,  // Include userID
+                    formID: order.formID,  // Include formID
+                    enrollID: enroll ? enroll._id : null,  // Include enrollID if found
+                    billData: billData, // Include the result of the API call
+                };
+            } catch (orderError) {
+                console.error(`Order processing failed for ${order._id}:`, orderError);
+                await releaseOrderForRetry(orderCollection, order._id);
+
+                return {
+                    ...order,
+                    userID: order.userID,
+                    formID: order.formID,
+                    enrollID: null,
+                    billData: null,
+                    error: orderError.message,
+                };
+            }
         }));
 
         return res.status(200).json({
