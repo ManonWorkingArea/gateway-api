@@ -44,7 +44,7 @@ function delay(ms) {
 }
 
 const ORDER_BATCH_LIMIT = 100;
-const STALE_PROCESSING_MS = 60 * 60 * 1000;
+const STALE_PROCESSING_MS = 15 * 60 * 1000;
 
 async function claimPendingOrders(orderCollection, filter) {
     const claimedOrders = [];
