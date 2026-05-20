@@ -500,8 +500,6 @@ router.post('/orders', async (req, res) => {
                         }
                     }
                 } else {
-                    await releaseOrderForRetry(orderCollection, order._id);
-
                     return {
                         orderId: order._id,
                         orderCode: order.orderCode,
@@ -511,13 +509,12 @@ router.post('/orders', async (req, res) => {
                         result: 'not_paid',
                         paymentDetected: false,
                         receiptIssued: false,
-                        finalStatus: 'pending',
+                        finalStatus: 'processing',
                         billData,
                     };
                 }
             } catch (orderError) {
                 console.error(`Order processing failed for ${order._id}:`, orderError);
-                await releaseOrderForRetry(orderCollection, order._id);
 
                 return {
                     orderId: order._id,
@@ -530,7 +527,7 @@ router.post('/orders', async (req, res) => {
                     result: 'error',
                     paymentDetected: false,
                     receiptIssued: false,
-                    finalStatus: 'pending',
+                    finalStatus: 'processing',
                     error: orderError.message,
                 };
             }
