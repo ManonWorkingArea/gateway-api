@@ -280,6 +280,7 @@ router.post('/orders/reset-processing', async (req, res) => {
 
 router.post('/orders', async (req, res) => {
     try {
+        const jobStartedAt = new Date();
         const { site } = req.body;
         const client = req.client;
 
@@ -337,11 +338,16 @@ router.post('/orders', async (req, res) => {
                     console.log(`Failed to get Bill Lookup data for Order: ${order._id}`);
                     await releaseOrderForRetry(orderCollection, order._id);
                     return {
-                        ...order,  // Include the full order data
-                        userID: order.userID,  // Include userID
-                        formID: order.formID,  // Include formID
-                        enrollID: enroll ? enroll._id : null,  // Include enrollID if found
-                        billData: null,  // No data from API
+                        orderId: order._id,
+                        orderCode: order.orderCode,
+                        createdAt: order.createdAt,
+                        processingStartedAt: order.processingStartedAt,
+                        enrollID: enroll ? enroll._id : null,
+                        result: 'bill_lookup_failed',
+                        paymentDetected: false,
+                        receiptIssued: false,
+                        finalStatus: 'pending',
+                        billData: null,
                     };
                 }
 
@@ -383,6 +389,19 @@ router.post('/orders', async (req, res) => {
                                 { $set: { status: false, process: 'draft' } }
                             );
                         }
+
+                        return {
+                            orderId: order._id,
+                            orderCode: order.orderCode,
+                            createdAt: order.createdAt,
+                            processingStartedAt: order.processingStartedAt,
+                            enrollID: enroll ? enroll._id : null,
+                            result: 'amount_mismatch',
+                            paymentDetected: true,
+                            receiptIssued: false,
+                            finalStatus: 'draft',
+                            billData,
+                        };
                     } else {
                         console.log("Order:" + order._id + " has Already paid");
                 
@@ -448,41 +467,119 @@ router.post('/orders', async (req, res) => {
                                     { $set: { status: true, process: 'confirm' } }
                                 );
                             }
+
+                            return {
+                                orderId: order._id,
+                                orderCode: order.orderCode,
+                                createdAt: order.createdAt,
+                                processingStartedAt: order.processingStartedAt,
+                                enrollID: enroll ? enroll._id : null,
+                                result: 'receipt_issued',
+                                paymentDetected: true,
+                                receiptIssued: true,
+                                finalStatus: 'confirm',
+                                billData,
+                                receiptNo: receiptResponse.data,
+                            };
                             
                         } else {
                             console.log("Failed to post receipt.");
                             await releaseOrderForRetry(orderCollection, order._id);
+
+                            return {
+                                orderId: order._id,
+                                orderCode: order.orderCode,
+                                createdAt: order.createdAt,
+                                processingStartedAt: order.processingStartedAt,
+                                enrollID: enroll ? enroll._id : null,
+                                result: 'receipt_failed',
+                                paymentDetected: true,
+                                receiptIssued: false,
+                                finalStatus: 'pending',
+                                billData,
+                            };
                         }
                     }
                 } else {
                     await releaseOrderForRetry(orderCollection, order._id);
-                }
 
-                return {
-                    ...order,  // Include the full order data
-                    userID: order.userID,  // Include userID
-                    formID: order.formID,  // Include formID
-                    enrollID: enroll ? enroll._id : null,  // Include enrollID if found
-                    billData: billData, // Include the result of the API call
-                };
+                    return {
+                        orderId: order._id,
+                        orderCode: order.orderCode,
+                        createdAt: order.createdAt,
+                        processingStartedAt: order.processingStartedAt,
+                        enrollID: enroll ? enroll._id : null,
+                        result: 'not_paid',
+                        paymentDetected: false,
+                        receiptIssued: false,
+                        finalStatus: 'pending',
+                        billData,
+                    };
+                }
             } catch (orderError) {
                 console.error(`Order processing failed for ${order._id}:`, orderError);
                 await releaseOrderForRetry(orderCollection, order._id);
 
                 return {
-                    ...order,
-                    userID: order.userID,
+                    orderId: order._id,
+                    orderCode: order.orderCode,
+                    createdAt: order.createdAt,
+                    processingStartedAt: order.processingStartedAt,
                     formID: order.formID,
                     enrollID: null,
                     billData: null,
+                    result: 'error',
+                    paymentDetected: false,
+                    receiptIssued: false,
+                    finalStatus: 'pending',
                     error: orderError.message,
                 };
             }
         }));
 
+        const jobFinishedAt = new Date();
+        const summary = enrichedOrders.reduce((accumulator, order) => {
+            accumulator.claimedCount += 1;
+
+            if (order.paymentDetected) {
+                accumulator.paymentDetectedCount += 1;
+            }
+
+            if (order.receiptIssued) {
+                accumulator.receiptIssuedCount += 1;
+            }
+
+            if (order.result === 'amount_mismatch') {
+                accumulator.draftCount += 1;
+            }
+
+            if (order.result === 'not_paid' || order.result === 'bill_lookup_failed' || order.result === 'receipt_failed') {
+                accumulator.pendingRetryCount += 1;
+            }
+
+            if (order.result === 'error') {
+                accumulator.errorCount += 1;
+            }
+
+            return accumulator;
+        }, {
+            claimedCount: 0,
+            paymentDetectedCount: 0,
+            receiptIssuedCount: 0,
+            draftCount: 0,
+            pendingRetryCount: 0,
+            errorCount: 0,
+        });
+
         return res.status(200).json({
             status: true,
             message: 'Orders retrieved successfully',
+            job: {
+                startedAt: jobStartedAt,
+                finishedAt: jobFinishedAt,
+                durationMs: jobFinishedAt.getTime() - jobStartedAt.getTime(),
+            },
+            summary,
             orders: enrichedOrders,
         });
 
