@@ -336,7 +336,6 @@ router.post('/orders', async (req, res) => {
 
                 if (!billData) {
                     console.log(`Failed to get Bill Lookup data for Order: ${order._id}`);
-                    await releaseOrderForRetry(orderCollection, order._id);
                     return {
                         orderId: order._id,
                         orderCode: order.orderCode,
@@ -346,7 +345,7 @@ router.post('/orders', async (req, res) => {
                         result: 'bill_lookup_failed',
                         paymentDetected: false,
                         receiptIssued: false,
-                        finalStatus: 'pending',
+                        finalStatus: 'processing',
                         billData: null,
                     };
                 }
