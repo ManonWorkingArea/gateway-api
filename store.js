@@ -143,6 +143,60 @@ async function resetStaleProcessingOrders(orderCollection, unit) {
     return result.modifiedCount || 0;
 }
 
+async function markOrderAsConfirmed({
+    orderCollection,
+    enrollCollection,
+    formCollection,
+    order,
+    transferedDate,
+    confirmedBy,
+    confirmNote,
+}) {
+    const orderUpdate = {
+        $set: {
+            status: 'confirm',
+            process: 'confirm',
+            confirmedAt: new Date(),
+            confirmSource: 'offline_manual',
+        },
+        $unset: {
+            processingStartedAt: ''
+        }
+    };
+
+    if (transferedDate) {
+        orderUpdate.$set['detailData.transfered_date'] = transferedDate;
+    }
+
+    if (confirmedBy) {
+        orderUpdate.$set.confirmedBy = confirmedBy;
+    }
+
+    if (confirmNote) {
+        orderUpdate.$set.confirmNote = confirmNote;
+    }
+
+    await orderCollection.updateOne({ _id: order._id }, orderUpdate);
+
+    if (order.courseID && order.userID) {
+        await enrollCollection.updateOne(
+            {
+                courseID: order.courseID.toString(),
+                userID: order.userID.toString(),
+                orderID: order._id.toString()
+            },
+            { $set: { status: true } }
+        );
+    }
+
+    if (order.formID && order.userID) {
+        await formCollection.updateOne(
+            { formID: order.formID, userID: order.userID },
+            { $set: { status: true, process: 'confirm' } }
+        );
+    }
+}
+
 // Function to make a POST request to the /PostReceipt API
 async function postReceiptApi({
     div_code, 
@@ -274,6 +328,157 @@ router.post('/orders/reset-processing', async (req, res) => {
     } catch (error) {
         console.error('An error occurred while resetting processing orders:', error);
         return res.status(500).json({ status: false, message: 'An error occurred while resetting processing orders' });
+    }
+});
+
+router.post('/orders/offline-confirm', async (req, res) => {
+    try {
+        const {
+            site,
+            ref1,
+            ref2,
+            amount,
+            dryRun,
+            transferedDate,
+            confirmedBy,
+            confirmNote,
+        } = req.body;
+        const client = req.client;
+
+        const ref1List = Array.isArray(ref1)
+            ? ref1.map((value) => String(value).trim()).filter(Boolean)
+            : [String(ref1 || '').trim()].filter(Boolean);
+
+        if (!site || ref1List.length === 0) {
+            return res.status(400).json({ status: false, message: 'site and ref1 are required' });
+        }
+
+        const { targetDb, siteData } = await getSiteSpecificDb(client, site);
+
+        if (!siteData || !siteData._id) {
+            return res.status(404).json({ status: false, message: 'Site data not found or invalid' });
+        }
+
+        const orderCollection = targetDb.collection('order');
+        const enrollCollection = targetDb.collection('enroll');
+        const formCollection = targetDb.collection('form');
+        const siteIdString = siteData._id.toString();
+
+        const buildQuery = (ref1Value, includeConfirmed = false) => {
+            const query = {
+                unit: siteIdString,
+                ref1: String(ref1Value)
+            };
+
+            if (!includeConfirmed) {
+                query.status = { $ne: 'confirm' };
+            }
+
+            if (ref2) {
+                query.ref2 = String(ref2);
+            }
+
+            if (amount !== undefined && amount !== null && amount !== '') {
+                query['detailData.transfered_amount'] = Number(amount);
+            }
+
+            return query;
+        };
+
+        const projection = {
+            _id: 1,
+            orderCode: 1,
+            ref1: 1,
+            ref2: 1,
+            status: 1,
+            process: 1,
+            userID: 1,
+            formID: 1,
+            courseID: 1,
+            detailData: 1,
+        };
+
+        if (dryRun) {
+            const results = await Promise.all(ref1List.map(async (ref1Value) => {
+                const matches = await orderCollection.find(buildQuery(ref1Value, true), { projection }).toArray();
+
+                return {
+                    ref1: ref1Value,
+                    matchCount: matches.length,
+                    canConfirm: matches.length === 1 && matches[0].status !== 'confirm',
+                    matches: matches.map((order) => ({
+                        orderId: order._id,
+                        orderCode: order.orderCode,
+                        ref1: order.ref1,
+                        ref2: order.ref2,
+                        amount: order.detailData?.transfered_amount ?? null,
+                        status: order.status,
+                        process: order.process,
+                    }))
+                };
+            }));
+
+            return res.status(200).json({
+                status: true,
+                dryRun: true,
+                results,
+            });
+        }
+
+        if (ref1List.length !== 1) {
+            return res.status(400).json({ status: false, message: 'offline confirm requires exactly one ref1 unless dryRun is true' });
+        }
+
+        const matches = await orderCollection.find(buildQuery(ref1List[0]), { projection }).toArray();
+
+        if (matches.length === 0) {
+            return res.status(404).json({ status: false, message: 'No matching order found for offline confirm' });
+        }
+
+        if (matches.length > 1) {
+            return res.status(409).json({
+                status: false,
+                message: 'Multiple matching orders found. Provide ref2 or amount to narrow the match.',
+                matches: matches.map((order) => ({
+                    orderId: order._id,
+                    orderCode: order.orderCode,
+                    ref1: order.ref1,
+                    ref2: order.ref2,
+                    amount: order.detailData?.transfered_amount ?? null,
+                    status: order.status,
+                    process: order.process,
+                }))
+            });
+        }
+
+        const order = matches[0];
+        const normalizedTransferedDate = transferedDate ? new Date(transferedDate) : null;
+
+        await markOrderAsConfirmed({
+            orderCollection,
+            enrollCollection,
+            formCollection,
+            order,
+            transferedDate: normalizedTransferedDate,
+            confirmedBy,
+            confirmNote,
+        });
+
+        return res.status(200).json({
+            status: true,
+            message: 'Order confirmed successfully by offline manual confirmation',
+            order: {
+                orderId: order._id,
+                orderCode: order.orderCode,
+                ref1: order.ref1,
+                ref2: order.ref2,
+                finalStatus: 'confirm',
+                confirmSource: 'offline_manual',
+            }
+        });
+    } catch (error) {
+        console.error('An error occurred while confirming offline payment:', error);
+        return res.status(500).json({ status: false, message: 'An error occurred while confirming offline payment' });
     }
 });
 
