@@ -143,6 +143,74 @@ async function resetStaleProcessingOrders(orderCollection, unit) {
     return result.modifiedCount || 0;
 }
 
+async function findRelatedForm(formCollection, order) {
+    if (!order) {
+        return null;
+    }
+
+    const filters = [];
+
+    if (order.formID && order.userID) {
+        filters.push({ formID: order.formID, userID: order.userID });
+    }
+
+    if (order._id) {
+        filters.push({ orderID: order._id.toString() });
+    }
+
+    if (filters.length === 0) {
+        return null;
+    }
+
+    return formCollection.findOne(
+        filters.length === 1 ? filters[0] : { $or: filters },
+        {
+            projection: {
+                _id: 1,
+                formID: 1,
+                orderID: 1,
+                status: 1,
+                process: 1,
+                formData: 1,
+            }
+        }
+    );
+}
+
+async function syncConfirmedOrderRelations({ enrollCollection, formCollection, order }) {
+    let enrollModified = 0;
+    let formModified = 0;
+
+    if (order.courseID && order.userID) {
+        const enrollResult = await enrollCollection.updateOne(
+            {
+                courseID: order.courseID.toString(),
+                userID: order.userID.toString(),
+                orderID: order._id.toString()
+            },
+            { $set: { status: true } }
+        );
+
+        enrollModified = enrollResult.modifiedCount || 0;
+    }
+
+    if (order.formID && order.userID) {
+        const formResult = await formCollection.updateOne(
+            {
+                $or: [
+                    { formID: order.formID, userID: order.userID },
+                    { orderID: order._id.toString() }
+                ]
+            },
+            { $set: { status: true, process: 'confirm' } }
+        );
+
+        formModified = formResult.modifiedCount || 0;
+    }
+
+    return { enrollModified, formModified };
+}
+
 async function markOrderAsConfirmed({
     orderCollection,
     enrollCollection,
@@ -178,23 +246,11 @@ async function markOrderAsConfirmed({
 
     await orderCollection.updateOne({ _id: order._id }, orderUpdate);
 
-    if (order.courseID && order.userID) {
-        await enrollCollection.updateOne(
-            {
-                courseID: order.courseID.toString(),
-                userID: order.userID.toString(),
-                orderID: order._id.toString()
-            },
-            { $set: { status: true } }
-        );
-    }
-
-    if (order.formID && order.userID) {
-        await formCollection.updateOne(
-            { formID: order.formID, userID: order.userID },
-            { $set: { status: true, process: 'confirm' } }
-        );
-    }
+    await syncConfirmedOrderRelations({
+        enrollCollection,
+        formCollection,
+        order,
+    });
 }
 
 // Function to make a POST request to the /PostReceipt API
@@ -402,11 +458,10 @@ router.post('/orders/offline-confirm', async (req, res) => {
             const results = await Promise.all(ref1List.map(async (ref1Value) => {
                 const matches = await orderCollection.find(buildQuery(ref1Value, true), { projection }).toArray();
 
-                return {
-                    ref1: ref1Value,
-                    matchCount: matches.length,
-                    canConfirm: matches.length === 1 && matches[0].status !== 'confirm',
-                    matches: matches.map((order) => ({
+                const matchesWithForm = await Promise.all(matches.map(async (order) => {
+                    const form = await findRelatedForm(formCollection, order);
+
+                    return {
                         orderId: order._id,
                         orderCode: order.orderCode,
                         ref1: order.ref1,
@@ -414,7 +469,24 @@ router.post('/orders/offline-confirm', async (req, res) => {
                         amount: order.detailData?.transfered_amount ?? null,
                         status: order.status,
                         process: order.process,
-                    }))
+                        form: form ? {
+                            formObjectId: form._id,
+                            formID: form.formID,
+                            orderID: form.orderID,
+                            status: form.status,
+                            process: form.process,
+                            ref2: form.formData?.ref2 || form.formData?.['hidden-8-0-5']?.value || null,
+                            needsConfirmSync: order.status === 'confirm' && (form.status !== true || form.process !== 'confirm'),
+                        } : null,
+                    };
+                }));
+
+                return {
+                    ref1: ref1Value,
+                    matchCount: matches.length,
+                    canConfirm: matches.length === 1 && matches[0].status !== 'confirm',
+                    needsFormSync: matchesWithForm.some((order) => order.form?.needsConfirmSync),
+                    matches: matchesWithForm
                 };
             }));
 
@@ -429,7 +501,11 @@ router.post('/orders/offline-confirm', async (req, res) => {
             return res.status(400).json({ status: false, message: 'offline confirm requires exactly one ref1 unless dryRun is true' });
         }
 
-        const matches = await orderCollection.find(buildQuery(ref1List[0]), { projection }).toArray();
+        let matches = await orderCollection.find(buildQuery(ref1List[0]), { projection }).toArray();
+
+        if (matches.length === 0) {
+            matches = await orderCollection.find(buildQuery(ref1List[0], true), { projection }).toArray();
+        }
 
         if (matches.length === 0) {
             return res.status(404).json({ status: false, message: 'No matching order found for offline confirm' });
@@ -453,6 +529,36 @@ router.post('/orders/offline-confirm', async (req, res) => {
 
         const order = matches[0];
         const normalizedTransferedDate = transferedDate ? new Date(transferedDate) : null;
+
+        if (order.status === 'confirm') {
+            const syncResult = await syncConfirmedOrderRelations({
+                enrollCollection,
+                formCollection,
+                order,
+            });
+            const form = await findRelatedForm(formCollection, order);
+
+            return res.status(200).json({
+                status: true,
+                message: 'Order is already confirmed. Related form and enroll records were synced.',
+                order: {
+                    orderId: order._id,
+                    orderCode: order.orderCode,
+                    ref1: order.ref1,
+                    ref2: order.ref2,
+                    finalStatus: order.status,
+                    finalProcess: order.process,
+                },
+                syncResult,
+                form: form ? {
+                    formObjectId: form._id,
+                    formID: form.formID,
+                    orderID: form.orderID,
+                    status: form.status,
+                    process: form.process,
+                } : null,
+            });
+        }
 
         await markOrderAsConfirmed({
             orderCollection,
