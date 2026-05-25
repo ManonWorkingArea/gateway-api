@@ -148,27 +148,68 @@ async function findRelatedForm(formCollection, order) {
         return null;
     }
 
-    const filters = [];
+    const orderId = order._id ? order._id.toString() : null;
+    const userId = order.userID ? order.userID.toString() : null;
+    const courseId = order.courseID ? order.courseID.toString() : null;
+    const formId = order.formID ? order.formID.toString() : null;
 
-    if (order.formID && order.userID) {
-        filters.push({ formID: order.formID, userID: order.userID });
+    if (orderId && userId && courseId) {
+        const form = await formCollection.findOne(
+            { orderID: orderId, userID: userId, courseID: courseId },
+            {
+                projection: {
+                    _id: 1,
+                    formID: 1,
+                    orderID: 1,
+                    userID: 1,
+                    courseID: 1,
+                    status: 1,
+                    process: 1,
+                    formData: 1,
+                }
+            }
+        );
+
+        if (form) {
+            return form;
+        }
     }
 
-    if (order._id) {
-        filters.push({ orderID: order._id.toString() });
+    if (orderId) {
+        const form = await formCollection.findOne(
+            { orderID: orderId },
+            {
+                projection: {
+                    _id: 1,
+                    formID: 1,
+                    orderID: 1,
+                    userID: 1,
+                    courseID: 1,
+                    status: 1,
+                    process: 1,
+                    formData: 1,
+                }
+            }
+        );
+
+        if (form) {
+            return form;
+        }
     }
 
-    if (filters.length === 0) {
+    if (!userId || !courseId) {
         return null;
     }
 
     return formCollection.findOne(
-        filters.length === 1 ? filters[0] : { $or: filters },
+        formId ? { formID: formId, userID: userId, courseID: courseId } : { userID: userId, courseID: courseId },
         {
             projection: {
                 _id: 1,
                 formID: 1,
                 orderID: 1,
+                userID: 1,
+                courseID: 1,
                 status: 1,
                 process: 1,
                 formData: 1,
@@ -180,13 +221,17 @@ async function findRelatedForm(formCollection, order) {
 async function syncConfirmedOrderRelations({ enrollCollection, formCollection, order }) {
     let enrollModified = 0;
     let formModified = 0;
+    const orderId = order._id ? order._id.toString() : null;
+    const userId = order.userID ? order.userID.toString() : null;
+    const courseId = order.courseID ? order.courseID.toString() : null;
+    const formId = order.formID ? order.formID.toString() : null;
 
-    if (order.courseID && order.userID) {
+    if (courseId && userId && orderId) {
         const enrollResult = await enrollCollection.updateOne(
             {
-                courseID: order.courseID.toString(),
-                userID: order.userID.toString(),
-                orderID: order._id.toString()
+                courseID: courseId,
+                userID: userId,
+                orderID: orderId
             },
             { $set: { status: true } }
         );
@@ -194,18 +239,26 @@ async function syncConfirmedOrderRelations({ enrollCollection, formCollection, o
         enrollModified = enrollResult.modifiedCount || 0;
     }
 
-    if (order.formID && order.userID) {
-        const formResult = await formCollection.updateOne(
-            {
-                $or: [
-                    { formID: order.formID, userID: order.userID },
-                    { orderID: order._id.toString() }
-                ]
-            },
+    if (orderId && userId && courseId) {
+        const formByOrderResult = await formCollection.updateOne(
+            { orderID: orderId, userID: userId, courseID: courseId },
             { $set: { status: true, process: 'confirm' } }
         );
 
-        formModified = formResult.modifiedCount || 0;
+        formModified = formByOrderResult.modifiedCount || 0;
+
+        if (formModified === 0) {
+            const fallbackQuery = formId
+                ? { formID: formId, userID: userId, courseID: courseId }
+                : { userID: userId, courseID: courseId, orderID: orderId };
+
+            const formFallbackResult = await formCollection.updateOne(
+                fallbackQuery,
+                { $set: { status: true, process: 'confirm' } }
+            );
+
+            formModified = formFallbackResult.modifiedCount || 0;
+        }
     }
 
     return { enrollModified, formModified };
