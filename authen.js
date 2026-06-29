@@ -294,20 +294,36 @@ router.post('/send-message', async (req, res) => {
     }
 });
 
-// Function to retrieve hostname data
-const getHostname = async (hostname) => {
-    const client = new MongoClient(process.env.MONGODB_URI, {
-        useNewUrlParser: true,
-        useUnifiedTopology: true,
-    });
+// Function to retrieve hostname data (uses singleton MongoClient)
+let _mongoClientAuth = null;
 
+async function getMongoClientAuth() {
+  if (_mongoClientAuth) {
     try {
-        await client.connect();
+      await _mongoClientAuth.db().admin().ping();
+      return _mongoClientAuth;
+    } catch (e) {
+      _mongoClientAuth = null;
+    }
+  }
+  _mongoClientAuth = new MongoClient(process.env.MONGODB_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+    maxPoolSize: 10
+  });
+  await _mongoClientAuth.connect();
+  return _mongoClientAuth;
+}
+
+const getHostname = async (hostname) => {
+    try {
+        const client = await getMongoClientAuth();
         const db = client.db('API');
         const clientsCollection = db.collection('hostname');
         return await clientsCollection.findOne({ hostname });
-    } finally {
-        await client.close();
+    } catch (error) {
+        console.error('Error retrieving hostname:', error);
+        throw error;
     }
 };
 

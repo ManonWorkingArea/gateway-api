@@ -32,7 +32,7 @@ async function connectToMongoDB(retries = 5) {
 
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      const maxPoolSize = Number(process.env.MONGODB_MAX_POOL_SIZE) || 100;
+      const maxPoolSize = Number(process.env.MONGODB_MAX_POOL_SIZE) || 20;
       const serverSelectionTimeoutMS = Number(process.env.MONGODB_SERVER_SELECTION_TIMEOUT_MS) || 10000;
       const socketTimeoutMS = Number(process.env.MONGODB_SOCKET_TIMEOUT_MS) || 45000;
       const tls = process.env.MONGODB_TLS === 'false' ? false : true; // default true (Atlas requires TLS)
