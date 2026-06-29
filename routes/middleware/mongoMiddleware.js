@@ -15,23 +15,32 @@ async function connectToMongoDB(retries = 5) {
     throw new Error('MONGODB_URI is not defined in environment variables');
   }
 
-  // Fast path: already connected
+  // Fast path: already connected, no lock needed
   if (mongoClient) {
     try {
       await mongoClient.db().admin().ping();
       return;
     } catch (err) {
       console.warn('MongoDB ping failed, reconnecting...');
-      mongoClient = null;
+      // Don't null mongoClient here — let the locked section handle reconnection
     }
   }
 
-  // Promise-based lock: if already connecting, wait for that same promise
+  // If another caller is already connecting, wait for that SAME promise
   if (connectPromise) {
     return connectPromise;
   }
 
+  // Create ONE connection promise — all concurrent callers share this
   connectPromise = (async () => {
+    // Recheck: maybe another caller already reconnected while we were waiting
+    if (mongoClient) {
+      try {
+        await mongoClient.db().admin().ping();
+        return;
+      } catch (e) { /* continue to reconnect */ }
+    }
+
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
         const maxPoolSize = Number(process.env.MONGODB_MAX_POOL_SIZE) || 20;
