@@ -4,8 +4,8 @@ const { redisClient, getCachedData, setCachedData } = require('./redis');
 const { auditMongoClient } = require('./mongo-audit');  // Import Redis helpers
 
 // Singleton MongoClient instance
-let mongoClient;
-let isConnecting = false;
+let mongoClient = null;
+let connectPromise = null;  // Promise-based lock: all concurrent callers share ONE connection attempt
 
 const maxCacheAge = 60 * 60; // 1 hour in seconds
 
@@ -14,76 +14,66 @@ async function connectToMongoDB(retries = 5) {
   if (!process.env.MONGODB_URI) {
     throw new Error('MONGODB_URI is not defined in environment variables');
   }
- 
+
+  // Fast path: already connected
   if (mongoClient) {
     try {
       await mongoClient.db().admin().ping();
       return;
     } catch (err) {
       console.warn('MongoDB ping failed, reconnecting...');
+      mongoClient = null;
     }
   }
 
-  if (isConnecting) {
-    await new Promise(resolve => setTimeout(resolve, 100));
-    return connectToMongoDB();
+  // Promise-based lock: if already connecting, wait for that same promise
+  if (connectPromise) {
+    return connectPromise;
   }
 
-  isConnecting = true;
+  connectPromise = (async () => {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        const maxPoolSize = Number(process.env.MONGODB_MAX_POOL_SIZE) || 20;
+        const serverSelectionTimeoutMS = Number(process.env.MONGODB_SERVER_SELECTION_TIMEOUT_MS) || 10000;
+        const socketTimeoutMS = Number(process.env.MONGODB_SOCKET_TIMEOUT_MS) || 45000;
+        const tls = process.env.MONGODB_TLS === 'false' ? false : true;
+        const tlsInsecure = process.env.MONGODB_TLS_INSECURE === 'true';
+        const minPoolSize = Number(process.env.MONGODB_MIN_POOL_SIZE) || 0;
 
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      const maxPoolSize = Number(process.env.MONGODB_MAX_POOL_SIZE) || 20;
-      const serverSelectionTimeoutMS = Number(process.env.MONGODB_SERVER_SELECTION_TIMEOUT_MS) || 10000;
-      const socketTimeoutMS = Number(process.env.MONGODB_SOCKET_TIMEOUT_MS) || 45000;
-      const tls = process.env.MONGODB_TLS === 'false' ? false : true;
-      const tlsInsecure = process.env.MONGODB_TLS_INSECURE === 'true';
-      const minPoolSize = Number(process.env.MONGODB_MIN_POOL_SIZE) || 0;
+        const options = {
+          useNewUrlParser: true,
+          useUnifiedTopology: true,
+          maxPoolSize,
+          minPoolSize,
+          serverSelectionTimeoutMS,
+          waitQueueTimeoutMS: Number(process.env.MONGODB_WAIT_QUEUE_TIMEOUT_MS) || 5000,
+          socketTimeoutMS,
+          retryWrites: true,
+          retryReads: true,
+          tls,
+          tlsInsecure,
+          appName: process.env.MONGODB_APP_NAME || 'gateway-api',
+        };
 
-      const options = {
-        useNewUrlParser: true,
-        useUnifiedTopology: true,
-        maxPoolSize,
-        minPoolSize,
-        serverSelectionTimeoutMS,
-        waitQueueTimeoutMS: Number(process.env.MONGODB_WAIT_QUEUE_TIMEOUT_MS) || 5000,
-        socketTimeoutMS,
-        retryWrites: true,
-        retryReads: true,
-        tls,
-        tlsInsecure,
-        appName: process.env.MONGODB_APP_NAME || 'gateway-api',
-      };
+        auditMongoClient('gateway-api:mongoMiddleware', 'routes/middleware/mongoMiddleware.js', options);
 
-      auditMongoClient('gateway-api:mongoMiddleware', 'routes/middleware/mongoMiddleware.js', options);
-
-      mongoClient = new MongoClient(process.env.MONGODB_URI, options);
-      await mongoClient.connect();
-      console.log('MON :: Connected');
-      break;
-    } catch (err) {
-      console.error(`MongoDB connection attempt ${attempt} failed:`, err);
-      if (err && err.name === 'MongoServerSelectionError' && err.reason) {
-        try {
-          const reason = err.reason;
-          const serverKeys = reason.servers && typeof reason.servers.keys === 'function'
-            ? Array.from(reason.servers.keys())
-            : [];
-          console.error('MongoDB server selection details:', {
-            type: reason.type,
-            setName: reason.setName,
-            heartbeatFrequencyMS: reason.heartbeatFrequencyMS,
-            servers: serverKeys,
-          });
-        } catch (_) {
-          // best-effort logging only
-        }
+        mongoClient = new MongoClient(process.env.MONGODB_URI, options);
+        await mongoClient.connect();
+        console.log('MON :: Connected');
+        return; // success
+      } catch (err) {
+        console.error(`MongoDB connection attempt ${attempt} failed:`, err);
+        if (attempt === retries) throw err;
+        await new Promise(resolve => setTimeout(resolve, attempt * 1000));
       }
-      if (attempt === retries) throw err;
-      await new Promise(resolve => setTimeout(resolve, attempt * 1000));
-    } finally {
-      isConnecting = false;
     }
+  })();
+
+  try {
+    await connectPromise;
+  } finally {
+    connectPromise = null;  // always release the lock
   }
 }
 
@@ -168,4 +158,12 @@ module.exports = {
   authenticateClient,
   safeObjectId,
   errorHandler,
+  getSharedMongoClient: async () => {
+    await connectToMongoDB();
+    return mongoClient;
+  },
+  getSharedDb: async (dbName = 'API') => {
+    await connectToMongoDB();
+    return mongoClient.db(dbName);
+  },
 };

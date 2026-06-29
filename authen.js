@@ -1,11 +1,9 @@
 const express = require('express');
 const CryptoJS = require('crypto-js');
 const jwt = require('jsonwebtoken');
-const { MongoClient } = require('mongodb');
-const { auditMongoClient } = require('./routes/middleware/mongo-audit');
 const builderRender = require('./builderRender');
-const { authenticateClient, safeObjectId, errorHandler } = require('./routes/middleware/mongoMiddleware');
-const axios = require('axios'); // For making HTTP requests
+const { authenticateClient, safeObjectId, errorHandler, getSharedDb } = require('./routes/middleware/mongoMiddleware');
+const axios = require('axios');
 
 const router = express.Router();
 
@@ -296,35 +294,11 @@ router.post('/send-message', async (req, res) => {
     }
 });
 
-// Function to retrieve hostname data (uses singleton MongoClient)
-let _mongoClientAuth = null;
-
-async function getMongoClientAuth() {
-  if (_mongoClientAuth) {
-    try {
-      await _mongoClientAuth.db().admin().ping();
-      return _mongoClientAuth;
-    } catch (e) {
-      _mongoClientAuth = null;
-    }
-  }
-  const options = {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-    maxPoolSize: 10
-  };
-  auditMongoClient('gateway-api:authen', 'authen.js', options);
-  _mongoClientAuth = new MongoClient(process.env.MONGODB_URI, options);
-  await _mongoClientAuth.connect();
-  return _mongoClientAuth;
-}
-
+// Function to retrieve hostname data (uses shared mongoMiddleware connection)
 const getHostname = async (hostname) => {
     try {
-        const client = await getMongoClientAuth();
-        const db = client.db('API');
-        const clientsCollection = db.collection('hostname');
-        return await clientsCollection.findOne({ hostname });
+        const db = await getSharedDb('API');
+        return await db.collection('hostname').findOne({ hostname });
     } catch (error) {
         console.error('Error retrieving hostname:', error);
         throw error;

@@ -1,48 +1,16 @@
 const express = require('express');
 const fetch = require('node-fetch');
-const { MongoClient } = require('mongodb');
-const { auditMongoClient } = require('./routes/middleware/mongo-audit');
+const { getSharedDb } = require('./routes/middleware/mongoMiddleware');
 const router = express.Router();
 
-// Replace 'Your_Channel_Access_Token_Here' with your actual LINE Messaging API Channel Access Token.
-// In a production environment, it's important to store this token securely, e.g., in environment variables or a secret manager.
 const CHANNEL_ACCESS_TOKEN = 'FbfaYJGWQHpGXAoYTvrkhIFr60h6qzBjoFWAP+tQ643Sh6dlY3+fqv1v1JX4UiFSW0kEuw7MipxJBj0W76VEzMx68KLAYmPNoomgnNiLNC9p2dXYHp8yESo5ARQMBdL3+mMQXp8uaLvBH/401XCCwgdB04t89/1O/w1cDnyilFU=';
-// MongoDB Connection URL
-// Singleton MongoClient - reuse across requests
-let mongoClient = null;
 
-async function getMongoClient() {
-  if (mongoClient) {
-    try {
-      await mongoClient.db().admin().ping();
-      return mongoClient;
-    } catch (e) {
-      // reconnect if ping fails
-      mongoClient = null;
-    }
-  }
-  const options = { 
-    useNewUrlParser: true, 
-    useUnifiedTopology: true,
-    maxPoolSize: 10
-  };
-  auditMongoClient('gateway-api:auth', 'auth.js', options);
-  mongoClient = new MongoClient(process.env.MONGODB_URI, options);
-  await mongoClient.connect();
-  return mongoClient;
-}
-
-// Function to retrieve hostname from MongoDB
+// Function to retrieve hostname from MongoDB (uses shared mongoMiddleware connection)
 const getHostname = async (hostname) => {
     try {
-        const client = await getMongoClient();
-        const db = client.db('API');
-        const clientsCollection = db.collection('hostname');
-        const clientData = await clientsCollection.findOne({ hostname });
-        if (clientData) {
-            return clientData;
-        }
-        return null;
+        const db = await getSharedDb('API');
+        const clientData = await db.collection('hostname').findOne({ hostname });
+        return clientData || null;
     } catch (error) {
       console.error('Error retrieving hostname:', error);
       throw error;
