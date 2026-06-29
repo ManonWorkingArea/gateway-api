@@ -108,6 +108,10 @@ async function initializeApp() {
     app.use('/dss', dssRoutes); // Add the /ai route
     app.use('/form', formRouter); // Add the /ai route
     
+    // MongoDB Connection Audit endpoint
+    const { auditMiddleware } = require('./routes/middleware/mongo-audit');
+    app.get('/_mongo-audit', auditMiddleware);
+    console.log('🔌 [MONGO-AUDIT] Audit endpoint available at /_mongo-audit');
     server.listen(process.env.PORT, () => {
       console.log(`PRT :: ${process.env.PORT}`);
     });

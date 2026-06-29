@@ -1,6 +1,7 @@
 const express = require('express');
 const fetch = require('node-fetch');
 const { MongoClient } = require('mongodb');
+const { auditMongoClient } = require('./routes/middleware/mongo-audit');
 const router = express.Router();
 
 // Replace 'Your_Channel_Access_Token_Here' with your actual LINE Messaging API Channel Access Token.
@@ -20,11 +21,13 @@ async function getMongoClient() {
       mongoClient = null;
     }
   }
-  mongoClient = new MongoClient(process.env.MONGODB_URI, { 
+  const options = { 
     useNewUrlParser: true, 
     useUnifiedTopology: true,
-    maxPoolSize: 10  // Limit pool size
-  });
+    maxPoolSize: 10
+  };
+  auditMongoClient('gateway-api:auth', 'auth.js', options);
+  mongoClient = new MongoClient(process.env.MONGODB_URI, options);
   await mongoClient.connect();
   return mongoClient;
 }

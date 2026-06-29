@@ -1,6 +1,7 @@
 const { MongoClient, ObjectId } = require('mongodb');
 const CryptoJS = require('crypto-js');
-const { redisClient, getCachedData, setCachedData } = require('./redis');  // Import Redis helpers
+const { redisClient, getCachedData, setCachedData } = require('./redis');
+const { auditMongoClient } = require('./mongo-audit');  // Import Redis helpers
 
 // Singleton MongoClient instance
 let mongoClient;
@@ -35,28 +36,28 @@ async function connectToMongoDB(retries = 5) {
       const maxPoolSize = Number(process.env.MONGODB_MAX_POOL_SIZE) || 20;
       const serverSelectionTimeoutMS = Number(process.env.MONGODB_SERVER_SELECTION_TIMEOUT_MS) || 10000;
       const socketTimeoutMS = Number(process.env.MONGODB_SOCKET_TIMEOUT_MS) || 45000;
-      const tls = process.env.MONGODB_TLS === 'false' ? false : true; // default true (Atlas requires TLS)
+      const tls = process.env.MONGODB_TLS === 'false' ? false : true;
       const tlsInsecure = process.env.MONGODB_TLS_INSECURE === 'true';
+      const minPoolSize = Number(process.env.MONGODB_MIN_POOL_SIZE) || 0;
 
-      mongoClient = new MongoClient(process.env.MONGODB_URI, {
-        // Parser/Topology
+      const options = {
         useNewUrlParser: true,
         useUnifiedTopology: true,
-        // Pooling/timeouts
         maxPoolSize,
-        minPoolSize: Number(process.env.MONGODB_MIN_POOL_SIZE) || 0,
+        minPoolSize,
         serverSelectionTimeoutMS,
         waitQueueTimeoutMS: Number(process.env.MONGODB_WAIT_QUEUE_TIMEOUT_MS) || 5000,
         socketTimeoutMS,
-        // Reliability
         retryWrites: true,
         retryReads: true,
-        // TLS
         tls,
         tlsInsecure,
-        // Metadata
         appName: process.env.MONGODB_APP_NAME || 'gateway-api',
-      });
+      };
+
+      auditMongoClient('gateway-api:mongoMiddleware', 'routes/middleware/mongoMiddleware.js', options);
+
+      mongoClient = new MongoClient(process.env.MONGODB_URI, options);
       await mongoClient.connect();
       console.log('MON :: Connected');
       break;

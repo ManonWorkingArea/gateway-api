@@ -1,6 +1,8 @@
 const express = require('express');
 const CryptoJS = require('crypto-js');
-const jwt = require('jsonwebtoken'); // Import jsonwebtoken
+const jwt = require('jsonwebtoken');
+const { MongoClient } = require('mongodb');
+const { auditMongoClient } = require('./routes/middleware/mongo-audit');
 const builderRender = require('./builderRender');
 const { authenticateClient, safeObjectId, errorHandler } = require('./routes/middleware/mongoMiddleware');
 const axios = require('axios'); // For making HTTP requests
@@ -306,11 +308,13 @@ async function getMongoClientAuth() {
       _mongoClientAuth = null;
     }
   }
-  _mongoClientAuth = new MongoClient(process.env.MONGODB_URI, {
+  const options = {
     useNewUrlParser: true,
     useUnifiedTopology: true,
     maxPoolSize: 10
-  });
+  };
+  auditMongoClient('gateway-api:authen', 'authen.js', options);
+  _mongoClientAuth = new MongoClient(process.env.MONGODB_URI, options);
   await _mongoClientAuth.connect();
   return _mongoClientAuth;
 }
