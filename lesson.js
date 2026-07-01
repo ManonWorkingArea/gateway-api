@@ -2878,19 +2878,34 @@ router.post('/enroll', async (req, res) => {
             if (enrollment) {
                 enrollID = enrollment._id;
     
-                // Try to fetch form data using userID and enrollID
                 const formCollection = targetDb.collection('form');
+    
+                // 1) Try exact match: userID + enrollID
                 submitFormData = await formCollection.findOne({ 
                     userID: user,
                     enrollID: enrollment._id.toString()
                 });
     
-                // console.log("submitFormData",submitFormData);
-    
-                // If no form found by userID and enrollID, and submitID exists, try finding by submitID
+                // 2) Fallback: by submitID (from enrollment)
                 if (!submitFormData && enrollment.submitID) {
                     submitFormData = await formCollection.findOne({ 
                         _id: safeObjectId(enrollment.submitID)
+                    });
+                }
+    
+                // 3) Fallback: userID + courseID (latest form for this course)
+                if (!submitFormData) {
+                    submitFormData = await formCollection.findOne(
+                        { userID: user, courseID: enrollment.courseID },
+                        { sort: { createdAt: -1 } }
+                    );
+                }
+    
+                // 4) Fallback: userID + orderID (if order exists)
+                if (!submitFormData && enrollment.orderID) {
+                    submitFormData = await formCollection.findOne({ 
+                        userID: user,
+                        orderID: enrollment.orderID
                     });
                 }
             } else {
