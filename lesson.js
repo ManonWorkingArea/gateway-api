@@ -3032,6 +3032,7 @@ router.post('/enroll', async (req, res) => {
                 enrollment,
                 course: courseDetails || null, // Include course details or null if not found
                 order: orderDetails, // Include order details if found
+                form: submitFormData || null, // Include form submission data
                 scheduleConfig: filteredScheduleConfig, // ✅ Reformatted scheduleConfig
                 condition: courseDetails
                     ? {
