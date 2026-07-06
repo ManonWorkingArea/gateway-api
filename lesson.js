@@ -1887,6 +1887,33 @@ router.post('/assessment/:id/:exam?', async (req, res) => {
             ? await enrollCollection.findOne({ courseID: course._id.toString(), userID: user })
             : null;
 
+        // Populate exam_round from order if null/missing on enrollment
+        if (enrollment && (!enrollment.analytics?.option?.exam_round)) {
+          const orderID = enrollment.orderID;
+          if (orderID) {
+            try {
+              const orderCollection = targetDb.collection('order');
+              const order = await orderCollection.findOne(
+                { _id: safeObjectId(orderID) },
+                { projection: { 'formData.radiobox-14-0-9': 1 } }
+              );
+              const examRoundRaw = order?.formData?.['radiobox-14-0-9']?.value?.value;
+              if (examRoundRaw) {
+                const round = String(examRoundRaw).trim().toLowerCase();
+                const normalized = ['first', 'round-1', 'round1', '1'].includes(round) ? 'first' :
+                                   ['second', 'round-2', 'round2', '2'].includes(round) ? 'second' : null;
+                if (normalized) {
+                  if (!enrollment.analytics) enrollment.analytics = {};
+                  if (!enrollment.analytics.option) enrollment.analytics.option = {};
+                  enrollment.analytics.option.exam_round = normalized;
+                }
+              }
+            } catch (_) {
+              // silently fail — exam_round stays null
+            }
+          }
+        }
+
         // Get selectedExamDate from enrollment if available
         const selectedExamDate = enrollment?.selectedExamDate || null;
 
