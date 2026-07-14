@@ -662,8 +662,8 @@ router.post('/orders', async (req, res) => {
         const siteIdString = siteData._id.toString();
 
         // Get current date in UTC to ensure filtering for orders created in 2025
-        const startOf2025 = new Date('2026-05-01T00:00:00.000Z');
-        const endOf2025 = new Date('2026-06-30T23:59:59.999Z');
+        const startOf2025 = new Date('2026-07-01T00:00:00.000Z');
+        const endOf2025 = new Date('2026-09-30T23:59:59.999Z');
 
         // Claim newest pending orders first so the next cron run does not pick them again.
         const orders = await claimPendingOrders(orderCollection, {
