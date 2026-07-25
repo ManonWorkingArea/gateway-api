@@ -1,0 +1,28 @@
+{
+  "last_updated": "2026-07-25T13:17:00+07:00",
+  "latest_task": "Add optional single-order payment checking to POST /orders",
+  "current_focus": "Reliable pending-order payment processing",
+  "active_modules": [
+    "store order processing",
+    "offline confirmation"
+  ],
+  "affected_files": [
+    "store.js"
+  ],
+  "known_risks": [
+    "An order in processing cannot be reclaimed until it becomes stale and is reset.",
+    "The batch processing path retains its fixed date window."
+  ],
+  "pending_items": [
+    "Deploy the gateway API change.",
+    "Exercise one single-order check in production."
+  ],
+  "completed_items": [
+    "POST /orders accepts optional ref1.",
+    "Single-order checks bypass the batch date window.",
+    "Existing batch behavior remains unchanged when ref1 is absent."
+  ],
+  "migration_required": false,
+  "regression_required": true,
+  "contract_docs_updated": true
+}

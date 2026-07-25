@@ -645,12 +645,14 @@ router.post('/orders/offline-confirm', async (req, res) => {
 router.post('/orders', async (req, res) => {
     try {
         const jobStartedAt = new Date();
-        const { site } = req.body;
+        const { site, ref1 } = req.body;
         const client = req.client;
 
         if (!site) {
             return res.status(400).json({ status: false, message: 'Site ID is required' });
         }
+
+        const requestedRef1 = ref1 === undefined || ref1 === null ? '' : String(ref1).trim();
 
         const { targetDb, siteData } = await getSiteSpecificDb(client, site);
 
@@ -665,14 +667,23 @@ router.post('/orders', async (req, res) => {
         const startOf2025 = new Date('2026-07-01T00:00:00.000Z');
         const endOf2025 = new Date('2026-09-30T23:59:59.999Z');
 
+        // A supplied ref1 checks only that order, including orders outside the batch date window.
+        const orderFilter = requestedRef1
+            ? { unit: siteIdString, ref1: requestedRef1 }
+            : {
+                unit: siteIdString,
+                createdAt: { $gte: startOf2025, $lte: endOf2025 }
+            };
+
         // Claim newest pending orders first so the next cron run does not pick them again.
-        const orders = await claimPendingOrders(orderCollection, {
-            unit: siteIdString,
-            createdAt: { $gte: startOf2025, $lte: endOf2025 }
-        });
+        const orders = await claimPendingOrders(orderCollection, orderFilter);
 
         if (orders.length === 0) {
-            return res.status(404).json({ status: false, message: 'No pending orders found for the given unit in the configured date window' });
+            const message = requestedRef1
+                ? 'No pending order found for the given unit and ref1'
+                : 'No pending orders found for the given unit in the configured date window';
+
+            return res.status(404).json({ status: false, message });
         }
 
         // For each order, fetch userID, formID, enrollID along with order data
@@ -937,6 +948,7 @@ router.post('/orders', async (req, res) => {
                 finishedAt: jobFinishedAt,
                 durationMs: jobFinishedAt.getTime() - jobStartedAt.getTime(),
             },
+            requestedRef1: requestedRef1 || null,
             summary,
             orders: enrichedOrders,
         });
