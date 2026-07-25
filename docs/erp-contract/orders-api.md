@@ -16,7 +16,8 @@ Checks payment status through BillLookup and processes matching pending orders.
 - `site` is required.
 - `ref1` is optional.
 - Without `ref1`, the existing batch behavior claims up to 100 pending orders within the configured date window.
-- With `ref1`, the endpoint claims and checks only that pending order. This path does not apply the batch date window.
+- With `ref1`, the endpoint claims and checks exactly one pending order. This path does not apply the batch date window and can reprocess an order with `status: pending` and `process: processing`.
+- A single-order check must not be run concurrently for the same `ref1` by multiple operators.
 
 ### Success Response Additions
 

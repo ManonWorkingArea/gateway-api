@@ -25,11 +25,11 @@ Extend the existing `POST /orders` endpoint with an optional `ref1` request fiel
 
 ## Implementation Summary
 
-`POST /orders` now normalizes an optional `ref1`. With a non-empty value, it claims and processes only the matching pending order under the requested site. The single-order filter deliberately omits the batch date window. Without `ref1`, the existing batch filter and response behavior remain in place. Successful responses include `requestedRef1` for traceability.
+`POST /orders` now normalizes an optional `ref1`. With a non-empty value, it claims and processes exactly one matching pending order under the requested site. The single-order filter deliberately omits the batch date window and can reclaim an order still marked `processing`, provided its status is `pending`. Without `ref1`, the existing batch filter and response behavior remain in place. Successful responses include `requestedRef1` for traceability.
 
 ## Root Cause
 
-The original endpoint always combined the site filter with a fixed batch date window and attempted up to 100 claims. There was no input to narrow processing to a known order, so older pending orders could not be checked directly.
+The original endpoint always combined the site filter with a fixed batch date window and attempted up to 100 claims. It also excluded every processing order, including pending orders left from a previous check. There was no input to narrow processing to a known order or to manually retry that state.
 
 ## Business Impact
 
@@ -49,13 +49,14 @@ The orders API contract and ADR document the single-order behavior and date-wind
 
 ## Risks
 
-An order that is already in `processing` remains protected from concurrent claims. The caller must wait for stale reset handling before retrying such an order.
+Manual single-order checks can supersede a processing claim. Operators must not invoke them concurrently for the same ref1.
 
 ## Regression Checks
 
 - `node --check store.js` passed after the route change.
 - Existing batch behavior is preserved structurally when `ref1` is omitted.
 - Single-order and batch filters are mutually exclusive.
+- The processing override is enabled only when `ref1` is supplied.
 
 ## Follow-up Recommendations
 

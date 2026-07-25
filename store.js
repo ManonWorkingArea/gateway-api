@@ -46,21 +46,28 @@ function delay(ms) {
 const ORDER_BATCH_LIMIT = 100;
 const STALE_PROCESSING_MS = 15 * 60 * 1000;
 
-async function claimPendingOrders(orderCollection, filter) {
+async function claimPendingOrders(orderCollection, filter, { includeProcessing = false } = {}) {
     const claimedOrders = [];
+    const claimableProcesses = [
+        { process: { $exists: false } },
+        { process: null },
+        { process: 'pending' },
+        { process: 'draft' }
+    ];
 
-    for (let i = 0; i < ORDER_BATCH_LIMIT; i += 1) {
+    if (includeProcessing) {
+        claimableProcesses.push({ process: 'processing' });
+    }
+
+    const claimLimit = includeProcessing ? 1 : ORDER_BATCH_LIMIT;
+
+    for (let i = 0; i < claimLimit; i += 1) {
         const claimedAt = new Date();
         const claimResult = await orderCollection.findOneAndUpdate(
             {
                 ...filter,
                 status: 'pending',
-                $or: [
-                    { process: { $exists: false } },
-                    { process: null },
-                    { process: 'pending' },
-                    { process: 'draft' }
-                ]
+                $or: claimableProcesses
             },
             {
                 $set: {
@@ -676,7 +683,9 @@ router.post('/orders', async (req, res) => {
             };
 
         // Claim newest pending orders first so the next cron run does not pick them again.
-        const orders = await claimPendingOrders(orderCollection, orderFilter);
+        const orders = await claimPendingOrders(orderCollection, orderFilter, {
+            includeProcessing: Boolean(requestedRef1)
+        });
 
         if (orders.length === 0) {
             const message = requestedRef1

@@ -1,6 +1,6 @@
 {
   "last_updated": "2026-07-25T13:17:00+07:00",
-  "latest_task": "Add optional single-order payment checking to POST /orders",
+  "latest_task": "Allow manual single-order payment checks for pending orders in processing",
   "current_focus": "Reliable pending-order payment processing",
   "active_modules": [
     "store order processing",
@@ -10,7 +10,7 @@
     "store.js"
   ],
   "known_risks": [
-    "An order in processing cannot be reclaimed until it becomes stale and is reset.",
+    "A manual single-order check supersedes the processing claim for its ref1 and should not be run concurrently by multiple operators.",
     "The batch processing path retains its fixed date window."
   ],
   "pending_items": [
@@ -19,6 +19,7 @@
   ],
   "completed_items": [
     "POST /orders accepts optional ref1.",
+    "A ref1 request can reprocess a pending order marked processing.",
     "Single-order checks bypass the batch date window.",
     "Existing batch behavior remains unchanged when ref1 is absent."
   ],

@@ -14,3 +14,18 @@
 - Breaking changes: None.
 - Migration required: No.
 - Regression risk: Low; the existing batch path is preserved when `ref1` is omitted.
+
+## 2026-07-25 - Manual Check Processing Override
+
+- Task summary: Let a single-order manual payment check reprocess an order currently marked `processing`.
+- Added: Single-ref claims accept `process: processing` while retaining `status: pending`.
+- Changed: `POST /orders` with `ref1` refreshes the processing claim before BillLookup and claims exactly one order per request.
+- Fixed: Manual checks no longer return not found solely because a pending order was left in processing by an earlier run.
+- Removed: None.
+- Affected modules: Store order processing.
+- Affected files: `store.js`.
+- Database impact: Refreshes `processingStartedAt` through the existing claim update.
+- API impact: No request or response shape change.
+- Breaking changes: None.
+- Migration required: No.
+- Regression risk: Low; batch claims still exclude processing orders.

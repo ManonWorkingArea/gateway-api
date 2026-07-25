@@ -9,13 +9,13 @@ The batch `POST /orders` operation only claims up to 100 pending orders in a con
 
 ## Decision
 
-Add an optional `ref1` request field to the existing `POST /orders` endpoint. When present, use `{ unit, ref1 }` as the claim filter. When absent, keep the existing unit and date-window batch filter.
+Add an optional `ref1` request field to the existing `POST /orders` endpoint. When present, use `{ unit, ref1 }` as the claim filter and permit an existing `processing` state when the order status remains `pending`. When absent, keep the existing unit and date-window batch filter.
 
 ## Consequences
 
 - Existing callers retain batch behavior.
 - Operators can check one pending order without changing shared date-window configuration.
-- The request still uses the existing claim and payment-processing flow, so an in-progress order is not concurrently claimed.
+- Batch processing does not claim in-progress orders; only the explicit manual ref1 path can supersede that claim.
 
 ## Affected Modules
 
