@@ -29,3 +29,18 @@
 - Breaking changes: None.
 - Migration required: No.
 - Regression risk: Low; batch claims still exclude processing orders.
+
+## 2026-07-25 - PostReceipt Result Diagnostics
+
+- Task summary: Include PostReceipt responses and safe failure diagnostics in order-check results.
+- Added: `postReceiptResponse` on successful and failed receipt-processing results.
+- Changed: Axios PostReceipt failures return message, error code, HTTP status, and upstream response data instead of `null`.
+- Fixed: Operators can identify receipt failures without relying solely on production console logs.
+- Removed: None.
+- Affected modules: Store order processing.
+- Affected files: `store.js`.
+- Database impact: None.
+- API impact: Adds a response field to order-check result objects.
+- Breaking changes: None.
+- Migration required: No.
+- Regression risk: Low; receipt success remains gated by `receiptResponse.success`.

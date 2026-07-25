@@ -1,6 +1,6 @@
 {
   "last_updated": "2026-07-25T13:17:00+07:00",
-  "latest_task": "Allow manual single-order payment checks for pending orders in processing",
+  "latest_task": "Return PostReceipt response diagnostics from order checks",
   "current_focus": "Reliable pending-order payment processing",
   "active_modules": [
     "store order processing",
@@ -20,6 +20,7 @@
   "completed_items": [
     "POST /orders accepts optional ref1.",
     "A ref1 request can reprocess a pending order marked processing.",
+    "Order-check results include PostReceipt responses or safe upstream failure diagnostics.",
     "Single-order checks bypass the batch date window.",
     "Existing batch behavior remains unchanged when ref1 is absent."
   ],

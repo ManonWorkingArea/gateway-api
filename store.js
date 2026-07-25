@@ -370,7 +370,15 @@ async function postReceiptApi({
         
     } catch (error) {
         console.error('PostReceipt API call error:', error);
-        return null; // Return null if there's an error
+        return {
+            success: false,
+            error: {
+                message: error.message,
+                code: error.code || null,
+                status: error.response?.status || null,
+                data: error.response?.data || null,
+            }
+        };
     }
 }
 
@@ -862,6 +870,7 @@ router.post('/orders', async (req, res) => {
                                 receiptIssued: true,
                                 finalStatus: 'confirm',
                                 billData,
+                                postReceiptResponse: receiptResponse,
                                 receiptNo: receiptResponse.data,
                             };
                             
@@ -876,8 +885,9 @@ router.post('/orders', async (req, res) => {
                                 result: 'receipt_failed',
                                 paymentDetected: true,
                                 receiptIssued: false,
-                                    finalStatus: 'processing',
+                                finalStatus: 'processing',
                                 billData,
+                                postReceiptResponse: receiptResponse,
                             };
                         }
                     }

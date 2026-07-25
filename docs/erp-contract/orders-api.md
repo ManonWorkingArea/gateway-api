@@ -26,6 +26,12 @@ The response includes `requestedRef1`.
 - It is the normalized requested value for a single-order check.
 - It is `null` for a batch check.
 
+Each result that reaches PostReceipt includes `postReceiptResponse`.
+
+- On a successful receipt, it contains the PostReceipt response body.
+- On a failed receipt, it contains either the PostReceipt response body or an error object with `message`, `code`, HTTP `status`, and upstream `data`.
+- Request headers and credentials are never included.
+
 ### Not Found
 
 A single-order check returns HTTP 404 when there is no pending order for the specified `site` and `ref1`.

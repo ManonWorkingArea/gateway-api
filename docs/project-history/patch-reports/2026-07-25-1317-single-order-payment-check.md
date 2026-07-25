@@ -41,7 +41,7 @@ None. The endpoint reads and updates the existing order, form, and enroll collec
 
 ## API Impact
 
-Backward-compatible. `ref1` is optional in `POST /orders`; successful responses now contain optional `requestedRef1`.
+Backward-compatible. `ref1` is optional in `POST /orders`; successful responses now contain optional `requestedRef1`. Receipt-processing result objects include `postReceiptResponse`, with safe Axios failure diagnostics when available.
 
 ## Contract Impact
 
@@ -57,6 +57,7 @@ Manual single-order checks can supersede a processing claim. Operators must not 
 - Existing batch behavior is preserved structurally when `ref1` is omitted.
 - Single-order and batch filters are mutually exclusive.
 - The processing override is enabled only when `ref1` is supplied.
+- Failed PostReceipt calls retain their safe upstream diagnostic in the result object.
 
 ## Follow-up Recommendations
 
